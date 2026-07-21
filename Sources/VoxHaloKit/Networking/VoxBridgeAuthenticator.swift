@@ -1,6 +1,13 @@
 import Foundation
 
-public struct VoxBridgeAuthenticator: Sendable {
+public protocol VoxBridgeAuthenticating: Sendable {
+    func login(
+        endpoint: VoxBridgeEndpoint,
+        credentials: VoxBridgeAuthCredentials?
+    ) async throws -> [HTTPCookie]
+}
+
+public struct VoxBridgeAuthenticator: VoxBridgeAuthenticating, Sendable {
     private let transport: any HTTPTransport
 
     public init(transport: any HTTPTransport = URLSessionHTTPTransport()) {
