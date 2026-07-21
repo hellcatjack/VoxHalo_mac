@@ -82,14 +82,18 @@ public struct SubtitleDisplayModel: Equatable, Sendable {
         sourceLanguage: String,
         isProcessing: Bool
     ) {
-        let primary = Array(cachedPrimarySegments.suffix(SubtitleText.maximumSegments))
+        let primary = cachedPrimarySegments.count <= SubtitleText.maximumSegments
+            ? cachedPrimarySegments
+            : Array(cachedPrimarySegments.suffix(SubtitleText.maximumSegments))
         self.primarySegments = primary
         self.stablePrimaryLines = primary.isEmpty ? [] : Array(primary.dropLast())
         self.activePrimaryText = primary.last ?? ""
         self.stablePrimaryText = SubtitleText.joined(stablePrimaryLines)
         self.primaryText = SubtitleText.recentWindow(SubtitleText.joined(primary))
         self.referenceText = SubtitleText.normalized(referenceText)
-        self.referenceSegments = Array(cachedReferenceSegments.suffix(SubtitleText.maximumSegments))
+        self.referenceSegments = cachedReferenceSegments.count <= SubtitleText.maximumSegments
+            ? cachedReferenceSegments
+            : Array(cachedReferenceSegments.suffix(SubtitleText.maximumSegments))
         self.targetLanguage = targetLanguage
         self.sourceLanguage = sourceLanguage
         self.isProcessing = isProcessing
