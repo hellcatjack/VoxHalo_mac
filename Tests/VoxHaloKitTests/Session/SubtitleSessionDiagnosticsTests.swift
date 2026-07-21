@@ -1,0 +1,173 @@
+import XCTest
+@testable import VoxHaloKit
+
+final class SubtitleSessionDiagnosticsTests: XCTestCase {
+    func testSessionStartDiagnosticContainsShapeForPermanentLoggerRedaction() async throws {
+        let credentials = VoxBridgeAuthCredentials(
+            username: "private-operator",
+            password: "private-password"
+        )
+        let source = AudioSource(
+            id: "private-device-uid",
+            name: "Private Device Name",
+            kind: .hardwareInput
+        )
+        let fixture = try SubtitleSessionFixture(
+            direction: .englishToChinese,
+            source: source,
+            credentials: credentials
+        )
+
+        try await fixture.coordinator.start(fixture.configuration)
+
+        let event = try await waitForDiagnostic(in: fixture.diagnostics) {
+            if case .sessionStart = $0 { true } else { false }
+        }
+        guard case let .sessionStart(
+            host,
+            port,
+            direction,
+            username,
+            deviceID,
+            deviceName
+        ) = event else {
+            return XCTFail("Expected session start diagnostic")
+        }
+        XCTAssertEqual(host, "example.test")
+        XCTAssertEqual(port, 18_024)
+        XCTAssertEqual(direction, .englishToChinese)
+        XCTAssertEqual(username, "private-operator")
+        XCTAssertEqual(deviceID, "private-device-uid")
+        XCTAssertEqual(deviceName, "Private Device Name")
+    }
+
+    func testBackendDiagnosticRecordsOnlyStructuredShapeAndOptionalBodies() async throws {
+        let fixture = try SubtitleSessionFixture()
+        try await fixture.coordinator.start(fixture.configuration)
+        let stability = VoxBridgeStability(
+            isStable: false,
+            phase: "tentative",
+            sequence: 7,
+            committedCount: 2
+        )
+        let backend = VoxBridgeEvent(
+            type: .partial,
+            rawType: "partial",
+            text: "private transcript",
+            translation: "private translation",
+            sequence: 42,
+            stability: stability
+        )
+
+        await fixture.client.emit(.event(backend))
+
+        let event = try await waitForDiagnostic(in: fixture.diagnostics) {
+            if case .backend = $0 { true } else { false }
+        }
+        guard case let .backend(
+            type,
+            sequence,
+            textLength,
+            translationLength,
+            recordedStability,
+            transcript,
+            translation
+        ) = event else {
+            return XCTFail("Expected backend diagnostic")
+        }
+        XCTAssertEqual(type, "partial")
+        XCTAssertEqual(sequence, 42)
+        XCTAssertEqual(textLength, "private transcript".count)
+        XCTAssertEqual(translationLength, "private translation".count)
+        XCTAssertEqual(recordedStability, stability)
+        XCTAssertEqual(transcript, "private transcript")
+        XCTAssertEqual(translation, "private translation")
+    }
+
+    func testConnectionParseAndAudioDiagnosticsUseSafeCategoriesAndCounters() async throws {
+        let fixture = try SubtitleSessionFixture()
+        try await fixture.coordinator.start(fixture.configuration)
+        await fixture.client.emit(.connection(.parseError))
+        await fixture.audio.emit(sessionFrame(7))
+
+        let recorded = await waitUntil {
+            let events = await fixture.diagnostics.events
+            let hasConnection = events.contains {
+                if case .connection(category: "connected") = $0 { true } else { false }
+            }
+            let hasParse = events.contains {
+                if case .failure(category: "parse_error") = $0 { true } else { false }
+            }
+            let hasAudio = events.contains {
+                if case .audio(frameCount: 1, byteCount: 10_240) = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
+            return hasConnection && hasParse && hasAudio
+        }
+        XCTAssertTrue(recorded)
+    }
+
+    func testSessionStartDiagnosticUsesDefaultSecurePort() async throws {
+        let fixture = try SubtitleSessionFixture(
+            endpointURL: URL(string: "wss://default-port.example/ws")!
+        )
+
+        try await fixture.coordinator.start(fixture.configuration)
+
+        let event = try await waitForDiagnostic(in: fixture.diagnostics) {
+            if case .sessionStart = $0 { true } else { false }
+        }
+        guard case let .sessionStart(_, port, _, _, _, _) = event else {
+            return XCTFail("Expected session start diagnostic")
+        }
+        XCTAssertEqual(port, 443)
+    }
+
+    func testAudioDiagnosticsAreThrottledAfterFirstThreeFrames() async throws {
+        let fixture = try SubtitleSessionFixture()
+        try await fixture.coordinator.start(fixture.configuration)
+
+        for value in 1 ... 50 {
+            await fixture.audio.emit(sessionFrame(UInt8(value)))
+            let sent = await waitUntil {
+                await fixture.client.audioFrames.count == value
+            }
+            XCTAssertTrue(sent, "frame \(value)")
+        }
+
+        let recorded = await waitUntil {
+            let events = await fixture.diagnostics.events
+            return events.contains {
+                if case .audio(frameCount: 50, byteCount: 10_240) = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        let events = await fixture.diagnostics.events
+        let frameCounts: [UInt64] = events.compactMap { event in
+            guard case let .audio(frameCount, _) = event else { return nil }
+            return frameCount
+        }
+        XCTAssertTrue(recorded)
+        XCTAssertEqual(frameCounts, [1, 2, 3, 50])
+    }
+
+    private func waitForDiagnostic(
+        in logger: RecordingDiagnosticsLogger,
+        matching predicate: @escaping @Sendable (DiagnosticEvent) -> Bool
+    ) async throws -> DiagnosticEvent {
+        for _ in 0 ..< 1_000 {
+            if let event = await logger.events.first(where: predicate) {
+                return event
+            }
+            await Task.yield()
+        }
+        let event = await logger.events.first(where: predicate)
+        return try XCTUnwrap(event)
+    }
+}
