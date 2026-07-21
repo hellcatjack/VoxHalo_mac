@@ -25,13 +25,18 @@ public enum DiagnosticEvent: Sendable {
 }
 
 public protocol DiagnosticsLogging: Sendable {
+    var isEnabled: Bool { get }
     func record(_ event: DiagnosticEvent) async
+}
+
+public extension DiagnosticsLogging {
+    var isEnabled: Bool { true }
 }
 
 public actor DiagnosticsLogger: DiagnosticsLogging {
     public nonisolated let fileURL: URL
 
-    private let isEnabled: Bool
+    public nonisolated let isEnabled: Bool
     private let includesTranscripts: Bool
 
     public init(

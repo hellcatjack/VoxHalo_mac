@@ -16,15 +16,25 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
 
     private var store: SubtitleStateStore
     private var outputContinuation: AsyncStream<SubtitleSessionOutput>.Continuation?
+    private var outputSubscriptionID: UUID?
     private var clientOutputTask: Task<Void, Never>?
     private var audioDrainTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Error>?
+    private var startupTask: Task<Void, Error>?
+    private var stopTask: Task<Void, Never>?
     private var queueGeneration: UInt64?
     private var activeConfiguration: SubtitleSessionConfiguration?
+    private var captureFailureGate: CaptureFailureGate?
+    private var finalSignalContinuation: AsyncStream<Void>.Continuation?
+    private var finalSignalToken: UInt64?
     private var sessionToken: UInt64 = 0
     private var captureWasStarted = false
     private var backendFaulted = false
     private var audioOverloadReported = false
     private var sentFrameCount: UInt64 = 0
+    private var lastAudioCallbackTimestamp: AudioCallbackTimestamp?
+
+    var backendSessionIsFaulted: Bool { backendFaulted }
 
     public init(
         client: any VoxBridgeClientProtocol,
@@ -55,9 +65,15 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
 
     public func outputs() async -> AsyncStream<SubtitleSessionOutput> {
         outputContinuation?.finish()
+        let id = UUID()
         let (stream, continuation) = AsyncStream.makeStream(
-            of: SubtitleSessionOutput.self
+            of: SubtitleSessionOutput.self,
+            bufferingPolicy: .bufferingNewest(128)
         )
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeOutputSubscription(id) }
+        }
+        outputSubscriptionID = id
         outputContinuation = continuation
         return stream
     }
@@ -65,17 +81,60 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
     public func start(
         _ configuration: SubtitleSessionConfiguration
     ) async throws {
-        guard state == .stopped else {
+        guard state == .stopped,
+              startupTask == nil,
+              stopTask == nil else {
             throw SubtitleSessionError.alreadyActive
         }
 
         sessionToken &+= 1
         let token = sessionToken
         transition(to: .starting)
+        let task = Task { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.performStart(configuration, token: token)
+        }
+        startupTask = task
+        try await task.value
+    }
+
+    public func stop() async {
+        if let stopTask {
+            await stopTask.value
+            return
+        }
+        guard state == .starting || state == .running else { return }
+
+        let stoppedDuringStart = state == .starting
+        let token = sessionToken
+        let startupToWait = stoppedDuringStart ? startupTask : nil
+        transition(to: .finishing)
+        captureFailureGate?.deactivate()
+        if stoppedDuringStart {
+            sessionToken &+= 1
+            startupToWait?.cancel()
+        }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performStop(
+                token: token,
+                startupToWait: startupToWait,
+                stoppedDuringStart: stoppedDuringStart
+            )
+        }
+        stopTask = task
+        await task.value
+    }
+
+    private func performStart(
+        _ configuration: SubtitleSessionConfiguration,
+        token: UInt64
+    ) async throws {
+        defer { completeStartup(token: token) }
         var startupStage = StartupStage.endpointValidation
         var connected = false
         var captureAttempted = false
-        var generation: UInt64?
 
         do {
             let endpoint = try endpointValidator(configuration.endpoint)
@@ -89,13 +148,12 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             try await permissionProvider.authorize(configuration.audioSource)
             try ensureStarting(token)
 
-            let validatedConfiguration = SubtitleSessionConfiguration(
+            activeConfiguration = SubtitleSessionConfiguration(
                 endpoint: endpoint,
                 direction: configuration.direction,
                 audioSource: configuration.audioSource,
                 credentials: configuration.credentials
             )
-            activeConfiguration = validatedConfiguration
             await installClientOutputTask(token: token)
             try ensureStarting(token)
 
@@ -121,34 +179,41 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             try ensureStarting(token)
 
             startupStage = .audioCapture
-            let activeGeneration = queue.reset()
-            generation = activeGeneration
-            queueGeneration = activeGeneration
+            let generation = queue.reset()
+            queueGeneration = generation
             audioDrainTask = makeAudioDrainTask(
-                generation: activeGeneration,
+                generation: generation,
                 token: token
             )
+            let failureGate = CaptureFailureGate()
+            captureFailureGate = failureGate
             captureAttempted = true
             captureWasStarted = true
             try await capture.start(
                 source: configuration.audioSource,
                 onFrame: { [queue] frame in
-                    queue.offer(frame, generation: activeGeneration)
+                    queue.offer(frame, generation: generation)
                 },
                 onFailure: { [weak self, queue] failure in
                     if failure == .pipelineOverloaded {
-                        queue.signalOverflow(generation: activeGeneration)
+                        queue.signalOverflow(generation: generation)
+                        return
                     }
-                    Task {
-                        await self?.handleCaptureFailure(
-                            failure,
-                            generation: activeGeneration,
-                            token: token
-                        )
+                    if failureGate.claim(failure) == .runtime {
+                        Task {
+                            await self?.beginRuntimeCaptureFailure(
+                                failure,
+                                generation: generation,
+                                token: token
+                            )
+                        }
                     }
                 }
             )
             try ensureStarting(token)
+            if let failure = failureGate.startupFailure {
+                throw failure
+            }
 
             await diagnostics.record(.sessionStart(
                 host: endpoint.webSocketURL.host ?? "unknown",
@@ -160,38 +225,121 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             ))
             await diagnostics.record(.capture(category: "started"))
             try ensureStarting(token)
+            if let failure = failureGate.commitRunning() {
+                throw failure
+            }
             transition(to: .running)
         } catch {
+            let interruptedByStop = state == .finishing || token != sessionToken
             await rollbackStart(
-                token: token,
                 connected: connected,
-                captureAttempted: captureAttempted,
-                generation: generation
+                captureAttempted: captureAttempted
             )
+            if interruptedByStop {
+                throw CancellationError()
+            }
+
             await diagnostics.record(.failure(category: startupStage.category))
             publish(.failure(Self.failureMessage(for: error)))
-            if state != .stopped {
-                transition(to: .stopped)
-            }
+            clearSessionResources()
+            transition(to: .stopped)
             throw error
         }
     }
 
-    public func stop() async {
-        guard state != .stopped else { return }
+    private func performStop(
+        token: UInt64,
+        startupToWait: Task<Void, Error>?,
+        stoppedDuringStart: Bool
+    ) async {
+        if stoppedDuringStart {
+            _ = try? await startupToWait?.value
+            clearSessionResources()
+            stopTask = nil
+            transition(to: .stopped)
+            return
+        }
 
-        sessionToken &+= 1
-        transition(to: .finishing)
         if captureWasStarted {
-            await capture.stop()
             captureWasStarted = false
+            await capture.stop()
         }
-        await endAudioDrain()
+        await stopAudioPipeline()
+
+        let connected = await client.isConnected
+        if connected {
+            let (stream, continuation) = AsyncStream.makeStream(
+                of: Void.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            finalSignalToken = token
+            finalSignalContinuation = continuation
+            do {
+                try await client.finish()
+                let result = await waitForFinalOrTimeout(
+                    stream: stream,
+                    signalContinuation: continuation
+                )
+                if result == .timeout {
+                    publish(.status("Final wait timeout"))
+                }
+            } catch {
+                await diagnostics.record(.failure(category: "finish"))
+                publish(.status("Finish failed"))
+            }
+            continuation.finish()
+            if finalSignalToken == token {
+                finalSignalContinuation = nil
+                finalSignalToken = nil
+            }
+        }
+
+        if sessionToken == token {
+            sessionToken &+= 1
+        }
         await cancelClientOutputTask()
-        if await client.isConnected {
-            await client.disconnect()
-        }
+        await client.disconnect()
         clearSessionResources()
+        stopTask = nil
+        transition(to: .stopped)
+    }
+
+    private func beginRuntimeCaptureFailure(
+        _ failure: AudioCaptureFailure,
+        generation: UInt64,
+        token: UInt64
+    ) async {
+        guard state == .running,
+              token == sessionToken,
+              generation == queueGeneration,
+              stopTask == nil else {
+            return
+        }
+
+        transition(to: .finishing)
+        captureFailureGate?.deactivate()
+        sessionToken &+= 1
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performFatalCaptureStop(failure)
+        }
+        stopTask = task
+    }
+
+    private func performFatalCaptureStop(
+        _ failure: AudioCaptureFailure
+    ) async {
+        await diagnostics.record(.failure(category: "capture_runtime"))
+        publish(.failure(Self.failureMessage(for: failure)))
+        if captureWasStarted {
+            captureWasStarted = false
+            await capture.stop()
+        }
+        await stopAudioPipeline()
+        await cancelClientOutputTask()
+        await client.disconnect()
+        clearSessionResources()
+        stopTask = nil
         transition(to: .stopped)
     }
 
@@ -227,29 +375,20 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         generation: UInt64,
         token: UInt64
     ) async {
-        guard token == sessionToken,
-              generation == queueGeneration,
-              state == .starting || state == .running else {
+        guard audioWorkIsCurrent(generation: generation, token: token) else {
             return
         }
 
         switch event {
         case let .frame(frame):
-            do {
-                try await client.sendAudioFrame(frame.pcm16LE)
-                guard token == sessionToken,
-                      generation == queueGeneration else { return }
-                sentFrameCount &+= 1
-                if sentFrameCount <= 3 || sentFrameCount.isMultiple(of: 50) {
-                    await diagnostics.record(.audio(
-                        frameCount: sentFrameCount,
-                        byteCount: frame.pcm16LE.count
-                    ))
-                }
-            } catch {
+            if let previous = lastAudioCallbackTimestamp,
+               frame.callbackTimestamp.duration(since: previous)
+                    >= policy.callbackGapThreshold {
                 backendFaulted = true
-                await diagnostics.record(.failure(category: "audio_send"))
+                publish(.status("Audio idle reconnect"))
             }
+            lastAudioCallbackTimestamp = frame.callbackTimestamp
+            await send(frame, generation: generation, token: token)
 
         case .overflow:
             backendFaulted = true
@@ -258,6 +397,105 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 publish(.status("Audio pipeline overloaded"))
                 await diagnostics.record(.failure(category: "audio_overload"))
             }
+        }
+    }
+
+    private func send(
+        _ frame: CapturedAudioFrame,
+        generation: UInt64,
+        token: UInt64
+    ) async {
+        do {
+            try await ensureBackendSession(
+                generation: generation,
+                token: token
+            )
+        } catch {
+            await recordAudioFailureIfCurrent(
+                "audio_reconnect",
+                generation: generation,
+                token: token
+            )
+            return
+        }
+
+        do {
+            try ensureAudioWorkCurrent(generation: generation, token: token)
+            try await client.sendAudioFrame(frame.pcm16LE)
+        } catch {
+            guard audioWorkIsCurrent(generation: generation, token: token) else {
+                return
+            }
+            backendFaulted = true
+            do {
+                try await ensureBackendSession(
+                    generation: generation,
+                    token: token
+                )
+                try ensureAudioWorkCurrent(generation: generation, token: token)
+                try await client.sendAudioFrame(frame.pcm16LE)
+            } catch {
+                backendFaulted = true
+                await recordAudioFailureIfCurrent(
+                    "audio_send",
+                    generation: generation,
+                    token: token
+                )
+                return
+            }
+        }
+
+        guard audioWorkIsCurrent(generation: generation, token: token) else {
+            return
+        }
+        sentFrameCount &+= 1
+        if sentFrameCount <= 3 || sentFrameCount.isMultiple(of: 50) {
+            await diagnostics.record(.audio(
+                frameCount: sentFrameCount,
+                byteCount: frame.pcm16LE.count
+            ))
+        }
+    }
+
+    private func ensureBackendSession(
+        generation: UInt64,
+        token: UInt64
+    ) async throws {
+        let connected = await client.isConnected
+        try ensureAudioWorkCurrent(generation: generation, token: token)
+        guard backendFaulted || !connected else { return }
+
+        if let reconnectTask {
+            try await reconnectTask.value
+            try ensureAudioWorkCurrent(generation: generation, token: token)
+            return
+        }
+        guard let configuration = activeConfiguration else {
+            throw CancellationError()
+        }
+
+        publish(.status("Reconnecting"))
+        let task = Task { [client] in
+            try await client.connect(
+                to: configuration.endpoint,
+                credentials: configuration.credentials
+            )
+            try await client.start(direction: configuration.direction)
+        }
+        reconnectTask = task
+        do {
+            try await task.value
+            try ensureAudioWorkCurrent(generation: generation, token: token)
+            reconnectTask = nil
+            backendFaulted = false
+            audioOverloadReported = false
+            publish(.status("Running"))
+        } catch {
+            reconnectTask = nil
+            if audioWorkIsCurrent(generation: generation, token: token) {
+                backendFaulted = true
+            }
+            throw error
         }
     }
 
@@ -279,12 +517,14 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 currentSubtitle = store.apply(event)
                 publish(.subtitle(currentSubtitle))
             }
-
             if event.type == .error {
-                backendFaulted = true
+                if state != .finishing { backendFaulted = true }
                 if let message = Self.conciseBackendMessage(event.message) {
                     publish(.status(message))
                 }
+            }
+            if event.type == .final || event.type == .error {
+                resolveFinalSignal(token: token)
             }
 
         case let .connection(connection):
@@ -293,14 +533,14 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 await diagnostics.record(.connection(category: "connected"))
                 publish(.status("Connected"))
             case .disconnected:
-                backendFaulted = true
+                if state != .finishing { backendFaulted = true }
                 await diagnostics.record(.connection(category: "disconnected"))
                 publish(.status("Disconnected"))
             case .parseError:
                 await diagnostics.record(.failure(category: "parse_error"))
                 publish(.status("Receive parse error"))
             case .receiveError:
-                backendFaulted = true
+                if state != .finishing { backendFaulted = true }
                 await diagnostics.record(.failure(category: "receive_error"))
                 publish(.status("Receive error"))
             }
@@ -308,6 +548,7 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
     }
 
     private func recordBackendDiagnostic(_ event: VoxBridgeEvent) async {
+        guard diagnostics.isEnabled else { return }
         let transcript = Self.firstNonBlank([
             event.text,
             event.tentativeText,
@@ -327,94 +568,140 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         ))
     }
 
-    private func handleCaptureFailure(
-        _ failure: AudioCaptureFailure,
-        generation: UInt64,
-        token: UInt64
-    ) async {
-        guard token == sessionToken,
-              generation == queueGeneration,
-              state == .running else {
-            return
-        }
-        if failure == .pipelineOverloaded {
-            return
-        }
-
-        await diagnostics.record(.failure(category: "capture_runtime"))
-        publish(.failure(Self.failureMessage(for: failure)))
-        await stopAfterCaptureFailure(token: token)
-    }
-
-    private func stopAfterCaptureFailure(token: UInt64) async {
-        guard token == sessionToken else { return }
-        sessionToken &+= 1
-        if captureWasStarted {
-            await capture.stop()
-            captureWasStarted = false
-        }
-        await endAudioDrain()
-        await cancelClientOutputTask()
-        await client.disconnect()
-        clearSessionResources()
-        transition(to: .stopped)
-    }
-
     private func rollbackStart(
-        token: UInt64,
         connected: Bool,
-        captureAttempted: Bool,
-        generation: UInt64?
+        captureAttempted: Bool
     ) async {
-        if captureAttempted {
-            await capture.stop()
+        captureFailureGate?.deactivate()
+        if captureAttempted && captureWasStarted {
             captureWasStarted = false
+            await capture.stop()
         }
-        if let generation {
-            queue.finish(generation: generation)
-        }
-        if let audioDrainTask {
-            audioDrainTask.cancel()
-            await audioDrainTask.value
-            self.audioDrainTask = nil
-        }
-        queueGeneration = nil
+        await stopAudioPipeline()
         await cancelClientOutputTask()
         let clientIsConnected = await client.isConnected
         if connected || clientIsConnected {
             await client.disconnect()
         }
-        if token == sessionToken {
-            clearSessionResources()
-        }
     }
 
-    private func endAudioDrain() async {
+    private func stopAudioPipeline() async {
         if let queueGeneration {
             queue.finish(generation: queueGeneration)
         }
-        if let audioDrainTask {
-            audioDrainTask.cancel()
-            await audioDrainTask.value
-        }
+        let drain = audioDrainTask
         audioDrainTask = nil
+        drain?.cancel()
+        let reconnect = reconnectTask
+        reconnectTask = nil
+        reconnect?.cancel()
+        if let reconnect { _ = try? await reconnect.value }
+        if let drain { await drain.value }
         queueGeneration = nil
     }
 
     private func cancelClientOutputTask() async {
-        if let clientOutputTask {
-            clientOutputTask.cancel()
-            await clientOutputTask.value
-        }
+        let task = clientOutputTask
         clientOutputTask = nil
+        task?.cancel()
+        if let task { await task.value }
+    }
+
+    private func waitForFinalOrTimeout(
+        stream: AsyncStream<Void>,
+        signalContinuation: AsyncStream<Void>.Continuation
+    ) async -> FinalWaitResult {
+        let (results, resultContinuation) = AsyncStream.makeStream(
+            of: FinalWaitResult.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        let finalTask = Task {
+            var iterator = stream.makeAsyncIterator()
+            if await iterator.next() != nil {
+                resultContinuation.yield(.backend)
+            }
+        }
+        let timeout = policy.finalWaitTimeout
+        let timeoutTask = Task { [clock] in
+            do {
+                try await clock.sleep(for: timeout)
+                resultContinuation.yield(.timeout)
+            } catch {
+                resultContinuation.yield(.cancelled)
+            }
+        }
+        var iterator = results.makeAsyncIterator()
+        let result = await iterator.next() ?? .cancelled
+        finalTask.cancel()
+        timeoutTask.cancel()
+        signalContinuation.finish()
+        resultContinuation.finish()
+        await finalTask.value
+        await timeoutTask.value
+        return result
+    }
+
+    private func resolveFinalSignal(token: UInt64) {
+        guard finalSignalToken == token,
+              let continuation = finalSignalContinuation else { return }
+        finalSignalContinuation = nil
+        finalSignalToken = nil
+        continuation.yield(())
+        continuation.finish()
+    }
+
+    private func recordAudioFailureIfCurrent(
+        _ category: String,
+        generation: UInt64,
+        token: UInt64
+    ) async {
+        guard audioWorkIsCurrent(generation: generation, token: token) else {
+            return
+        }
+        await diagnostics.record(.failure(category: category))
+    }
+
+    private func audioWorkIsCurrent(
+        generation: UInt64,
+        token: UInt64
+    ) -> Bool {
+        token == sessionToken
+            && generation == queueGeneration
+            && (state == .starting || state == .running)
+    }
+
+    private func ensureAudioWorkCurrent(
+        generation: UInt64,
+        token: UInt64
+    ) throws {
+        guard audioWorkIsCurrent(generation: generation, token: token) else {
+            throw CancellationError()
+        }
+    }
+
+    private func ensureStarting(_ token: UInt64) throws {
+        guard token == sessionToken, state == .starting else {
+            throw CancellationError()
+        }
+    }
+
+    private func completeStartup(token: UInt64) {
+        guard token == sessionToken || state == .finishing else { return }
+        startupTask = nil
     }
 
     private func clearSessionResources() {
+        captureFailureGate?.deactivate()
+        captureFailureGate = nil
         activeConfiguration = nil
         backendFaulted = false
         audioOverloadReported = false
         sentFrameCount = 0
+        lastAudioCallbackTimestamp = nil
         captureWasStarted = false
+        finalSignalContinuation?.finish()
+        finalSignalContinuation = nil
+        finalSignalToken = nil
     }
 
     private func transition(to nextState: SubtitleSessionState) {
@@ -426,10 +713,10 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         outputContinuation?.yield(output)
     }
 
-    private func ensureStarting(_ token: UInt64) throws {
-        guard token == sessionToken, state == .starting else {
-            throw CancellationError()
-        }
+    private func removeOutputSubscription(_ id: UUID) {
+        guard outputSubscriptionID == id else { return }
+        outputSubscriptionID = nil
+        outputContinuation = nil
     }
 
     private static func updatesSubtitle(_ type: VoxBridgeEventType) -> Bool {
@@ -462,7 +749,9 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
 
     private static func conciseBackendMessage(_ value: String?) -> String? {
         guard let value = trimmed(value) else { return nil }
-        return String(value.prefix(256))
+        let normalized = value.split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return String(normalized.prefix(256))
     }
 
     private static func failureMessage(for error: Error) -> String {
@@ -521,5 +810,66 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             case .audioCapture: "audio_capture"
             }
         }
+    }
+
+    private enum FinalWaitResult: Sendable {
+        case backend
+        case timeout
+        case cancelled
+    }
+}
+
+private final class CaptureFailureGate: @unchecked Sendable {
+    enum Disposition: Equatable {
+        case startup
+        case runtime
+        case ignored
+    }
+
+    private enum Phase {
+        case starting
+        case running
+        case inactive
+    }
+
+    private let lock = NSLock()
+    private var phase: Phase = .starting
+    private var failure: AudioCaptureFailure?
+
+    var startupFailure: AudioCaptureFailure? {
+        lock.lock()
+        defer { lock.unlock() }
+        return failure
+    }
+
+    func claim(_ failure: AudioCaptureFailure) -> Disposition {
+        lock.lock()
+        defer { lock.unlock() }
+        guard self.failure == nil else { return .ignored }
+        switch phase {
+        case .starting:
+            self.failure = failure
+            return .startup
+        case .running:
+            self.failure = failure
+            return .runtime
+        case .inactive:
+            return .ignored
+        }
+    }
+
+    func commitRunning() -> AudioCaptureFailure? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let failure { return failure }
+        guard phase == .starting else { return nil }
+        phase = .running
+        return nil
+    }
+
+    func deactivate() {
+        lock.lock()
+        phase = .inactive
+        lock.unlock()
     }
 }

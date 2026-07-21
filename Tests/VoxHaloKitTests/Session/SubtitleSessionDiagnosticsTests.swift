@@ -157,6 +157,36 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
         XCTAssertEqual(frameCounts, [1, 2, 3, 50])
     }
 
+    func testDisabledDiagnosticsSkipBackendShapeWorkAndPipelineContinues() async throws {
+        let diagnostics = DisabledRecordingDiagnosticsLogger()
+        let fixture = try SubtitleSessionFixture(
+            diagnosticsOverride: diagnostics
+        )
+        try await fixture.coordinator.start(fixture.configuration)
+
+        for sequence in 0 ..< 1_000 {
+            await fixture.client.emit(.event(VoxBridgeEvent(
+                type: .unknown,
+                rawType: "future_event",
+                text: "private transcript \(sequence)",
+                translation: "private translation \(sequence)",
+                sequence: sequence
+            )))
+        }
+        await fixture.client.emit(.event(.committed("s1", "你好", sequence: 1_001)))
+        await fixture.client.emit(.event(.translated("s1", "Hello", sequence: 1_002)))
+
+        let continued = await waitUntil {
+            await fixture.coordinator.currentSubtitle.primaryText == "Hello"
+        }
+        let events = await diagnostics.events
+        let backendEvents = events.filter {
+            if case .backend = $0 { true } else { false }
+        }
+        XCTAssertTrue(continued)
+        XCTAssertTrue(backendEvents.isEmpty)
+    }
+
     private func waitForDiagnostic(
         in logger: RecordingDiagnosticsLogger,
         matching predicate: @escaping @Sendable (DiagnosticEvent) -> Bool

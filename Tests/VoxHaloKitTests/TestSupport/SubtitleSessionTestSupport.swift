@@ -9,6 +9,15 @@ actor RecordingDiagnosticsLogger: DiagnosticsLogging {
     }
 }
 
+actor DisabledRecordingDiagnosticsLogger: DiagnosticsLogging {
+    nonisolated let isEnabled = false
+    private(set) var events: [DiagnosticEvent] = []
+
+    func record(_ event: DiagnosticEvent) async {
+        events.append(event)
+    }
+}
+
 actor SessionOutputRecorder {
     private(set) var outputs: [SubtitleSessionOutput] = []
 
@@ -66,15 +75,34 @@ struct SubtitleSessionFixture: Sendable {
         permissionError: (any Error & Sendable)? = nil,
         connectError: (any Error & Sendable)? = nil,
         clientStartError: (any Error & Sendable)? = nil,
-        audioStartError: (any Error & Sendable)? = nil
+        audioStartError: (any Error & Sendable)? = nil,
+        audioFailureDuringStart: AudioCaptureFailure? = nil,
+        finishError: (any Error & Sendable)? = nil,
+        finishOutput: VoxBridgeClientOutput? = nil,
+        sendFailureCount: Int = 0,
+        sendsSuspended: Bool = false,
+        connectSuspended: Bool = false,
+        queueCapacity: Int = 4,
+        clock: any SessionClock = ContinuousSessionClock(),
+        policy: SubtitleSessionPolicy = SubtitleSessionPolicy(),
+        diagnosticsOverride: (any DiagnosticsLogging)? = nil
     ) throws {
         let calls = CallRecorder()
         let client = FakeVoxBridgeClient(
             calls: calls,
             connectError: connectError,
-            startError: clientStartError
+            startError: clientStartError,
+            finishError: finishError,
+            finishOutput: finishOutput,
+            sendFailureCount: sendFailureCount,
+            sendsSuspended: sendsSuspended,
+            connectSuspended: connectSuspended
         )
-        let audio = FakeAudioCapture(calls: calls, startError: audioStartError)
+        let audio = FakeAudioCapture(
+            calls: calls,
+            startError: audioStartError,
+            failureDuringStart: audioFailureDuringStart
+        )
         let permissions = FakeAudioPermissionProvider(
             calls: calls,
             error: permissionError
@@ -105,9 +133,11 @@ struct SubtitleSessionFixture: Sendable {
             capture: audio,
             sourceValidator: sourceValidator,
             permissionProvider: permissions,
-            queue: BoundedAudioFrameQueue(capacity: 4),
+            queue: BoundedAudioFrameQueue(capacity: queueCapacity),
             store: store,
-            diagnostics: diagnostics,
+            diagnostics: diagnosticsOverride ?? diagnostics,
+            clock: clock,
+            policy: policy,
             endpointValidator: { endpoint in
                 calls.record("validate:endpoint")
                 if let endpointError { throw endpointError }
