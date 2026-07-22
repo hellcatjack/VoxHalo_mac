@@ -249,6 +249,68 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         )
     }
 
+    func testEveryExplicitActiveSourceRevisionRefreshesTranslationImmediately() {
+        var store = SubtitleStateStore(direction: .chineseToEnglish)
+        store.apply(.committed("s1", "初稿", sequence: 1, isStable: true))
+        store.apply(.translated("s1", "Rough draft.", sequence: 2))
+
+        let revisions = [
+            ("第一次修订", "The first complete revision."),
+            ("第二次修订补充细节", "A structurally different second revision with more detail."),
+            ("最终精简修订", "Final concise revision.")
+        ]
+        for (index, revision) in revisions.enumerated() {
+            let sequence = index * 2 + 3
+            store.apply(.updated("s1", revision.0, sequence: sequence))
+            store.apply(.translated("s1", revision.1, sequence: sequence + 1))
+            XCTAssertEqual(
+                store.current.primaryText,
+                revision.1,
+                "explicit revision \(index + 1) was not reflected in the active tail"
+            )
+        }
+
+        store.apply(.committed("s2", "下一句", sequence: 9))
+        store.apply(.updated("s1", "迟到修订", sequence: 10))
+        store.apply(.translated(
+            "s1",
+            "A late historical rewrite must remain hidden.",
+            sequence: 11
+        ))
+
+        XCTAssertEqual(
+            store.current.primarySegments,
+            ["Final concise revision."]
+        )
+    }
+
+    func testOverlappingExplicitRevisionsCannotHideTheNewestTranslation() {
+        var store = SubtitleStateStore(direction: .chineseToEnglish)
+        store.apply(.committed("s1", "初稿", sequence: 1, isStable: true))
+        store.apply(.translated("s1", "Rough draft.", sequence: 1))
+        store.apply(.updated("s1", "第一版修订", sequence: 3))
+        store.apply(.updated("s1", "第二版完整修订", sequence: 5))
+
+        store.apply(.translated("s1", "First revision.", sequence: 3))
+        XCTAssertEqual(store.current.primaryText, "First revision.")
+
+        store.apply(.translated(
+            "s1",
+            "The complete newest revision with every word.",
+            sequence: 5
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The complete newest revision with every word."
+        )
+
+        store.apply(.translated("s1", "Late obsolete revision.", sequence: 3))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The complete newest revision with every word."
+        )
+    }
+
     func testCompletedSentencePrefixFreezesWhileCurrentTailCanCorrect() {
         var store = makeTranslatedStore((
             "s1",
@@ -359,7 +421,7 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         XCTAssertEqual(store.current.primarySegments, ["First translation"])
     }
 
-    func testNewSourceSentenceFinalizesPreviousCanonicalTranslation() {
+    func testNewSourceSentenceFreezesLatestCanonicalTranslation() {
         var store = SubtitleStateStore(direction: .chineseToEnglish)
         store.apply(.committed("s1", "初稿", sequence: 1, isStable: true))
         store.apply(.translated("s1", "Rough first translation.", sequence: 2))
@@ -372,7 +434,10 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
             sequence: 6
         ))
 
-        XCTAssertEqual(store.current.primaryText, "First canonical revision.")
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The complete final translation with every word."
+        )
 
         store.apply(.committed("s2", "下一句", sequence: 7))
 

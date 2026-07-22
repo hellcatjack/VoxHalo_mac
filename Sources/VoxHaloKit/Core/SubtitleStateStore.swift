@@ -10,8 +10,8 @@ public struct SubtitleStateStore: Sendable {
     private var frozenTranslationPrefixes: [String: String] = [:]
     private var translationRewriteCounts: [String: Int] = [:]
     private var sourceRevisionSentenceIDs: Set<String> = []
-    private var pendingAuthoritativeTranslationUpdates: Set<String> = []
-    private var appliedAuthoritativeTranslationUpdates: Set<String> = []
+    private var pendingAuthoritativeTranslationSequences: [String: Set<Int>] = [:]
+    private var pendingUnsequencedAuthoritativeTranslationUpdates: Set<String> = []
     private var aggregatePrimaryText = ""
     private var displayedAggregatePrimaryText = ""
     private var aggregateDisplayBaseText = ""
@@ -112,16 +112,24 @@ public struct SubtitleStateStore: Sendable {
             rows[existingIndex] = row
         } else {
             finalizeActiveDisplayedTranslation()
-            pendingAuthoritativeTranslationUpdates.removeAll(keepingCapacity: true)
+            clearPendingAuthoritativeTranslationUpdates()
             rows.append(row)
         }
 
         if event.type == .sentenceUpdated, existingIndex != nil {
             sourceRevisionSentenceIDs.insert(sentenceID)
             if rows.last?.sentenceID == sentenceID,
-               displayedTranslations[sentenceID] != nil,
-               !appliedAuthoritativeTranslationUpdates.contains(sentenceID) {
-                pendingAuthoritativeTranslationUpdates.insert(sentenceID)
+               displayedTranslations[sentenceID] != nil {
+                if let sequence = event.sequence {
+                    pendingAuthoritativeTranslationSequences[
+                        sentenceID,
+                        default: []
+                    ].insert(sequence)
+                } else {
+                    pendingUnsequencedAuthoritativeTranslationUpdates.insert(
+                        sentenceID
+                    )
+                }
             }
         }
 
@@ -197,13 +205,15 @@ public struct SubtitleStateStore: Sendable {
 
         updateDisplayedTranslation(
             translation,
-            sentenceID: sentenceID
+            sentenceID: sentenceID,
+            sequence: event.sequence
         )
     }
 
     private mutating func updateDisplayedTranslation(
         _ value: String,
-        sentenceID: String
+        sentenceID: String,
+        sequence: Int?
     ) {
         let translation = SubtitleText.normalized(value)
         guard !translation.isEmpty else { return }
@@ -213,7 +223,10 @@ public struct SubtitleStateStore: Sendable {
             return
         }
         guard translation != displayed else {
-            consumeAuthoritativeTranslationUpdate(for: sentenceID)
+            consumeAuthoritativeTranslationUpdate(
+                for: sentenceID,
+                through: sequence
+            )
             return
         }
 
@@ -221,17 +234,20 @@ public struct SubtitleStateStore: Sendable {
         // becomes immutable. Canonical rows still receive backend corrections,
         // but the reader's visible history and scroll anchor do not move.
         guard rows.last?.sentenceID == sentenceID else {
-            pendingAuthoritativeTranslationUpdates.remove(sentenceID)
+            clearPendingAuthoritativeTranslationUpdates(for: sentenceID)
             return
         }
 
         // A sentence_updated event explicitly says that the source sentence
-        // used for the first translation was revised. Accept exactly one
-        // matching translation while this remains the active tail, even when
-        // the source was already marked stable. This prevents the rough first
-        // translation from permanently hiding words added by the canonical
-        // source revision, without allowing later unsolicited churn.
-        if consumeAuthoritativeTranslationUpdate(for: sentenceID) {
+        // used for the displayed translation was revised. Accept the next
+        // matching translation for every explicit revision while this remains
+        // the active tail, even when the source was already marked stable.
+        // Ordinary translation-only rewrites still cannot churn the display,
+        // and every older sentence remains immutable.
+        if consumeAuthoritativeTranslationUpdate(
+            for: sentenceID,
+            through: sequence
+        ) {
             acceptDisplayedTranslation(translation, sentenceID: sentenceID)
             return
         }
@@ -297,8 +313,7 @@ public struct SubtitleStateStore: Sendable {
         let translation = SubtitleText.normalized(canonical)
         guard !translation.isEmpty else { return }
 
-        pendingAuthoritativeTranslationUpdates.remove(row.sentenceID)
-        appliedAuthoritativeTranslationUpdates.insert(row.sentenceID)
+        clearPendingAuthoritativeTranslationUpdates(for: row.sentenceID)
         if displayedTranslations[row.sentenceID] != translation {
             acceptDisplayedTranslation(
                 translation,
@@ -484,8 +499,7 @@ public struct SubtitleStateStore: Sendable {
         frozenTranslationPrefixes.removeAll(keepingCapacity: true)
         translationRewriteCounts.removeAll(keepingCapacity: true)
         sourceRevisionSentenceIDs.removeAll(keepingCapacity: true)
-        pendingAuthoritativeTranslationUpdates.removeAll(keepingCapacity: true)
-        appliedAuthoritativeTranslationUpdates.removeAll(keepingCapacity: true)
+        clearPendingAuthoritativeTranslationUpdates()
         aggregatePrimaryText = ""
         displayedAggregatePrimaryText = ""
         aggregateDisplayBaseText = ""
@@ -651,14 +665,50 @@ public struct SubtitleStateStore: Sendable {
 
     @discardableResult
     private mutating func consumeAuthoritativeTranslationUpdate(
-        for sentenceID: String
+        for sentenceID: String,
+        through translationSequence: Int?
     ) -> Bool {
-        guard pendingAuthoritativeTranslationUpdates.remove(sentenceID) != nil,
-              !appliedAuthoritativeTranslationUpdates.contains(sentenceID) else {
-            return false
+        var consumed = pendingUnsequencedAuthoritativeTranslationUpdates.remove(
+            sentenceID
+        ) != nil
+
+        guard let pending = pendingAuthoritativeTranslationSequences[sentenceID]
+        else {
+            return consumed
         }
-        appliedAuthoritativeTranslationUpdates.insert(sentenceID)
-        return true
+        guard let translationSequence else {
+            pendingAuthoritativeTranslationSequences.removeValue(
+                forKey: sentenceID
+            )
+            return true
+        }
+
+        let remaining = pending.filter { $0 > translationSequence }
+        if remaining.count != pending.count {
+            consumed = true
+        }
+        if remaining.isEmpty {
+            pendingAuthoritativeTranslationSequences.removeValue(
+                forKey: sentenceID
+            )
+        } else {
+            pendingAuthoritativeTranslationSequences[sentenceID] = remaining
+        }
+        return consumed
+    }
+
+    private mutating func clearPendingAuthoritativeTranslationUpdates(
+        for sentenceID: String
+    ) {
+        pendingAuthoritativeTranslationSequences.removeValue(forKey: sentenceID)
+        pendingUnsequencedAuthoritativeTranslationUpdates.remove(sentenceID)
+    }
+
+    private mutating func clearPendingAuthoritativeTranslationUpdates() {
+        pendingAuthoritativeTranslationSequences.removeAll(keepingCapacity: true)
+        pendingUnsequencedAuthoritativeTranslationUpdates.removeAll(
+            keepingCapacity: true
+        )
     }
 }
 

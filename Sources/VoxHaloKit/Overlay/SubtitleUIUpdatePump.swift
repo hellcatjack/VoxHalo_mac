@@ -65,7 +65,7 @@ private final class ContinuousScheduledTask:
 
 @MainActor
 public final class SubtitleUIUpdatePump {
-    public static let defaultMinimumInterval = Duration.milliseconds(150)
+    public static let defaultMinimumInterval = Duration.milliseconds(80)
 
     private let minimumInterval: Duration
     private let scheduler: any MainActorScheduling

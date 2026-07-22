@@ -4,6 +4,22 @@ import XCTest
 
 @MainActor
 final class SubtitleUIUpdatePumpTests: XCTestCase {
+    func testDefaultPumpDeliversLatestModelWithin80Milliseconds() {
+        let scheduler = ManualMainActorScheduler()
+        var applied: [SubtitleDisplayModel] = []
+        let pump = SubtitleUIUpdatePump(scheduler: scheduler) {
+            applied.append($0)
+        }
+
+        pump.post(model("one"))
+        pump.post(model("latest"))
+
+        scheduler.advance(by: .milliseconds(79))
+        XCTAssertTrue(applied.isEmpty)
+        scheduler.advance(by: .milliseconds(1))
+        XCTAssertEqual(applied.map(\.primaryText), ["latest"])
+    }
+
     func testBurstCoalescesToLatestModelAfter150Milliseconds() {
         let scheduler = ManualMainActorScheduler()
         var applied: [SubtitleDisplayModel] = []

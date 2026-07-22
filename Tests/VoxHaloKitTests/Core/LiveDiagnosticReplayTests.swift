@@ -33,18 +33,95 @@ final class LiveDiagnosticReplayTests: XCTestCase {
             )
         }
 
+        let timestampFormatter = ISO8601DateFormatter()
+        timestampFormatter.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds
+        ]
         var reconstructor = LiveEventReconstructor()
-        let events = records.compactMap { reconstructor.event(from: $0) }
+        let events = records.compactMap { record -> LiveTimedEvent? in
+            guard let event = reconstructor.event(from: record) else {
+                return nil
+            }
+            return LiveTimedEvent(
+                event: event,
+                receivedAt: record.timestamp.flatMap(timestampFormatter.date(from:))
+            )
+        }
         XCTAssertGreaterThan(events.count, 100)
 
         var store = SubtitleStateStore(direction: .chineseToEnglish)
         let view = makeReplayView()
         var readerPinned = false
         var verifiedFrozenPrefixes = 0
+        var pendingExplicitRevisions: [Int: LivePendingRevision] = [:]
+        var pendingUnsequencedRevisions: [LivePendingRevision] = []
+        var explicitSourceRevisions = 0
+        var matchedExplicitTranslations = 0
+        var activeExplicitTranslations = 0
+        var immediatelyReflectedTranslations = 0
+        var revisionTranslationDelays: [Double] = []
 
-        for event in events {
+        for timedEvent in events {
+            let event = timedEvent.event
+            if event.type == .sentenceUpdated,
+               let sentenceID = event.sentenceID {
+                explicitSourceRevisions += 1
+                let revision = LivePendingRevision(
+                    sentenceID: sentenceID,
+                    receivedAt: timedEvent.receivedAt
+                )
+                if let sequence = event.sequence {
+                    pendingExplicitRevisions[sequence] = revision
+                } else {
+                    pendingUnsequencedRevisions.append(revision)
+                }
+            } else if event.type == .sentenceReset {
+                pendingExplicitRevisions.removeAll(keepingCapacity: true)
+                pendingUnsequencedRevisions.removeAll(keepingCapacity: true)
+            }
+
+            let matchingRevision: LivePendingRevision?
+            if event.type == .sentenceTranslation,
+               let sequence = event.sequence,
+               let revision = pendingExplicitRevisions.removeValue(forKey: sequence) {
+                matchingRevision = revision
+            } else if event.type == .sentenceTranslation,
+                      let sentenceID = event.sentenceID,
+                      let index = pendingUnsequencedRevisions.firstIndex(where: {
+                          $0.sentenceID == sentenceID
+                      }) {
+                matchingRevision = pendingUnsequencedRevisions.remove(at: index)
+            } else {
+                matchingRevision = nil
+            }
+
             let oldSegments = store.current.primarySegments
             let model = store.apply(event)
+
+            if let matchingRevision {
+                matchedExplicitTranslations += 1
+                if let start = matchingRevision.receivedAt,
+                   let end = timedEvent.receivedAt {
+                    revisionTranslationDelays.append(
+                        max(0, end.timeIntervalSince(start) * 1_000)
+                    )
+                }
+
+                if store.rows.last?.sentenceID == matchingRevision.sentenceID {
+                    activeExplicitTranslations += 1
+                    let expected = SubtitleText.normalized(event.translation ?? "")
+                    let wasReflected = !expected.isEmpty
+                        && model.activePrimaryText == expected
+                    if wasReflected {
+                        immediatelyReflectedTranslations += 1
+                    }
+                    XCTAssertTrue(
+                        wasReflected,
+                        "an explicit active source revision was not rendered immediately"
+                    )
+                }
+            }
 
             if oldSegments.count > 1 {
                 let frozenPrefix = Array(oldSegments.dropLast())
@@ -88,6 +165,42 @@ final class LiveDiagnosticReplayTests: XCTestCase {
         XCTAssertGreaterThan(store.current.primarySegments.count, 10)
         XCTAssertGreaterThan(store.current.primaryText.utf16.count, 480)
         XCTAssertEqual(view.targetTextView.text, store.current.primaryText)
+        XCTAssertGreaterThan(explicitSourceRevisions, 10)
+        XCTAssertGreaterThan(activeExplicitTranslations, 10)
+        XCTAssertGreaterThanOrEqual(
+            coverage(
+                commonCount: matchedExplicitTranslations,
+                totalCount: explicitSourceRevisions
+            ),
+            0.95,
+            "too many explicit source revisions lacked a translation event"
+        )
+        XCTAssertEqual(
+            immediatelyReflectedTranslations,
+            activeExplicitTranslations,
+            "the active translation tail stalled after an explicit source revision"
+        )
+
+        let sortedRevisionDelays = revisionTranslationDelays.sorted()
+        print(
+            "LIVE_REALTIME_METRICS "
+                + "explicit_updates=\(explicitSourceRevisions) "
+                + "matched_translations=\(matchedExplicitTranslations) "
+                + "active_translations=\(activeExplicitTranslations) "
+                + "immediately_reflected=\(immediatelyReflectedTranslations) "
+                + "reflection_ratio="
+                + formatCoverage(coverage(
+                    commonCount: immediatelyReflectedTranslations,
+                    totalCount: activeExplicitTranslations
+                ))
+                + " median_backend_ms="
+                + formatMilliseconds(percentile(sortedRevisionDelays, ratio: 0.50))
+                + " p95_backend_ms="
+                + formatMilliseconds(percentile(sortedRevisionDelays, ratio: 0.95))
+                + " max_backend_ms="
+                + formatMilliseconds(sortedRevisionDelays.last ?? 0)
+                + " client_budget_ms=80"
+        )
 
         if let finalTranslation = records.last(where: {
             $0.event == "backend" && $0.type == "final"
@@ -213,15 +326,39 @@ final class LiveDiagnosticReplayTests: XCTestCase {
     private func formatCoverage(_ value: Double) -> String {
         String(format: "%.4f", value)
     }
+
+    private func percentile(_ sortedValues: [Double], ratio: Double) -> Double {
+        guard !sortedValues.isEmpty else { return 0 }
+        let boundedRatio = min(max(ratio, 0), 1)
+        let index = Int(
+            (Double(sortedValues.count - 1) * boundedRatio).rounded()
+        )
+        return sortedValues[index]
+    }
+
+    private func formatMilliseconds(_ value: Double) -> String {
+        String(format: "%.0f", value)
+    }
 }
 
 private struct LiveDiagnosticRecord: Decodable {
+    let timestamp: String?
     let event: String
     let type: String?
     let sequence: Int?
     let transcript: String?
     let translation: String?
     let stability: LiveDiagnosticStability?
+}
+
+private struct LiveTimedEvent {
+    let event: VoxBridgeEvent
+    let receivedAt: Date?
+}
+
+private struct LivePendingRevision {
+    let sentenceID: String
+    let receivedAt: Date?
 }
 
 private struct LiveDiagnosticStability: Decodable {
