@@ -163,7 +163,7 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         ])
     }
 
-    func testStableSourceFreezesFirstDisplayedTranslation() {
+    func testStableSourceFreezesAfterExplicitCanonicalTranslation() {
         var store = SubtitleStateStore(direction: .chineseToEnglish)
         store.apply(.committed(
             "s1",
@@ -195,7 +195,58 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         XCTAssertEqual(store.rows[0].translation,
                        "He then said, \"Brothers and sisters, I mean the time is short.\"")
         XCTAssertEqual(store.current.primaryText,
-                       "He then said, \"Brothers and sisters, I.\"")
+                       "He then said, \"Brothers and sisters, I mean the time is short.\"")
+
+        store.apply(.translated(
+            "s1",
+            "A later unsolicited rewrite must remain hidden.",
+            sequence: 5
+        ))
+        XCTAssertEqual(store.current.primaryText,
+                       "He then said, \"Brothers and sisters, I mean the time is short.\"")
+    }
+
+    func testStableActiveSentenceAcceptsOneTranslationAfterExplicitSourceUpdate() {
+        var store = SubtitleStateStore(direction: .chineseToEnglish)
+        store.apply(.committed(
+            "s1",
+            "弟兄姐妹，我。",
+            sequence: 1,
+            isStable: true,
+            stability: VoxBridgeStability(
+                isStable: true,
+                phase: "solidified",
+                reason: "sentence_committed",
+                sentenceID: "s1",
+                sequence: 1
+            )
+        ))
+        store.apply(.translated(
+            "s1",
+            "Brothers and sisters, I.",
+            sequence: 2
+        ))
+
+        store.apply(.updated(
+            "s1",
+            "弟兄姐妹，我是说时候不多了。",
+            sequence: 3
+        ))
+        store.apply(.translated(
+            "s1",
+            "Brothers and sisters, I mean the time is short.",
+            sequence: 4
+        ))
+        store.apply(.translated(
+            "s1",
+            "A later unsolicited rewrite must remain hidden.",
+            sequence: 5
+        ))
+
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Brothers and sisters, I mean the time is short."
+        )
     }
 
     func testCompletedSentencePrefixFreezesWhileCurrentTailCanCorrect() {
@@ -236,7 +287,7 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         )
     }
 
-    func testStableMetadataFreezesUnpunctuatedTranslation() {
+    func testStableMetadataAllowsOneExplicitCanonicalTranslationUpdate() {
         var store = SubtitleStateStore(direction: .englishToChinese)
         store.apply(.committed(
             "s1",
@@ -247,9 +298,10 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         store.apply(.translated("s1", "Initial stable wording", sequence: 2))
         store.apply(.updated("s1", "Corrected stable source", sequence: 3))
         store.apply(.translated("s1", "Corrected stable wording", sequence: 4))
+        store.apply(.translated("s1", "Later unstable wording", sequence: 5))
 
-        XCTAssertEqual(store.rows[0].translation, "Corrected stable wording")
-        XCTAssertEqual(store.current.primaryText, "Initial stable wording")
+        XCTAssertEqual(store.rows[0].translation, "Later unstable wording")
+        XCTAssertEqual(store.current.primaryText, "Corrected stable wording")
     }
 
     func testUnpunctuatedActiveTranslationAllowsOnlyOneStructuralRewrite() {
@@ -305,6 +357,29 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
         store.apply(.translated("s1", "Corrected first translation", sequence: 5))
 
         XCTAssertEqual(store.current.primarySegments, ["First translation"])
+    }
+
+    func testNewSourceSentenceFinalizesPreviousCanonicalTranslation() {
+        var store = SubtitleStateStore(direction: .chineseToEnglish)
+        store.apply(.committed("s1", "初稿", sequence: 1, isStable: true))
+        store.apply(.translated("s1", "Rough first translation.", sequence: 2))
+        store.apply(.updated("s1", "第一次修订", sequence: 3))
+        store.apply(.translated("s1", "First canonical revision.", sequence: 4))
+        store.apply(.updated("s1", "最终完整原文", sequence: 5))
+        store.apply(.translated(
+            "s1",
+            "The complete final translation with every word.",
+            sequence: 6
+        ))
+
+        XCTAssertEqual(store.current.primaryText, "First canonical revision.")
+
+        store.apply(.committed("s2", "下一句", sequence: 7))
+
+        XCTAssertEqual(
+            store.current.primarySegments,
+            ["The complete final translation with every word."]
+        )
     }
 
     func testChineseSentenceEndingWithObjectPronounIsDisplayed() {

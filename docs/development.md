@@ -27,19 +27,22 @@ Run focused tests with `swift test --filter TestClassName`.
 
 An opted-in live run can be replayed through the exact production state store
 and AppKit renderer without storing any transcript in the repository. Record the
-first diagnostic line before Start, then run:
+first diagnostic line before Start and the final line after Stop, then run:
 
 ```bash
 VOXHALO_LIVE_DIAGNOSTIC_LOG="$HOME/Library/Logs/VoxHalo/client.log" \
 VOXHALO_LIVE_DIAGNOSTIC_FIRST_LINE=<first-line> \
+VOXHALO_LIVE_DIAGNOSTIC_LAST_LINE=<last-line> \
 VOXHALO_LIVE_REPLAY_SNAPSHOT=/tmp/voxhalo-live-replay.png \
 swift test --filter LiveDiagnosticReplayTests
 ```
 
 The gated test reconstructs production-shaped subtitle events, verifies that
 rendered history never changes after it leaves the live tail, simulates a reader
-scrolling back, asserts that later events preserve that position, and optionally
-writes a pixel snapshot. It skips in ordinary test runs.
+scrolling back, asserts that later events preserve that position, requires at
+least 95% bidirectional word-sequence coverage against a completed backend
+`final`, reports numeric-only coverage metrics, and optionally writes a pixel
+snapshot. It skips in ordinary test runs.
 
 Build and verify the release application:
 

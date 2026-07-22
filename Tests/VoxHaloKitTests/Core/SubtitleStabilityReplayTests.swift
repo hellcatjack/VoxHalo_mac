@@ -4,9 +4,9 @@ import XCTest
 
 @MainActor
 final class SubtitleStabilityReplayTests: XCTestCase {
-    func testTwoMinuteEquivalentReplayNeverDropsOrRewritesVisiblePrefix() {
+    func testTwoMinuteEquivalentReplayOnlyRevisesActiveTail() {
         var store = SubtitleStateStore(direction: .englishToChinese)
-        var acceptedText = ""
+        var frozenSegments: [String] = []
 
         for index in 1...48 {
             store.apply(.committed(
@@ -21,11 +21,12 @@ final class SubtitleStabilityReplayTests: XCTestCase {
                 sequence: index * 4 - 2
             ))
 
-            XCTAssertTrue(
-                store.current.primaryText.hasPrefix(acceptedText),
-                "append \(index) displaced an already visible prefix"
+            XCTAssertEqual(
+                Array(store.current.primarySegments.prefix(frozenSegments.count)),
+                frozenSegments,
+                "append \(index) displaced an already frozen sentence"
             )
-            acceptedText = store.current.primaryText
+            XCTAssertEqual(store.current.primarySegments.last, translation)
 
             store.apply(.updated(
                 "s\(index)",
@@ -34,19 +35,24 @@ final class SubtitleStabilityReplayTests: XCTestCase {
             ))
             store.apply(.translated(
                 "s\(index)",
-                "Structurally rewritten translation \(index) should stay canonical only.",
+                "Structurally rewritten translation \(index) is the explicit canonical revision.",
                 sequence: index * 4
             ))
             XCTAssertEqual(
-                store.current.primaryText,
-                acceptedText,
-                "revision \(index) rewrote the visible reading stream"
+                Array(store.current.primarySegments.prefix(frozenSegments.count)),
+                frozenSegments,
+                "revision \(index) rewrote an earlier sentence"
             )
+            XCTAssertEqual(
+                store.current.primarySegments.last,
+                "Structurally rewritten translation \(index) is the explicit canonical revision."
+            )
+            frozenSegments = store.current.primarySegments
         }
 
         XCTAssertGreaterThan(store.current.primaryText.utf16.count, 480)
-        XCTAssertTrue(store.current.primaryText.hasPrefix("Stable translated sentence 1"))
-        XCTAssertTrue(store.current.primaryText.hasSuffix("sentence 48 remains readable."))
+        XCTAssertTrue(store.current.primaryText.hasPrefix("Structurally rewritten translation 1"))
+        XCTAssertTrue(store.current.primaryText.hasSuffix("explicit canonical revision."))
         XCTAssertEqual(store.current.primarySegments.count, 48)
     }
 

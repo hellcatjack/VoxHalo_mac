@@ -14,12 +14,19 @@ final class LiveDiagnosticReplayTests: XCTestCase {
             1,
             Int(environment["VOXHALO_LIVE_DIAGNOSTIC_FIRST_LINE"] ?? "1") ?? 1
         )
+        let lastLine = environment["VOXHALO_LIVE_DIAGNOSTIC_LAST_LINE"]
+            .flatMap(Int.init)
+            .map { max(firstLine, $0) }
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let text = try XCTUnwrap(String(data: data, encoding: .utf8))
         let decoder = JSONDecoder()
         let records = try text.split(separator: "\n").enumerated().compactMap {
             index, line -> LiveDiagnosticRecord? in
-            guard index + 1 >= firstLine else { return nil }
+            let lineNumber = index + 1
+            guard lineNumber >= firstLine,
+                  lastLine.map({ lineNumber <= $0 }) ?? true else {
+                return nil
+            }
             return try decoder.decode(
                 LiveDiagnosticRecord.self,
                 from: Data(line.utf8)
@@ -82,6 +89,48 @@ final class LiveDiagnosticReplayTests: XCTestCase {
         XCTAssertGreaterThan(store.current.primaryText.utf16.count, 480)
         XCTAssertEqual(view.targetTextView.text, store.current.primaryText)
 
+        if let finalTranslation = records.last(where: {
+            $0.event == "backend" && $0.type == "final"
+        })?.translation {
+            let displayedWords = normalizedWords(store.current.primaryText)
+            let finalWords = normalizedWords(finalTranslation)
+            let commonWords = longestCommonSubsequenceLength(
+                displayedWords,
+                finalWords
+            )
+            let displayedCoverage = coverage(
+                commonCount: commonWords,
+                totalCount: displayedWords.count
+            )
+            let finalCoverage = coverage(
+                commonCount: commonWords,
+                totalCount: finalWords.count
+            )
+
+            XCTAssertGreaterThanOrEqual(
+                displayedCoverage,
+                0.95,
+                "displayed history diverged too far from the authoritative final"
+            )
+            XCTAssertGreaterThanOrEqual(
+                finalCoverage,
+                0.95,
+                "authoritative final content is missing from the displayed history"
+            )
+
+            print(
+                "LIVE_REPLAY_METRICS "
+                    + "rows=\(store.rows.count) "
+                    + "primary_segments=\(store.current.primarySegments.count) "
+                    + "reference_segments=\(store.current.referenceSegments.count) "
+                    + "displayed_words=\(displayedWords.count) "
+                    + "final_words=\(finalWords.count) "
+                    + "common_words=\(commonWords) "
+                    + "displayed_coverage=\(formatCoverage(displayedCoverage)) "
+                    + "final_coverage=\(formatCoverage(finalCoverage))"
+            )
+        }
+
         if let outputPath = environment["VOXHALO_LIVE_REPLAY_SNAPSHOT"],
            !outputPath.isEmpty {
             let bitmap = try XCTUnwrap(
@@ -122,6 +171,47 @@ final class LiveDiagnosticReplayTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
         view.flushPendingScrolls()
         return view
+    }
+
+    private func normalizedWords(_ value: String) -> [String] {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+    }
+
+    private func longestCommonSubsequenceLength(
+        _ lhs: [String],
+        _ rhs: [String]
+    ) -> Int {
+        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
+        var previous = Array(repeating: 0, count: rhs.count + 1)
+        var current = previous
+
+        for left in lhs {
+            current[0] = 0
+            for index in rhs.indices {
+                if left == rhs[index] {
+                    current[index + 1] = previous[index] + 1
+                } else {
+                    current[index + 1] = max(
+                        current[index],
+                        previous[index + 1]
+                    )
+                }
+            }
+            swap(&previous, &current)
+        }
+        return previous[rhs.count]
+    }
+
+    private func coverage(commonCount: Int, totalCount: Int) -> Double {
+        guard totalCount > 0 else { return 1 }
+        return Double(commonCount) / Double(totalCount)
+    }
+
+    private func formatCoverage(_ value: Double) -> String {
+        String(format: "%.4f", value)
     }
 }
 
