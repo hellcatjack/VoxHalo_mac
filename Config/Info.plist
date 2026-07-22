@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>VoxHalo</string>
+    <key>CFBundleDisplayName</key>
+    <string>VoxHalo</string>
+    <key>CFBundleExecutable</key>
+    <string>VoxHalo</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.hellcatjack.voxhalo</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>VoxHalo needs microphone access to capture a selected hardware input for live subtitles.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>VoxHalo needs System Audio Recording access to capture playing audio for live subtitles.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

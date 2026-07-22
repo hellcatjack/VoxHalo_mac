@@ -1,4 +1,5 @@
 import SwiftUI
+import VoxHaloKit
 
 @main
 struct VoxHaloApp: App {
@@ -6,8 +7,8 @@ struct VoxHaloApp: App {
 
     var body: some Scene {
         WindowGroup("VoxHalo") {
-            Text("VoxHalo")
-                .frame(minWidth: 520, minHeight: 360)
+            OperatorView(model: appDelegate.environment.operatorModel)
         }
+        .defaultSize(width: 760, height: 780)
     }
 }

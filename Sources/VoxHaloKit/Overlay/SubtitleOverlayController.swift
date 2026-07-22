@@ -1,6 +1,15 @@
 import AppKit
 
 @MainActor
+public protocol SubtitleOverlayControlling: AnyObject {
+    func showEmpty(on displayUUID: String?)
+    func apply(model: SubtitleDisplayModel)
+    func apply(layout: SubtitleLayoutSettings)
+    func selectDisplay(uuid: String?)
+    func close()
+}
+
+@MainActor
 public final class SubtitleOverlayController {
     public let panel: SubtitleOverlayPanel
     public let overlayView: SubtitleOverlayView
@@ -89,3 +98,5 @@ public final class SubtitleOverlayController {
         overlayView.layoutSubtreeIfNeeded()
     }
 }
+
+extension SubtitleOverlayController: SubtitleOverlayControlling {}

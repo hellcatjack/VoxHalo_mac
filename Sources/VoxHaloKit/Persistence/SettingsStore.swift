@@ -1,6 +1,11 @@
 import Darwin
 import Foundation
 
+public protocol AppSettingsStoring: Sendable {
+    func load() throws -> AppSettings
+    func save(_ settings: AppSettings) throws
+}
+
 public struct SettingsStore: Sendable {
     public let settingsURL: URL
 
@@ -170,3 +175,5 @@ public struct SettingsStore: Sendable {
         case referenceColor = "RecognitionSubtitleColor"
     }
 }
+
+extension SettingsStore: AppSettingsStoring {}
