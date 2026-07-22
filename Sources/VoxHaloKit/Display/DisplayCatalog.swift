@@ -7,7 +7,7 @@ public protocol DisplayCataloging: AnyObject {
     func displays() -> [DisplayDescriptor]
     func selectedDisplay(savedUUID: String?) -> DisplayDescriptor
     func startObserving(
-        _ handler: @escaping @Sendable ([DisplayDescriptor]) -> Void
+        _ handler: @escaping @MainActor @Sendable ([DisplayDescriptor]) -> Void
     )
     func stopObserving()
 }
@@ -96,7 +96,7 @@ public final class DisplayCatalog: DisplayCataloging {
     private let provider: any ScreenProviding
     private let uuidResolver: UUIDResolver
     private var lastSnapshot: [DisplayDescriptor]?
-    private var handler: (@Sendable ([DisplayDescriptor]) -> Void)?
+    private var handler: (@MainActor @Sendable ([DisplayDescriptor]) -> Void)?
     private var isObserving = false
 
     public init(
@@ -125,7 +125,7 @@ public final class DisplayCatalog: DisplayCataloging {
     }
 
     public func startObserving(
-        _ handler: @escaping @Sendable ([DisplayDescriptor]) -> Void
+        _ handler: @escaping @MainActor @Sendable ([DisplayDescriptor]) -> Void
     ) {
         if isObserving {
             stopObserving()
