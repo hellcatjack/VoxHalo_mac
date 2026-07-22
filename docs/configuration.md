@@ -5,6 +5,7 @@
 The operator window exposes:
 
 - VoxBridge endpoint and authentication username/password;
+- an opt-in **Save in Keychain** checkbox;
 - exactly Chinese → English and English → Chinese;
 - a multiline Hotwords editor for rare names and professional terms;
 - System Audio plus currently available hardware input devices;
@@ -30,7 +31,9 @@ Before persistence, URL userinfo and fragments are removed. Query items named `t
 
 Enter the password in the SecureField before Start. A blank password skips the `/login` request. A nonblank password causes form authentication and cookie handoff to the WebSocket.
 
-The username may be persisted. The password is memory-only: it is not part of `AppSettings`, settings JSON, logs, Keychain, or the application bundle. It must normally be re-entered after relaunch.
+The username is persisted in settings. Password persistence is opt-in: select **Save in Keychain**, then complete a successful Start. VoxHalo stores one endpoint/username/password tuple as a macOS generic-password item and restores it only when the saved endpoint and username still match. Clearing the checkbox deletes that item while leaving the current field available until the app quits.
+
+The password is never part of `AppSettings`, settings JSON, diagnostics, process arguments, or the application bundle. A rejected login does not overwrite the last successfully saved Keychain item.
 
 Command-line development launches may override the fields:
 
@@ -39,7 +42,11 @@ VOXBRIDGE_AUTH_USERNAME
 VOXBRIDGE_AUTH_PASSWORD
 ```
 
-Environment values take precedence over saved/default values. The environment password still remains memory-only. Finder launches should not be expected to inherit shell environment variables.
+Environment values take precedence over Keychain/saved/default values and are never copied into Keychain automatically. Finder launches should not be expected to inherit shell environment variables.
+
+## Operator window layout
+
+The settings window uses a two-column, non-scrolling layout. Its preferred content size is 1020 × 540 points and its minimum is 900 × 500 points. App launch caps the initial size to the active display's visible frame. All session, overlay, translation, recognition, action, and status controls remain in the same screen; the settings hierarchy contains no scroll view or scrollbar.
 
 ## Hotwords and professional terms
 

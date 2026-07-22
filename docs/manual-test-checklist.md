@@ -80,7 +80,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 ## F. Persistence, diagnostics, teardown, and relaunch
 
 38. `[ ] Pass  [ ] Fail  [ ] N/A` Safe endpoint, username, direction, source, display, and all layout values survive relaunch.
-39. `[ ] Pass  [ ] Fail  [ ] N/A` Password is absent from settings, diagnostics, bundle resources, process launch arguments, and Keychain usage; password field is empty after normal relaunch.
+39. `[ ] Pass  [ ] Fail  [ ] N/A` With Save in Keychain enabled, a successful Start restores the matching password after unchanged-bundle relaunch; clearing it removes the item. Password remains absent from settings, diagnostics, bundle resources, and process launch arguments.
 40. `[x] Pass  [ ] Fail  [ ] N/A` Saved missing audio source falls back before Start; active source removal never switches during Running. Evidence: operator/catalog/disconnect tests passed.
 41. `[x] Pass  [ ] Fail  [ ] N/A` Saved missing display falls back to main/first display. Evidence: display catalog and overlay removal tests passed.
 42. `[x] Pass  [ ] Fail  [ ] N/A` Diagnostics are absent/off by default. Evidence: no `~/Library/Logs/VoxHalo/client.log` after clean launches; opt-in test passed.

@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "VoxHaloKit", targets: ["VoxHaloKit"]),
-        .executable(name: "VoxHalo", targets: ["VoxHaloApp"])
+        .executable(name: "VoxHalo", targets: ["VoxHaloApp"]),
     ],
     targets: [
         .target(
@@ -15,7 +15,7 @@ let package = Package(
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("CoreAudio"),
-                .linkedFramework("AudioToolbox")
+                .linkedFramework("AudioToolbox"),
             ]
         ),
         .target(
@@ -28,7 +28,8 @@ let package = Package(
                 .linkedFramework("CoreAudio"),
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreGraphics"),
-                .linkedFramework("CoreText")
+                .linkedFramework("CoreText"),
+                .linkedFramework("Security"),
             ]
         ),
         .executableTarget(
@@ -41,7 +42,7 @@ let package = Package(
             dependencies: ["VoxHaloKit"],
             path: "Tests/VoxHaloKitTests",
             linkerSettings: [.linkedFramework("Network")]
-        )
+        ),
     ],
     swiftLanguageModes: [.v6],
     cxxLanguageStandard: .cxx17

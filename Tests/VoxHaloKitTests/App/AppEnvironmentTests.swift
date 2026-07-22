@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import XCTest
+
 @testable import VoxHaloKit
 
 @MainActor
@@ -26,7 +27,7 @@ final class AppEnvironmentTests: XCTestCase {
 
         let recorded = await waitUntil {
             await diagnostics.events.contains { event in
-                guard case let .capturePipeline(value) = event else {
+                guard case .capturePipeline(let value) = event else {
                     return false
                 }
                 return value == progress
@@ -50,6 +51,7 @@ final class AppEnvironmentTests: XCTestCase {
 
         let model = OperatorModel(
             settingsStore: store,
+            passwordStore: FakePasswordStore(),
             sessionCoordinator: session,
             audioCatalog: audio,
             displayCatalog: displays,
@@ -121,6 +123,7 @@ private final class EnvironmentFixture {
         overlay = FakeOperatorOverlay()
         model = OperatorModel(
             settingsStore: modelFixture.store,
+            passwordStore: FakePasswordStore(),
             sessionCoordinator: session,
             audioCatalog: audioCatalog,
             displayCatalog: displayCatalog,

@@ -72,13 +72,15 @@ Stop is shared and idempotent. It stops capture, drains/cancels audio work, send
 
 ### Operator and overlay
 
-`OperatorModel` is isolated to the main actor. It loads settings and environment overrides, observes audio/display catalogs, automatically persists raw hotword input, validates it before Start, constructs credentials only inside Start, maps session outputs, and sends subtitle snapshots through the coalescing pump.
+`OperatorModel` is isolated to the main actor. It loads settings, an optional matching Keychain password, and environment overrides; observes audio/display catalogs; automatically persists raw hotword input; validates it before Start; constructs credentials only inside Start; saves an opted-in password only after successful startup; maps session outputs; and sends subtitle snapshots through the coalescing pump.
+
+`OperatorView` uses a compact two-column SwiftUI hierarchy with no scroll container. `OperatorWindowLayout` selects a 1020 × 540-point preferred size, enforces a 900 × 500-point minimum, and caps the initial window to the active display's visible frame so every setting and action remains visible together.
 
 The overlay is a borderless nonactivating transparent `NSPanel` at `.screenSaver` level. It ignores mouse events and uses `.canJoinAllSpaces`, `.fullScreenAuxiliary`, `.stationary`, and `.ignoresCycle`. Bilingual text uses PingFang SC Semibold/Medium with natural font-metric line heights and separate outline-then-fill Core Text passes, keeping Chinese and Latin glyphs solid on complex video. Persistent display selection uses a CG display UUID, so array order and transient display IDs are irrelevant.
 
 ### Persistence and diagnostics
 
-`SettingsStore` normalizes values, strips URL credentials/sensitive query parameters, removes legacy `AuthPassword`, preserves raw `AsrContextTermsText` and unrelated JSON fields, and uses mode-0700 directories plus atomic mode-0600 files. No password field exists in `AppSettings`.
+`SettingsStore` normalizes values, strips URL credentials/sensitive query parameters, removes legacy `AuthPassword`, preserves raw `AsrContextTermsText` and unrelated JSON fields, and uses mode-0700 directories plus atomic mode-0600 files. No password field exists in `AppSettings`. `KeychainPasswordStore` is the sole persistent password boundary and uses the native Security framework's generic-password operations.
 
 `DiagnosticsLogger` is disabled by default. When enabled, it permanently redacts credentials, cookies, usernames, device identities, and credential-shaped content. It records only hotword counts/character counts/acknowledgement metadata and backend error-message length, never the configured term array or error text. Transcripts remain redacted unless separately opted in.
 

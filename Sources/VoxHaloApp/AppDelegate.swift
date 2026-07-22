@@ -26,9 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowPresentationTask = Task { @MainActor [weak self, weak window] in
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled,
-                  let self,
-                  let window,
-                  self.operatorWindow === window else {
+                let self,
+                let window,
+                self.operatorWindow === window
+            else {
                 return
             }
             application.activate()
@@ -55,17 +56,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func makeOperatorWindow() -> NSWindow {
+        let visibleFrame =
+            NSScreen.main?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1_024, height: 700)
+        let contentSize = OperatorWindowLayout.contentSize(fitting: visibleFrame)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 780),
+            contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "VoxHalo"
-        window.minSize = NSSize(width: 680, height: 700)
+        window.contentMinSize = NSSize(
+            width: min(
+                OperatorWindowLayout.minimumContentSize.width,
+                contentSize.width
+            ),
+            height: min(
+                OperatorWindowLayout.minimumContentSize.height,
+                contentSize.height
+            )
+        )
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace]
-        window.setFrameAutosaveName("VoxHalo.OperatorWindow")
         window.contentView = NSHostingView(
             rootView: OperatorView(model: environment.operatorModel)
         )

@@ -16,9 +16,10 @@ final class ProjectPackagingTests: XCTestCase {
     func testReleaseScriptBuildsFixedArm64AppPathAndSignsWithEntitlements() throws {
         let script = try text("scripts/build-app.sh")
 
-        XCTAssertTrue(script.contains(
-            "swift build -c release --arch arm64 --product VoxHalo"
-        ))
+        XCTAssertTrue(
+            script.contains(
+                "swift build -c release --arch arm64 --product VoxHalo"
+            ))
         XCTAssertTrue(script.contains("dist/VoxHalo.app/Contents/MacOS/VoxHalo"))
         XCTAssertTrue(script.contains("install -m 0755"))
         XCTAssertTrue(script.contains("Config/Info.plist"))
@@ -58,6 +59,7 @@ final class ProjectPackagingTests: XCTestCase {
             "LSMinimumSystemVersion",
             "26.0",
             "arm64",
+            "Security.framework",
             "codesign --verify --deep --strict",
             "runtime",
             "com.apple.security.device.audio-input",
@@ -92,10 +94,11 @@ final class ProjectPackagingTests: XCTestCase {
     }
 
     func testRepositoryIgnoresNineSensitiveLocalPathPatterns() throws {
-        let rules = Set(try text(".gitignore")
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") })
+        let rules = Set(
+            try text(".gitignore")
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !$0.hasPrefix("#") })
 
         for expected in [
             "/.tools/",
@@ -122,26 +125,32 @@ final class ProjectPackagingTests: XCTestCase {
             "docs/security-and-privacy.md",
             "docs/manual-test-checklist.md",
         ] {
-            XCTAssertTrue(FileManager.default.fileExists(
-                atPath: packageRoot.appendingPathComponent(path).path
-            ), path)
+            XCTAssertTrue(
+                FileManager.default.fileExists(
+                    atPath: packageRoot.appendingPathComponent(path).path
+                ), path)
         }
     }
 
-    func testPackageHasNoThirdPartyPinsAndProductSourceUsesNoKeychainAPI() throws {
+    func testPackageHasNoThirdPartyPinsAndUsesOnlyNativeMacOSKeychainAPI() throws {
         let resolvedURL = packageRoot.appendingPathComponent("Package.resolved")
         if FileManager.default.fileExists(atPath: resolvedURL.path) {
-            let object = try JSONSerialization.jsonObject(
-                with: Data(contentsOf: resolvedURL)
-            ) as? [String: Any]
-            let pins = (object?["pins"] as? [Any])
+            let object =
+                try JSONSerialization.jsonObject(
+                    with: Data(contentsOf: resolvedURL)
+                ) as? [String: Any]
+            let pins =
+                (object?["pins"] as? [Any])
                 ?? ((object?["object"] as? [String: Any])?["pins"] as? [Any])
                 ?? []
             XCTAssertTrue(pins.isEmpty)
         }
 
+        let package = try text("Package.swift")
+        XCTAssertTrue(package.contains(".linkedFramework(\"Security\")"))
+
         let sources = try swiftSourceText(in: "Sources")
-        for forbidden in [
+        for required in [
             "import Security",
             "SecItemAdd",
             "SecItemCopyMatching",
@@ -149,8 +158,9 @@ final class ProjectPackagingTests: XCTestCase {
             "SecItemDelete",
             "kSecClass",
         ] {
-            XCTAssertFalse(sources.contains(forbidden), forbidden)
+            XCTAssertTrue(sources.contains(required), required)
         }
+        XCTAssertFalse(sources.contains("AuthPassword"))
     }
 
     func testReleaseBundleBuildAndVerificationWhenExplicitlyEnabled() throws {
@@ -160,11 +170,13 @@ final class ProjectPackagingTests: XCTestCase {
 
         let result = try run("scripts/build-app.sh")
         XCTAssertEqual(result.status, 0, result.output)
-        XCTAssertTrue(FileManager.default.isExecutableFile(
-            atPath: packageRoot
-                .appendingPathComponent("dist/VoxHalo.app/Contents/MacOS/VoxHalo")
-                .path
-        ))
+        XCTAssertTrue(
+            FileManager.default.isExecutableFile(
+                atPath:
+                    packageRoot
+                    .appendingPathComponent("dist/VoxHalo.app/Contents/MacOS/VoxHalo")
+                    .path
+            ))
 
         let verification = try run("scripts/verify-app.sh", "dist/VoxHalo.app")
         XCTAssertEqual(verification.status, 0, verification.output)
@@ -179,11 +191,12 @@ final class ProjectPackagingTests: XCTestCase {
 
     private func propertyList(_ relativePath: String) throws -> [String: Any] {
         let data = try Data(contentsOf: packageRoot.appendingPathComponent(relativePath))
-        return try XCTUnwrap(PropertyListSerialization.propertyList(
-            from: data,
-            options: [],
-            format: nil
-        ) as? [String: Any])
+        return try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+            ) as? [String: Any])
     }
 
     private func swiftSourceText(in relativeDirectory: String) throws -> String {
@@ -211,10 +224,11 @@ final class ProjectPackagingTests: XCTestCase {
         process.standardError = pipe
         try process.run()
         process.waitUntilExit()
-        let output = String(
-            data: pipe.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
+        let output =
+            String(
+                data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
         return (process.terminationStatus, output)
     }
 

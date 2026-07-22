@@ -42,7 +42,7 @@ The suite covers hotword parsing and privacy, the wire protocol, authentication 
 
 1. Launch `dist/VoxHalo.app`.
 2. Keep the default TLS endpoint or enter another absolute `ws://`/`wss://` endpoint.
-3. Enter the login username and password. The password remains in memory only.
+3. Enter the login username and password. Enable **Save in Keychain** to reuse it securely after relaunch.
 4. Choose a direction and optionally enter rare names or professional terms in **Hotwords**.
 5. Choose an audio source and display.
 6. Click **Start** and approve the relevant macOS permission when prompted.
@@ -55,7 +55,7 @@ The overlay is transparent, always on top, nonactivating, click-through, and vis
 - Settings: `~/Library/Application Support/VoxHalo/settings.json`
 - Opt-in diagnostics: `~/Library/Logs/VoxHalo/client.log`
 
-Passwords are not written to settings, diagnostics, the bundle, or Keychain. Hotword input is automatically stored as plaintext in the private settings file and sent to the selected backend, so inspect it before sharing that file. Hotword arrays and backend error text are never written as diagnostic fields. Diagnostics are disabled by default. See [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), and the [user guide](docs/user-guide.md) for details.
+Passwords are never written to settings, diagnostics, or the bundle. When explicitly enabled, the endpoint/username/password tuple is stored only as a generic password in this Mac's Keychain after a successful Start. Hotword input is automatically stored as plaintext in the private settings file and sent to the selected backend, so inspect it before sharing that file. Hotword arrays and backend error text are never written as diagnostic fields. Diagnostics are disabled by default. See [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), and the [user guide](docs/user-guide.md) for details.
 
 ## Documentation
 
@@ -66,4 +66,4 @@ Passwords are not written to settings, diagnostics, the bundle, or Keychain. Hot
 - [Security and privacy](docs/security-and-privacy.md)
 - [Manual acceptance checklist](docs/manual-test-checklist.md)
 
-This release is intended for this Mac. Developer ID distribution, notarization, Intel support, App Store sandboxing, automatic updates, and password persistence are intentionally outside its scope.
+This release is intended for this Mac. Developer ID distribution, notarization, Intel support, App Store sandboxing, and automatic updates are outside its scope.

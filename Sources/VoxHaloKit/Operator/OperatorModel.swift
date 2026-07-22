@@ -11,7 +11,18 @@ public final class OperatorModel: ObservableObject {
         didSet { persistIfReady() }
     }
 
-    @Published public var password: String = ""
+    @Published public var password: String
+
+    @Published public var rememberPassword: Bool {
+        didSet {
+            guard isReady, oldValue != rememberPassword else { return }
+            if rememberPassword {
+                passwordStorageMessage = "Saved after a successful Start"
+            } else {
+                forgetSavedPassword()
+            }
+        }
+    }
 
     @Published public var hotwordsText: String {
         didSet { persistIfReady() }
@@ -50,14 +61,15 @@ public final class OperatorModel: ObservableObject {
     @Published public private(set) var state: SubtitleSessionState = .stopped
     @Published public private(set) var status: String = "Stopped"
     @Published public private(set) var errorMessage: String?
-    @Published public private(set) var permissionSettingsDestination:
-        PermissionSettingsDestination?
+    @Published public private(set) var permissionSettingsDestination: PermissionSettingsDestination?
+    @Published public private(set) var passwordStorageMessage: String?
 
     public let directions = TranslationDirection.allCases
     public let colorChoices = SubtitleColorChoice.all
     public let usesTransparentOverlayOnly = true
 
     private let settingsStore: any AppSettingsStoring
+    private let passwordStore: any PasswordStoring
     private let sessionCoordinator: any SubtitleSessionCoordinating
     private let audioCatalog: any AudioDeviceCataloging
     private let displayCatalog: any DisplayCataloging
@@ -73,6 +85,7 @@ public final class OperatorModel: ObservableObject {
 
     public init(
         settingsStore: any AppSettingsStoring,
+        passwordStore: any PasswordStoring,
         sessionCoordinator: any SubtitleSessionCoordinating,
         audioCatalog: any AudioDeviceCataloging,
         displayCatalog: any DisplayCataloging,
@@ -81,6 +94,7 @@ public final class OperatorModel: ObservableObject {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.settingsStore = settingsStore
+        self.passwordStore = passwordStore
         self.sessionCoordinator = sessionCoordinator
         self.audioCatalog = audioCatalog
         self.displayCatalog = displayCatalog
@@ -97,10 +111,39 @@ public final class OperatorModel: ObservableObject {
         }
         settingsTemplate = loadedSettings
 
-        backendURL = loadedSettings.backendURL.absoluteString
-        username = Self.nonBlank(environment["VOXBRIDGE_AUTH_USERNAME"])
+        let resolvedEndpoint = loadedSettings.backendURL.absoluteString
+        let resolvedUsername =
+            Self.nonBlank(environment["VOXBRIDGE_AUTH_USERNAME"])
             ?? loadedSettings.authUsername
-        password = environment["VOXBRIDGE_AUTH_PASSWORD"] ?? ""
+        let environmentPassword = environment["VOXBRIDGE_AUTH_PASSWORD"]
+        let savedPassword: SavedPassword?
+        let passwordLoadFailed: Bool
+        do {
+            savedPassword = try passwordStore.load()
+            passwordLoadFailed = false
+        } catch {
+            savedPassword = nil
+            passwordLoadFailed = true
+        }
+        let matchingSavedPassword =
+            environmentPassword == nil
+            ? savedPassword.flatMap { saved in
+                saved.endpoint == resolvedEndpoint
+                    && saved.username == resolvedUsername ? saved : nil
+            }
+            : nil
+
+        backendURL = resolvedEndpoint
+        username = resolvedUsername
+        password = environmentPassword ?? matchingSavedPassword?.password ?? ""
+        rememberPassword = matchingSavedPassword != nil
+        if matchingSavedPassword != nil {
+            passwordStorageMessage = "Saved in macOS Keychain"
+        } else if passwordLoadFailed {
+            passwordStorageMessage = "macOS Keychain could not be read"
+        } else {
+            passwordStorageMessage = nil
+        }
         hotwordsText = loadedSettings.asrContextTermsText
         direction = loadedSettings.direction
         layout = SubtitleLayoutSettings(settings: loadedSettings).normalized()
@@ -112,17 +155,19 @@ public final class OperatorModel: ObservableObject {
             initialSources = [.systemAudio]
         }
         audioSources = initialSources
-        selectedAudioSourceID = AudioSourceSelection.preferred(
-            from: initialSources,
-            savedID: loadedSettings.preferredAudioDeviceID
-        )?.id ?? ""
+        selectedAudioSourceID =
+            AudioSourceSelection.preferred(
+                from: initialSources,
+                savedID: loadedSettings.preferredAudioDeviceID
+            )?.id ?? ""
 
         let initialDisplays = displayCatalog.displays()
         displays = initialDisplays
-        selectedDisplayUUID = Self.preferredDisplay(
-            from: initialDisplays,
-            savedUUID: loadedSettings.preferredDisplayUUID
-        )?.id
+        selectedDisplayUUID =
+            Self.preferredDisplay(
+                from: initialDisplays,
+                savedUUID: loadedSettings.preferredDisplayUUID
+            )?.id
 
         let scheduler = updateScheduler ?? ContinuousMainActorScheduler()
         updatePump = SubtitleUIUpdatePump(scheduler: scheduler) { [weak overlay] model in
@@ -143,7 +188,8 @@ public final class OperatorModel: ObservableObject {
         startSessionOutputTask()
 
         if loadedSettings.preferredAudioDeviceID != nil,
-           loadedSettings.preferredAudioDeviceID != selectedAudioSourceID {
+            loadedSettings.preferredAudioDeviceID != selectedAudioSourceID
+        {
             persistSettings()
         }
     }
@@ -195,9 +241,11 @@ public final class OperatorModel: ObservableObject {
             setFailure("Enter a valid ws:// or wss:// VoxBridge endpoint.")
             return
         }
-        guard let source = audioSources.first(where: {
-            $0.id == selectedAudioSourceID
-        }) else {
+        guard
+            let source = audioSources.first(where: {
+                $0.id == selectedAudioSourceID
+            })
+        else {
             setFailure("Select an available audio source.")
             return
         }
@@ -229,6 +277,7 @@ public final class OperatorModel: ObservableObject {
 
         do {
             try await sessionCoordinator.start(configuration)
+            savePasswordIfRequested(endpoint: endpoint.webSocketURL)
             if state == .starting {
                 state = .running
                 status = "Running"
@@ -286,9 +335,10 @@ public final class OperatorModel: ObservableObject {
     }
 
     private func persistSettings() {
-        let endpoint = URL(string: backendURL).flatMap { url in
-            try? VoxBridgeEndpoint(validating: url).webSocketURL
-        } ?? settingsTemplate.backendURL
+        let endpoint =
+            URL(string: backendURL).flatMap { url in
+                try? VoxBridgeEndpoint(validating: url).webSocketURL
+            } ?? settingsTemplate.backendURL
         let settings = AppSettings(
             backendURL: endpoint,
             direction: direction,
@@ -314,6 +364,34 @@ public final class OperatorModel: ObservableObject {
         }
     }
 
+    private func savePasswordIfRequested(endpoint: URL) {
+        guard rememberPassword else { return }
+        guard Self.nonBlank(password) != nil else {
+            passwordStorageMessage = "Enter a password before saving"
+            return
+        }
+        let saved = SavedPassword(
+            endpoint: endpoint.absoluteString,
+            username: Self.nonBlank(username) ?? "admin",
+            password: password
+        )
+        do {
+            try passwordStore.save(saved)
+            passwordStorageMessage = "Saved in macOS Keychain"
+        } catch {
+            passwordStorageMessage = "Password could not be saved"
+        }
+    }
+
+    private func forgetSavedPassword() {
+        do {
+            try passwordStore.delete()
+            passwordStorageMessage = nil
+        } catch {
+            passwordStorageMessage = "Saved password could not be removed"
+        }
+    }
+
     private func validatedEndpoint() -> VoxBridgeEndpoint? {
         let value = backendURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: value) else { return nil }
@@ -333,7 +411,7 @@ public final class OperatorModel: ObservableObject {
 
     private func handle(_ output: SubtitleSessionOutput) {
         switch output {
-        case let .state(value):
+        case .state(let value):
             if state == .stopped, value != .stopped {
                 return
             }
@@ -350,11 +428,11 @@ public final class OperatorModel: ObservableObject {
             case .finishing:
                 if errorMessage == nil { status = "Stopping…" }
             }
-        case let .subtitle(model):
+        case .subtitle(let model):
             updatePump.post(model)
-        case let .status(message):
+        case .status(let message):
             status = Self.concise(message)
-        case let .failure(message):
+        case .failure(let message):
             let message = Self.concise(message)
             if message.localizedCaseInsensitiveContains("authentication") {
                 setFailure("Authentication failed. Please check username/password.")
@@ -410,10 +488,11 @@ public final class OperatorModel: ObservableObject {
             return
         }
 
-        selectedAudioSourceID = AudioSourceSelection.preferred(
-            from: sources,
-            savedID: nil
-        )?.id ?? ""
+        selectedAudioSourceID =
+            AudioSourceSelection.preferred(
+                from: sources,
+                savedID: nil
+            )?.id ?? ""
     }
 
     private func startDisplayObservation() {
@@ -427,11 +506,13 @@ public final class OperatorModel: ObservableObject {
     private func handleDisplays(_ displays: [DisplayDescriptor]) {
         self.displays = displays
         guard let selectedDisplayUUID,
-              displays.contains(where: { $0.id == selectedDisplayUUID }) else {
-            self.selectedDisplayUUID = Self.preferredDisplay(
-                from: displays,
-                savedUUID: nil
-            )?.id
+            displays.contains(where: { $0.id == selectedDisplayUUID })
+        else {
+            self.selectedDisplayUUID =
+                Self.preferredDisplay(
+                    from: displays,
+                    savedUUID: nil
+                )?.id
             return
         }
     }
@@ -452,7 +533,7 @@ public final class OperatorModel: ObservableObject {
             setFailure(endpointError.localizedDescription)
         case let sessionError as SubtitleSessionError:
             switch sessionError {
-            case let .backendRejected(message):
+            case .backendRejected(let message):
                 setFailure("Start failed: \(message)")
             case .alreadyActive:
                 setFailure(sessionError.localizedDescription)
@@ -506,7 +587,8 @@ public final class OperatorModel: ObservableObject {
         savedUUID: String?
     ) -> DisplayDescriptor? {
         if let savedUUID,
-           let saved = displays.first(where: { $0.id == savedUUID }) {
+            let saved = displays.first(where: { $0.id == savedUUID })
+        {
             return saved
         }
         return displays.first(where: \.isMain) ?? displays.first

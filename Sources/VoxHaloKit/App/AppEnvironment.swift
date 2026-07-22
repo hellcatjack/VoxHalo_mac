@@ -66,6 +66,7 @@ public final class AppEnvironment {
         )
         let model = OperatorModel(
             settingsStore: settingsStore,
+            passwordStore: KeychainPasswordStore(),
             sessionCoordinator: coordinator,
             audioCatalog: operatorAudioCatalog,
             displayCatalog: operatorDisplayCatalog,

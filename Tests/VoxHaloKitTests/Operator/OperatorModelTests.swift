@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import XCTest
+
 @testable import VoxHaloKit
 
 @MainActor
@@ -8,59 +9,70 @@ final class OperatorModelTests: XCTestCase {
     func testExactDirectionsColorsAndTransparentOverlayOnly() throws {
         let fixture = try OperatorFixture()
 
-        XCTAssertEqual(TranslationDirection.allCases, [
-            .chineseToEnglish,
-            .englishToChinese,
-        ])
-        XCTAssertEqual(SubtitleColorChoice.all.map(\.name), [
-            "White", "Soft White", "Warm Yellow", "Cyan", "Soft Green", "Pink",
-        ])
-        XCTAssertEqual(SubtitleColorChoice.all.map(\.hex), [
-            "#FFFFFF", "#F4F4F4", "#FFD966", "#8FE8FF", "#B7F7C4", "#FFB3D1",
-        ])
+        XCTAssertEqual(
+            TranslationDirection.allCases,
+            [
+                .chineseToEnglish,
+                .englishToChinese,
+            ])
+        XCTAssertEqual(
+            SubtitleColorChoice.all.map(\.name),
+            [
+                "White", "Soft White", "Warm Yellow", "Cyan", "Soft Green", "Pink",
+            ])
+        XCTAssertEqual(
+            SubtitleColorChoice.all.map(\.hex),
+            [
+                "#FFFFFF", "#F4F4F4", "#FFD966", "#8FE8FF", "#B7F7C4", "#FFB3D1",
+            ])
         XCTAssertTrue(fixture.model.usesTransparentOverlayOnly)
     }
 
     func testLoadsSettingsAndFallsBackFromMissingSavedAudioBeforeStart() throws {
-        let fixture = try OperatorFixture(settings: AppSettings(
-            backendURL: URL(string: "wss://example.test/ws")!,
-            direction: .englishToChinese,
-            preferredAudioDeviceID: "missing-device",
-            preferredDisplayUUID: OperatorFixture.sideDisplay.id,
-            targetAreaHeight: 384,
-            targetFontSize: 30,
-            targetTopOffset: 150,
-            targetColor: "#FFD966",
-            authUsername: "operator",
-            referenceAreaHeight: 144,
-            referenceFontSize: 22,
-            referenceBottomOffset: 96,
-            referenceColor: "#8FE8FF",
-            asrContextTermsText: "Elisha\r\nQwen3-ASR"
-        ))
+        let fixture = try OperatorFixture(
+            settings: AppSettings(
+                backendURL: URL(string: "wss://example.test/ws")!,
+                direction: .englishToChinese,
+                preferredAudioDeviceID: "missing-device",
+                preferredDisplayUUID: OperatorFixture.sideDisplay.id,
+                targetAreaHeight: 384,
+                targetFontSize: 30,
+                targetTopOffset: 150,
+                targetColor: "#FFD966",
+                authUsername: "operator",
+                referenceAreaHeight: 144,
+                referenceFontSize: 22,
+                referenceBottomOffset: 96,
+                referenceColor: "#8FE8FF",
+                asrContextTermsText: "Elisha\r\nQwen3-ASR"
+            ))
 
         XCTAssertEqual(fixture.model.backendURL, "wss://example.test/ws")
         XCTAssertEqual(fixture.model.direction, .englishToChinese)
         XCTAssertEqual(fixture.model.selectedAudioSourceID, AudioSource.systemAudioID)
         XCTAssertEqual(fixture.model.selectedDisplayUUID, OperatorFixture.sideDisplay.id)
         XCTAssertEqual(fixture.model.hotwordsText, "Elisha\r\nQwen3-ASR")
-        XCTAssertEqual(fixture.model.layout, SubtitleLayoutSettings(
-            targetAreaHeight: 384,
-            targetFontSize: 30,
-            targetTopOffset: 150,
-            targetColor: "#FFD966",
-            referenceAreaHeight: 144,
-            referenceFontSize: 22,
-            referenceBottomOffset: 96,
-            referenceColor: "#8FE8FF"
-        ))
+        XCTAssertFalse(fixture.model.rememberPassword)
+        XCTAssertEqual(
+            fixture.model.layout,
+            SubtitleLayoutSettings(
+                targetAreaHeight: 384,
+                targetFontSize: 30,
+                targetTopOffset: 150,
+                targetColor: "#FFD966",
+                referenceAreaHeight: 144,
+                referenceFontSize: 22,
+                referenceBottomOffset: 96,
+                referenceColor: "#8FE8FF"
+            ))
     }
 
-    func testUsernameAndLayoutPersistButPasswordOnlyReachesStartConfiguration() async throws {
+    func testRememberedPasswordSavesAfterSuccessfulStartButNeverEntersJSON() async throws {
         let fixture = try OperatorFixture()
         fixture.model.backendURL = "wss://example.test/ws"
         fixture.model.username = "operator"
         fixture.model.password = "runtime-synthetic-password"
+        fixture.model.rememberPassword = true
         fixture.model.direction = .englishToChinese
         fixture.model.layout.referenceAreaHeight = 160
         fixture.model.layout.referenceFontSize = 24
@@ -71,10 +83,12 @@ final class OperatorModelTests: XCTestCase {
 
         let capturedConfiguration = await fixture.session.configuration()
         let configuration = try XCTUnwrap(capturedConfiguration)
-        XCTAssertEqual(configuration.credentials, VoxBridgeAuthCredentials(
-            username: "operator",
-            password: "runtime-synthetic-password"
-        ))
+        XCTAssertEqual(
+            configuration.credentials,
+            VoxBridgeAuthCredentials(
+                username: "operator",
+                password: "runtime-synthetic-password"
+            ))
         let saved = try fixture.store.load()
         XCTAssertEqual(saved.authUsername, "operator")
         XCTAssertEqual(saved.referenceAreaHeight, 160)
@@ -82,15 +96,78 @@ final class OperatorModelTests: XCTestCase {
         let json = try String(contentsOf: fixture.store.settingsURL, encoding: .utf8)
         XCTAssertFalse(json.contains("runtime-synthetic-password"))
         XCTAssertFalse(json.lowercased().contains("authpassword"))
+        XCTAssertEqual(
+            fixture.passwordStore.savedPassword,
+            SavedPassword(
+                endpoint: "wss://example.test/ws",
+                username: "operator",
+                password: "runtime-synthetic-password"
+            ))
+        XCTAssertEqual(fixture.model.passwordStorageMessage, "Saved in macOS Keychain")
+    }
+
+    func testMatchingKeychainPasswordLoadsAtLaunch() throws {
+        let saved = SavedPassword(
+            endpoint: "wss://example.test/ws",
+            username: "operator",
+            password: "saved-synthetic-password"
+        )
+        let fixture = try OperatorFixture(
+            settings: AppSettings(
+                backendURL: URL(string: saved.endpoint)!,
+                authUsername: saved.username
+            ),
+            savedPassword: saved
+        )
+
+        XCTAssertEqual(fixture.model.password, saved.password)
+        XCTAssertTrue(fixture.model.rememberPassword)
+        XCTAssertEqual(fixture.model.passwordStorageMessage, "Saved in macOS Keychain")
+    }
+
+    func testMismatchedKeychainPasswordIsNotLoaded() throws {
+        let saved = SavedPassword(
+            endpoint: "wss://different.example.test/ws",
+            username: "different-user",
+            password: "unrelated-synthetic-password"
+        )
+        let fixture = try OperatorFixture(savedPassword: saved)
+
+        XCTAssertEqual(fixture.model.password, "")
+        XCTAssertFalse(fixture.model.rememberPassword)
+        XCTAssertNil(fixture.model.passwordStorageMessage)
+        XCTAssertEqual(fixture.passwordStore.savedPassword, saved)
+    }
+
+    func testUncheckingRememberPasswordDeletesKeychainItem() throws {
+        let saved = SavedPassword(
+            endpoint: AppSettings.publicEndpoint.absoluteString,
+            username: "admin",
+            password: "saved-synthetic-password"
+        )
+        let fixture = try OperatorFixture(savedPassword: saved)
+        XCTAssertTrue(fixture.model.rememberPassword)
+
+        fixture.model.rememberPassword = false
+
+        XCTAssertNil(fixture.passwordStore.savedPassword)
+        XCTAssertNil(fixture.model.passwordStorageMessage)
+        XCTAssertEqual(fixture.model.password, saved.password)
     }
 
     func testEnvironmentCredentialsOverrideSavedValuesWithoutPasswordPersistence() async throws {
+        let saved = SavedPassword(
+            endpoint: AppSettings.publicEndpoint.absoluteString,
+            username: "saved-user",
+            password: "keychain-synthetic-password"
+        )
         let fixture = try OperatorFixture(
             settings: AppSettings(authUsername: "saved-user"),
             environment: [
                 "VOXBRIDGE_AUTH_USERNAME": "environment-user",
                 "VOXBRIDGE_AUTH_PASSWORD": "environment-synthetic-password",
-            ]
+            ],
+            savedPassword: saved
         )
 
         XCTAssertEqual(fixture.model.username, "environment-user")
@@ -104,6 +181,8 @@ final class OperatorModelTests: XCTestCase {
         let savedJSON = try String(contentsOf: fixture.store.settingsURL, encoding: .utf8)
         XCTAssertFalse(savedJSON.contains("environment-synthetic-password"))
         XCTAssertEqual(try fixture.store.load().authUsername, "environment-user")
+        XCTAssertFalse(fixture.model.rememberPassword)
+        XCTAssertEqual(fixture.passwordStore.savedPassword, saved)
     }
 
     func testRunningLocksSessionInputsButLeavesDisplayAndLayoutLive() async throws {
@@ -127,9 +206,10 @@ final class OperatorModelTests: XCTestCase {
     }
 
     func testRawHotwordInputIsAutomaticallyPersisted() throws {
-        let fixture = try OperatorFixture(settings: AppSettings(
-            asrContextTermsText: "Elisha\r\nQwen3-ASR"
-        ))
+        let fixture = try OperatorFixture(
+            settings: AppSettings(
+                asrContextTermsText: "Elisha\r\nQwen3-ASR"
+            ))
 
         XCTAssertEqual(fixture.model.hotwordsText, "Elisha\r\nQwen3-ASR")
 
@@ -185,7 +265,12 @@ final class OperatorModelTests: XCTestCase {
     }
 
     func testAuthenticationFailureReturnsToStoppedWithConciseGuidance() async throws {
-        let fixture = try OperatorFixture()
+        let saved = SavedPassword(
+            endpoint: AppSettings.publicEndpoint.absoluteString,
+            username: "admin",
+            password: "previous-synthetic-password"
+        )
+        let fixture = try OperatorFixture(savedPassword: saved)
         await fixture.session.setStartError(VoxBridgeAuthenticationError.rejected)
         fixture.model.password = "wrong-synthetic-password"
 
@@ -201,6 +286,21 @@ final class OperatorModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.errorMessage, fixture.model.status)
         XCTAssertTrue(fixture.model.canEditBackend)
         XCTAssertTrue(fixture.model.canStart)
+        XCTAssertEqual(fixture.passwordStore.savedPassword, saved)
+        XCTAssertEqual(fixture.passwordStore.saveCount, 0)
+    }
+
+    func testKeychainSaveFailureDoesNotInterruptRunningSession() async throws {
+        let fixture = try OperatorFixture()
+        fixture.passwordStore.failSave = true
+        fixture.model.password = "runtime-synthetic-password"
+        fixture.model.rememberPassword = true
+
+        await fixture.model.start()
+
+        XCTAssertEqual(fixture.model.state, .running)
+        XCTAssertEqual(fixture.model.passwordStorageMessage, "Password could not be saved")
+        XCTAssertNil(fixture.passwordStore.savedPassword)
     }
 
     func testInsecureEndpointWarningAndStartStopEnablementFollowState() async throws {
@@ -295,7 +395,7 @@ final class OperatorModelTests: XCTestCase {
         )
 
         await fixture.session.emit(.subtitle(subtitle))
-        for _ in 0 ..< 1_000 where scheduler.pendingCount == 0 {
+        for _ in 0..<1_000 where scheduler.pendingCount == 0 {
             await Task.yield()
         }
         XCTAssertNil(fixture.overlay.lastModel)
@@ -328,11 +428,13 @@ final class OperatorFixture {
     let audioCatalog: FakeOperatorAudioCatalog
     let displayCatalog: FakeOperatorDisplayCatalog
     let overlay: FakeOperatorOverlay
+    let passwordStore: FakePasswordStore
     let model: OperatorModel
 
     init(
         settings: AppSettings? = nil,
         environment: [String: String] = [:],
+        savedPassword: SavedPassword? = nil,
         sources: [AudioSource] = [.systemAudio],
         updateScheduler: (any MainActorScheduling)? = nil
     ) throws {
@@ -348,8 +450,10 @@ final class OperatorFixture {
             Self.sideDisplay,
         ])
         overlay = FakeOperatorOverlay()
+        passwordStore = FakePasswordStore(savedPassword: savedPassword)
         model = OperatorModel(
             settingsStore: store,
+            passwordStore: passwordStore,
             sessionCoordinator: session,
             audioCatalog: audioCatalog,
             displayCatalog: displayCatalog,
@@ -359,6 +463,43 @@ final class OperatorFixture {
         )
     }
 }
+
+final class FakePasswordStore: PasswordStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedPassword: SavedPassword?
+    private var storedSaveCount = 0
+    var failSave = false
+
+    init(savedPassword: SavedPassword? = nil) {
+        storedPassword = savedPassword
+    }
+
+    var savedPassword: SavedPassword? {
+        lock.withLock { storedPassword }
+    }
+
+    var saveCount: Int {
+        lock.withLock { storedSaveCount }
+    }
+
+    func load() throws -> SavedPassword? {
+        savedPassword
+    }
+
+    func save(_ password: SavedPassword) throws {
+        try lock.withLock {
+            guard !failSave else { throw SyntheticPasswordStoreError() }
+            storedSaveCount += 1
+            storedPassword = password
+        }
+    }
+
+    func delete() throws {
+        lock.withLock { storedPassword = nil }
+    }
+}
+
+private struct SyntheticPasswordStoreError: Error {}
 
 actor FakeOperatorSessionCoordinator: SubtitleSessionCoordinating {
     private var continuation: AsyncStream<SubtitleSessionOutput>.Continuation?
@@ -471,7 +612,8 @@ final class FakeOperatorDisplayCatalog: DisplayCataloging {
 
     func selectedDisplay(savedUUID: String?) -> DisplayDescriptor {
         if let savedUUID,
-           let saved = storedDisplays.first(where: { $0.id == savedUUID }) {
+            let saved = storedDisplays.first(where: { $0.id == savedUUID })
+        {
             return saved
         }
         return storedDisplays.first(where: \.isMain) ?? storedDisplays[0]
@@ -527,7 +669,7 @@ final class FakeOperatorOverlay: SubtitleOverlayControlling {
 private func waitForOperatorCondition(
     _ predicate: @escaping @MainActor () -> Bool
 ) async -> Bool {
-    for _ in 0 ..< 1_000 {
+    for _ in 0..<1_000 {
         if predicate() { return true }
         await Task.yield()
     }

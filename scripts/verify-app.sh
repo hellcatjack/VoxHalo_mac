@@ -40,6 +40,8 @@ plist_value() {
 ARCHITECTURES="$(lipo -archs "$EXECUTABLE")"
 [[ "$ARCHITECTURES" == "arm64" ]] \
     || fail "executable must contain only arm64, found: $ARCHITECTURES"
+otool -L "$EXECUTABLE" | grep -q '/Security.framework/' \
+    || fail "native Security.framework linkage is missing"
 
 codesign --verify --deep --strict "$APP" 2>/dev/null \
     || fail "code signature is invalid"

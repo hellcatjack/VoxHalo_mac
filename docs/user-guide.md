@@ -9,7 +9,7 @@ The overlay never accepts focus or mouse clicks. You continue interacting with t
 ## Start a subtitle session
 
 1. Confirm the VoxBridge endpoint. The default is the TLS endpoint `wss://ushome.amycat.com:18024/ws`.
-2. Enter the username and password required by the service. The password is not saved.
+2. Enter the username and password required by the service. Select **Save in Keychain** if the app should restore it after relaunch; saving occurs only after a successful Start.
 3. Choose **Chinese → English** or **English → Chinese**.
 4. Optionally enter rare names, technical vocabulary, or abbreviations in **Hotwords**. Separate entries with spaces, line breaks, English commas, or Chinese commas.
 5. Choose **System Audio** for audio playing on the Mac, or select a microphone/USB/line input.
@@ -71,7 +71,9 @@ If an active hardware device is unplugged, the session stops with a concise mess
 
 ## Persistence and relaunch
 
-Endpoint, username, raw hotword text, direction, selected source/display, layout, and colors persist in the private settings JSON. Missing source/display selections fall back at launch. Hotwords are plaintext and can include identifying/internal terms, so inspect or clear them before sharing the settings file. The password must be entered again after a normal Finder relaunch unless a command-line development environment supplies it.
+Endpoint, username, raw hotword text, direction, selected source/display, layout, and colors persist in the private settings JSON. Missing source/display selections fall back at launch. Hotwords are plaintext and can include identifying/internal terms, so inspect or clear them before sharing the settings file.
+
+With **Save in Keychain** enabled, a successfully authenticated password is stored in macOS Keychain and restored only for the matching endpoint and username. Clear the checkbox to remove it. The password never appears in settings JSON, diagnostics, or the app bundle. Without the checkbox, it remains in memory only and must be entered after relaunch.
 
 To remove saved preferences, quit VoxHalo and delete:
 

@@ -2,17 +2,20 @@
 
 ## Authentication secret handling
 
-VoxHalo deliberately provides no password persistence. The password exists only in the operator model and active in-memory session configuration after the user enters it or supplies `VOXBRIDGE_AUTH_PASSWORD` to a development launch. Credentials are constructed only when Start is invoked.
+VoxHalo provides explicit, opt-in password persistence through macOS Keychain. The app reads one generic-password item at launch and restores it only when its endpoint and username match the current safe settings. It writes or updates that item only after a successful authenticated Start while **Save in Keychain** is enabled. Clearing the checkbox deletes it. A rejected login never replaces the last successful item.
+
+Without that opt-in—or when `VOXBRIDGE_AUTH_PASSWORD` is supplied to a development launch—the password exists only in the operator model and active in-memory session configuration. Credentials are constructed only when Start is invoked.
 
 The app never writes the password to:
 
 - `settings.json`;
 - diagnostics or transcript logs;
-- Keychain/Security framework storage;
 - the application bundle;
 - crash/status text produced by VoxHalo.
 
-The persisted authentication field is username only. Loading old JSON removes every case-insensitive `AuthPassword` key before rewriting it. URL sanitation removes userinfo, fragments, and credential-shaped query items.
+The settings JSON persists username only. Loading old JSON removes every case-insensitive `AuthPassword` key before rewriting it. URL sanitation removes userinfo, fragments, and credential-shaped query items. The Keychain item uses `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`; it is local to this Mac and is not a configuration-file or bundle resource.
+
+Because the local release is ad hoc signed, rebuilding changes its code identity and macOS may request Keychain access again. Normal relaunches of the unchanged final bundle reuse the saved password without re-entry.
 
 ## Transport
 

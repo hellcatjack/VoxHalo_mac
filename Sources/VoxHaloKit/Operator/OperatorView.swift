@@ -6,6 +6,7 @@ public struct OperatorView: View {
         "operator.backend",
         "operator.username",
         "operator.password",
+        "operator.rememberPassword",
         "operator.direction",
         "operator.hotwords",
         "operator.audioSource",
@@ -23,14 +24,19 @@ public struct OperatorView: View {
         "operator.status",
     ]
 
-    public static let targetAreaHeightRange: ClosedRange<CGFloat> = 120 ... 640
-    public static let targetFontSizeRange: ClosedRange<CGFloat> = 18 ... 56
-    public static let targetTopOffsetRange: ClosedRange<CGFloat> = 0 ... 900
-    public static let referenceAreaHeightRange: ClosedRange<CGFloat> = 48 ... 360
-    public static let referenceFontSizeRange: ClosedRange<CGFloat> = 16 ... 42
-    public static let referenceBottomOffsetRange: ClosedRange<CGFloat> = 0 ... 900
-    public static let hotwordEditorHeight: CGFloat = 72
-    public static let hotwordGuidance = "Separate with spaces, English or Chinese commas, or new lines. Maximum 24 terms / 160 joined characters. Saved automatically."
+    public static let targetAreaHeightRange: ClosedRange<CGFloat> = 120...640
+    public static let targetFontSizeRange: ClosedRange<CGFloat> = 18...56
+    public static let targetTopOffsetRange: ClosedRange<CGFloat> = 0...900
+    public static let referenceAreaHeightRange: ClosedRange<CGFloat> = 48...360
+    public static let referenceFontSizeRange: ClosedRange<CGFloat> = 16...42
+    public static let referenceBottomOffsetRange: ClosedRange<CGFloat> = 0...900
+    public static let preferredContentSize = OperatorWindowLayout.preferredContentSize
+    public static let minimumContentSize = OperatorWindowLayout.minimumContentSize
+    public static let hotwordEditorHeight: CGFloat = 48
+    public static let hotwordGuidance =
+        "Separate with spaces, English or Chinese commas, or new lines. Maximum 24 terms / 160 joined characters. Saved automatically."
+    public static let hotwordSummary =
+        "Spaces, commas, or new lines · 24 terms / 160 characters · auto-saved"
 
     @ObservedObject private var model: OperatorModel
 
@@ -39,52 +45,66 @@ public struct OperatorView: View {
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                sessionSection
-                overlaySection
-                layoutSection(
-                    title: "Translation",
-                    height: $model.layout.targetAreaHeight,
-                    heightRange: Self.targetAreaHeightRange,
-                    heightIdentifier: "operator.target.height",
-                    font: $model.layout.targetFontSize,
-                    fontRange: Self.targetFontSizeRange,
-                    fontIdentifier: "operator.target.font",
-                    offsetTitle: "Top offset",
-                    offset: $model.layout.targetTopOffset,
-                    offsetRange: Self.targetTopOffsetRange,
-                    offsetIdentifier: "operator.target.offset",
-                    color: $model.layout.targetColor,
-                    colorIdentifier: "operator.target.color"
-                )
-                layoutSection(
-                    title: "Recognition",
-                    height: $model.layout.referenceAreaHeight,
-                    heightRange: Self.referenceAreaHeightRange,
-                    heightIdentifier: "operator.reference.height",
-                    font: $model.layout.referenceFontSize,
-                    fontRange: Self.referenceFontSizeRange,
-                    fontIdentifier: "operator.reference.font",
-                    offsetTitle: "Bottom offset",
-                    offset: $model.layout.referenceBottomOffset,
-                    offsetRange: Self.referenceBottomOffsetRange,
-                    offsetIdentifier: "operator.reference.offset",
-                    color: $model.layout.referenceColor,
-                    colorIdentifier: "operator.reference.color"
-                )
-                actionSection
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
+                    sessionSection
+                    overlaySection
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    layoutSection(
+                        title: "Translation",
+                        height: $model.layout.targetAreaHeight,
+                        heightRange: Self.targetAreaHeightRange,
+                        heightIdentifier: "operator.target.height",
+                        font: $model.layout.targetFontSize,
+                        fontRange: Self.targetFontSizeRange,
+                        fontIdentifier: "operator.target.font",
+                        offsetTitle: "Top offset",
+                        offset: $model.layout.targetTopOffset,
+                        offsetRange: Self.targetTopOffsetRange,
+                        offsetIdentifier: "operator.target.offset",
+                        color: $model.layout.targetColor,
+                        colorIdentifier: "operator.target.color"
+                    )
+                    layoutSection(
+                        title: "Recognition",
+                        height: $model.layout.referenceAreaHeight,
+                        heightRange: Self.referenceAreaHeightRange,
+                        heightIdentifier: "operator.reference.height",
+                        font: $model.layout.referenceFontSize,
+                        fontRange: Self.referenceFontSizeRange,
+                        fontIdentifier: "operator.reference.font",
+                        offsetTitle: "Bottom offset",
+                        offset: $model.layout.referenceBottomOffset,
+                        offsetRange: Self.referenceBottomOffsetRange,
+                        offsetIdentifier: "operator.reference.offset",
+                        color: $model.layout.referenceColor,
+                        colorIdentifier: "operator.reference.color"
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(20)
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            actionSection
         }
+        .padding(16)
         .background(Color(nsColor: .windowBackgroundColor))
-        .frame(minWidth: 680, minHeight: 700)
+        .frame(
+            minWidth: Self.minimumContentSize.width,
+            idealWidth: Self.preferredContentSize.width,
+            minHeight: Self.minimumContentSize.height,
+            idealHeight: Self.preferredContentSize.height
+        )
         .accessibilityIdentifier("operator.root")
     }
 
     private var sessionSection: some View {
         GroupBox("Session") {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
                 GridRow {
                     fieldLabel("VoxBridge endpoint")
                     TextField("wss://host/ws", text: $model.backendURL)
@@ -109,10 +129,27 @@ public struct OperatorView: View {
                 }
                 GridRow {
                     fieldLabel("Password")
-                    SecureField("Stored in memory only", text: $model.password)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(!model.canEditBackend)
-                        .accessibilityIdentifier("operator.password")
+                    VStack(alignment: .leading, spacing: 4) {
+                        SecureField("Password", text: $model.password)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(!model.canEditBackend)
+                            .accessibilityIdentifier("operator.password")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Toggle(
+                                "Save in Keychain",
+                                isOn: $model.rememberPassword
+                            )
+                            .toggleStyle(.checkbox)
+                            .disabled(!model.canEditBackend)
+                            .accessibilityIdentifier("operator.rememberPassword")
+                            if let message = model.passwordStorageMessage {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
                 }
                 GridRow {
                     fieldLabel("Direction")
@@ -127,25 +164,25 @@ public struct OperatorView: View {
                 }
                 GridRow(alignment: .top) {
                     fieldLabel("Hotwords")
-                        .padding(.top, 7)
+                        .padding(.top, 5)
                     VStack(alignment: .leading, spacing: 4) {
-                        TextEditor(text: $model.hotwordsText)
-                            .font(.body)
-                            .frame(height: Self.hotwordEditorHeight)
-                            .padding(3)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .stroke(Color.secondary.opacity(0.35))
-                            }
-                            .disabled(!model.canEditHotwords)
-                            .help(Self.hotwordGuidance)
-                            .accessibilityLabel("Hotwords")
-                            .accessibilityHint(Self.hotwordGuidance)
-                            .accessibilityIdentifier("operator.hotwords")
-                        Text(Self.hotwordGuidance)
+                        TextField(
+                            "Rare names and technical terms",
+                            text: $model.hotwordsText,
+                            axis: .vertical
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(2...3)
+                        .frame(minHeight: Self.hotwordEditorHeight)
+                        .disabled(!model.canEditHotwords)
+                        .help(Self.hotwordGuidance)
+                        .accessibilityLabel("Hotwords")
+                        .accessibilityHint(Self.hotwordGuidance)
+                        .accessibilityIdentifier("operator.hotwords")
+                        Text(Self.hotwordSummary)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(2)
                     }
                 }
                 GridRow {
@@ -160,13 +197,14 @@ public struct OperatorView: View {
                     .accessibilityIdentifier("operator.audioSource")
                 }
             }
-            .padding(8)
+            .padding(6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var overlaySection: some View {
         GroupBox("Overlay") {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
                 GridRow {
                     fieldLabel("Display")
                     Picker("Display", selection: $model.selectedDisplayUUID) {
@@ -183,8 +221,9 @@ public struct OperatorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(8)
+            .padding(6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func layoutSection(
@@ -203,7 +242,7 @@ public struct OperatorView: View {
         colorIdentifier: String
     ) -> some View {
         GroupBox("\(title) subtitle layout") {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 sliderRow(
                     title: "Area height",
                     value: height,
@@ -222,7 +261,7 @@ public struct OperatorView: View {
                     range: offsetRange,
                     identifier: offsetIdentifier
                 )
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     fieldLabel("Color")
                     Picker("Color", selection: color) {
                         ForEach(model.colorChoices) { choice in
@@ -233,8 +272,9 @@ public struct OperatorView: View {
                     .accessibilityIdentifier(colorIdentifier)
                 }
             }
-            .padding(8)
+            .padding(6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func sliderRow(
@@ -243,7 +283,7 @@ public struct OperatorView: View {
         range: ClosedRange<CGFloat>,
         identifier: String
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             fieldLabel(title)
             Slider(value: value, in: range, step: 1)
             TextField(
@@ -256,13 +296,13 @@ public struct OperatorView: View {
             )
             .labelsHidden()
             .multilineTextAlignment(.trailing)
-            .frame(width: 64)
+            .frame(width: 56)
         }
         .accessibilityIdentifier(identifier)
     }
 
     private var actionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             if let destination = model.permissionSettingsDestination {
                 PermissionSettingsLink(destination: destination)
             }
@@ -294,6 +334,6 @@ public struct OperatorView: View {
     private func fieldLabel(_ title: String) -> some View {
         Text(title)
             .font(.callout.weight(.medium))
-            .frame(width: 128, alignment: .leading)
+            .frame(width: 96, alignment: .leading)
     }
 }
