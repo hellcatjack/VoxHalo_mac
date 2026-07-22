@@ -2,7 +2,7 @@
 
 Run this checklist against one unchanged `dist/VoxHalo.app`. Do not rebuild after recording the signature hash or granting permissions. Mark exactly one result per applicable row. If required external hardware is unavailable, mark N/A and retain the automated catalog proof; do not mark it Pass.
 
-Never record the authentication password here. If an audio device UID is needed for manual correlation, record it only in this checklist—not application settings screenshots or diagnostics.
+Never record the authentication password or real identifying hotwords here. If an audio device UID is needed for manual correlation, record it only in this checklist—not application settings screenshots or diagnostics.
 
 ## Build record
 
@@ -13,8 +13,8 @@ Never record the authentication password here. If an audio device UID is needed 
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | Working tree based on `a4cf8a8a93936069ca51ecc986d795f683ee69d6`; immutable executable SHA-256 below |
-| Windows reference commit | `2f5627b14b4af5f476fef50f03f4cd269b031c09` |
+| App Git commit | `4e28179` (the committed source tree used by the recorded executable) |
+| Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
 | Executable architecture | arm64 only; executable SHA-256 `1b515769d16f005d1ce2627b1bc14e6580d4323eb136bce355a1296a92d49ed2` |
@@ -27,8 +27,8 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 
 ## A. Automated and bundle gate
 
-1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 268 tests, one intentionally gated packaging test skipped, zero failures.
-2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 268 tests, zero failures/warnings.
+1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 292 tests, one intentionally gated packaging test skipped, zero failures.
+2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 292 tests, zero failures/warnings.
 3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
 4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
 5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered foreground arm64 process and both operator/overlay windows; clean quit/relaunch completed.
@@ -90,6 +90,20 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 46. `[x] Pass  [ ] Fail  [ ] N/A` Stop destroys active AUHAL/tap/private aggregate resources; repeated Stop is harmless. Evidence: native cleanup/retry/concurrent-Stop tests passed and clean-launch quit left no VoxHalo aggregate/tap.
 47. `[ ] Pass  [ ] Fail  [ ] N/A` Quit during Starting, Running, and Finishing shares cleanup and leaves no private tap/aggregate device.
 48. `[ ] Pass  [ ] Fail  [ ] N/A` The unchanged signed bundle relaunches and completes a smoke session with expected permission state.
+
+## G. Hotword context
+
+Use synthetic/nonidentifying terms for this section and remove them afterward.
+
+49. `[ ] Pass  [ ] Fail  [ ] N/A` Enter `Elisha, Qwen3-ASR elisha，U.S.` and confirm the raw multiline text survives relaunch.
+50. `[ ] Pass  [ ] Fail  [ ] N/A` Start sends `asr_context_terms` in the deduplicated order `Elisha`, `Qwen3-ASR`, `U.S.`.
+51. `[ ] Pass  [ ] Fail  [ ] N/A` A current backend acknowledgement shows `Running · Hotwords: 3`.
+52. `[ ] Pass  [ ] Fail  [ ] N/A` A socket or long-idle reconnect sends the identical three-term session snapshot.
+53. `[ ] Pass  [ ] Fail  [ ] N/A` A term ending in sentence punctuation blocks startup, leaves capture stopped, and retains editable text.
+54. `[ ] Pass  [ ] Fail  [ ] N/A` Exactly 24 terms and 160 joined Unicode characters are accepted; larger inputs are rejected without truncation.
+55. `[ ] Pass  [ ] Fail  [ ] N/A` Clearing the editor persists an empty value; the next Start sends `asr_context_terms: []` and shows plain `Running`.
+56. `[ ] Pass  [ ] Fail  [ ] N/A` Against a compatible legacy backend that omits context metadata from `started`, a nonempty request shows `Running · Hotwords not confirmed` without breaking subtitles.
+57. `[x] Pass  [ ] Fail  [ ] N/A` Automated privacy tests prove configured arrays and backend error text never enter diagnostic fields; only count, joined characters, activation/count/character acknowledgement, and message length are recorded. Transcript opt-in may naturally contain the same spoken word.
 
 ## Final disposition
 

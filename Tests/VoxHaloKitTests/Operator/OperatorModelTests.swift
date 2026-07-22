@@ -35,13 +35,15 @@ final class OperatorModelTests: XCTestCase {
             referenceAreaHeight: 144,
             referenceFontSize: 22,
             referenceBottomOffset: 96,
-            referenceColor: "#8FE8FF"
+            referenceColor: "#8FE8FF",
+            asrContextTermsText: "Elisha\r\nQwen3-ASR"
         ))
 
         XCTAssertEqual(fixture.model.backendURL, "wss://example.test/ws")
         XCTAssertEqual(fixture.model.direction, .englishToChinese)
         XCTAssertEqual(fixture.model.selectedAudioSourceID, AudioSource.systemAudioID)
         XCTAssertEqual(fixture.model.selectedDisplayUUID, OperatorFixture.sideDisplay.id)
+        XCTAssertEqual(fixture.model.hotwordsText, "Elisha\r\nQwen3-ASR")
         XCTAssertEqual(fixture.model.layout, SubtitleLayoutSettings(
             targetAreaHeight: 384,
             targetFontSize: 30,
@@ -114,6 +116,7 @@ final class OperatorModelTests: XCTestCase {
         XCTAssertFalse(fixture.model.canEditBackend)
         XCTAssertFalse(fixture.model.canEditDirection)
         XCTAssertFalse(fixture.model.canEditAudioSource)
+        XCTAssertFalse(fixture.model.canEditHotwords)
         XCTAssertTrue(fixture.model.canEditDisplayAndLayout)
         fixture.model.layout.targetFontSize = 50
         fixture.model.selectedDisplayUUID = OperatorFixture.sideDisplay.id
@@ -121,6 +124,64 @@ final class OperatorModelTests: XCTestCase {
         XCTAssertEqual(fixture.overlay.selectedDisplayUUID, OperatorFixture.sideDisplay.id)
         let json = try String(contentsOf: fixture.store.settingsURL, encoding: .utf8)
         XCTAssertFalse(json.contains("memory-only-value"))
+    }
+
+    func testRawHotwordInputIsAutomaticallyPersisted() throws {
+        let fixture = try OperatorFixture(settings: AppSettings(
+            asrContextTermsText: "Elisha\r\nQwen3-ASR"
+        ))
+
+        XCTAssertEqual(fixture.model.hotwordsText, "Elisha\r\nQwen3-ASR")
+
+        fixture.model.hotwordsText = "U.S.，Elisha"
+
+        XCTAssertEqual(
+            try fixture.store.load().asrContextTermsText,
+            "U.S.，Elisha"
+        )
+    }
+
+    func testStartParsesAndPassesHotwordsInOperatorOrder() async throws {
+        let fixture = try OperatorFixture()
+        fixture.model.hotwordsText = "Elisha, Qwen3-ASR elisha"
+
+        await fixture.model.start()
+
+        let capturedConfiguration = await fixture.session.configuration()
+        let configuration = try XCTUnwrap(capturedConfiguration)
+        XCTAssertEqual(configuration.asrContextTerms, ["Elisha", "Qwen3-ASR"])
+    }
+
+    func testInvalidHotwordInputBlocksConnectionAndRemainsEditable() async throws {
+        let fixture = try OperatorFixture()
+        fixture.model.hotwordsText = "not-a-term!"
+
+        await fixture.model.start()
+
+        let capturedConfiguration = await fixture.session.configuration()
+        XCTAssertNil(capturedConfiguration)
+        XCTAssertEqual(fixture.model.state, .stopped)
+        XCTAssertTrue(fixture.model.status.contains("punctuation"))
+        XCTAssertEqual(fixture.model.hotwordsText, "not-a-term!")
+        XCTAssertTrue(fixture.model.canEditHotwords)
+    }
+
+    func testBackendStartRejectionReturnsToEditableStoppedState() async throws {
+        let fixture = try OperatorFixture()
+        let rejection = "ASR context accepts at most 160 characters"
+        await fixture.session.setStartError(
+            SubtitleSessionError.backendRejected(rejection)
+        )
+        fixture.model.hotwordsText = "Elisha"
+
+        await fixture.model.start()
+
+        XCTAssertEqual(fixture.model.state, .stopped)
+        XCTAssertEqual(fixture.model.status, "Start failed: \(rejection)")
+        XCTAssertEqual(fixture.model.errorMessage, fixture.model.status)
+        XCTAssertTrue(fixture.model.canEditHotwords)
+        let stopCount = await fixture.session.numberOfStops()
+        XCTAssertEqual(stopCount, 0)
     }
 
     func testAuthenticationFailureReturnsToStoppedWithConciseGuidance() async throws {

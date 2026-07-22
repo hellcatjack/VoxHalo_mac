@@ -4,15 +4,21 @@ import XCTest
 final class VoxBridgeMessagesTests: XCTestCase {
     func testChineseToEnglishStartMessageUsesExactProtocolNames() throws {
         XCTAssertEqual(
-            try text(VoxBridgeMessageEncoder.start(.chineseToEnglish)),
-            #"{"language":"Chinese","translation_direction":"zh2en","type":"start"}"#
+            try text(VoxBridgeMessageEncoder.start(
+                .chineseToEnglish,
+                asrContextTerms: ["Elisha", "Qwen3-ASR"]
+            )),
+            #"{"asr_context_terms":["Elisha","Qwen3-ASR"],"language":"Chinese","translation_direction":"zh2en","type":"start"}"#
         )
     }
 
-    func testEnglishToChineseStartMessageUsesExactProtocolNames() throws {
+    func testEmptyHotwordContextIsSerializedRatherThanOmitted() throws {
         XCTAssertEqual(
-            try text(VoxBridgeMessageEncoder.start(.englishToChinese)),
-            #"{"language":"English","translation_direction":"en2zh","type":"start"}"#
+            try text(VoxBridgeMessageEncoder.start(
+                .englishToChinese,
+                asrContextTerms: []
+            )),
+            #"{"asr_context_terms":[],"language":"English","translation_direction":"en2zh","type":"start"}"#
         )
     }
 

@@ -8,6 +8,8 @@ The first release targets only the current development computer: Apple Silicon r
 
 The Windows source at `https://github.com/hellcatjack/VoxHalo_win` remains an unmodified behavioral reference. The inspected reference head was commit `2f5627b14b4af5f476fef50f03f4cd269b031c09` on `master`.
 
+Update, 2026-07-21: the reference was re-inspected through `0867afe48e2196e84512c842aacb6117a1f8799e`. The macOS port now also includes the upstream ASR hotword-context contract: raw local persistence, backend-matched 24-term/160-Unicode-scalar validation, explicit `start.asr_context_terms` arrays, immutable reconnect snapshots, `started` acknowledgement status, startup rejection rollback, and diagnostic metadata that never contains configured terms or backend error text.
+
 ## Confirmed Decisions
 
 - Deliver full functional parity in the first usable macOS release.

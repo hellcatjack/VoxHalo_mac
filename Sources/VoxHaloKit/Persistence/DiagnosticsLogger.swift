@@ -6,6 +6,8 @@ public enum DiagnosticEvent: Sendable {
         port: Int,
         direction: TranslationDirection,
         username: String?,
+        hotwordCount: Int,
+        hotwordCharacters: Int,
         deviceID: String,
         deviceName: String
     )
@@ -14,6 +16,10 @@ public enum DiagnosticEvent: Sendable {
         sequence: Int?,
         textLength: Int,
         translationLength: Int,
+        asrContextActive: Bool?,
+        asrContextTermCount: Int?,
+        asrContextCharacters: Int?,
+        messageLength: Int,
         stability: VoxBridgeStability?,
         transcript: String?,
         translation: String?
@@ -88,11 +94,24 @@ public actor DiagnosticsLogger: DiagnosticsLogging {
         ]
 
         switch event {
-        case let .sessionStart(host, port, direction, _, _, _):
+        case let .sessionStart(
+            host,
+            port,
+            direction,
+            _,
+            hotwordCount,
+            hotwordCharacters,
+            _,
+            _
+        ):
             record["event"] = .string("session_start")
             record["host"] = .string(Self.safeHost(host))
             record["port"] = .integer(Int64(port))
             record["direction"] = .string(direction.backendDirection)
+            record["hotword_count"] = .integer(Int64(max(0, hotwordCount)))
+            record["hotword_chars"] = .integer(
+                Int64(max(0, hotwordCharacters))
+            )
             record["username"] = .string(Self.redacted)
             record["device_id"] = .string(Self.redacted)
             record["device_name"] = .string(Self.redacted)
@@ -102,6 +121,10 @@ public actor DiagnosticsLogger: DiagnosticsLogging {
             sequence,
             textLength,
             translationLength,
+            asrContextActive,
+            asrContextTermCount,
+            asrContextCharacters,
+            messageLength,
             stability,
             transcript,
             translation
@@ -111,6 +134,20 @@ public actor DiagnosticsLogger: DiagnosticsLogging {
             put(sequence, key: "sequence", in: &record)
             record["text_length"] = .integer(Int64(max(0, textLength)))
             record["translation_length"] = .integer(Int64(max(0, translationLength)))
+            if let asrContextActive {
+                record["asr_context_active"] = .bool(asrContextActive)
+            }
+            put(
+                asrContextTermCount,
+                key: "asr_context_term_count",
+                in: &record
+            )
+            put(
+                asrContextCharacters,
+                key: "asr_context_chars",
+                in: &record
+            )
+            record["message_length"] = .integer(Int64(max(0, messageLength)))
             if let stability {
                 record["stability"] = .object(Self.stabilityMetadata(stability))
             }

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a full-feature, native Apple Silicon macOS 26 VoxHalo application that matches the observable behavior of Windows upstream commit `2f5627b14b4af5f476fef50f03f4cd269b031c09` and produces a locally signed `dist/VoxHalo.app`.
+**Goal:** Build a full-feature, native Apple Silicon macOS 26 VoxHalo application that matches the observable behavior of Windows upstream through commit `0867afe48e2196e84512c842aacb6117a1f8799e` and produces a locally signed `dist/VoxHalo.app`.
 
 **Architecture:** A Swift Package opened and built by Xcode separates a minimal SwiftUI executable from a testable `VoxHaloKit` library. Swift actors own networking and session state, `@MainActor` models own UI state, AppKit owns the click-through overlay, Core Audio owns device/tap capture, and a small Objective-C++ bridge keeps the real-time AUHAL callback allocation-free. Both capture paths feed one converter, exact-frame accumulator, four-frame queue, and serialized session drain.
 
@@ -13,7 +13,8 @@
 ## Locked baseline and execution rules
 
 - Windows behavioral reference: [`hellcatjack/VoxHalo_win@2f5627b`](https://github.com/hellcatjack/VoxHalo_win/commit/2f5627b14b4af5f476fef50f03f4cd269b031c09), branch `master`, commit time 2026-07-13 04:42:18 UTC.
-- Fresh GitHub archive rechecked on 2026-07-21: 71 files, byte-identical to the reviewed archive, aggregate sorted-file manifest SHA-256 `76a4502b8df5784bf178ccd2046e7207eb7949017e9e7a20398ead97fc5a3de4`.
+- Upstream extension: commits `040bda5..0867afe` inspected on 2026-07-21 add ASR hotword context, persistence, acknowledgement status, reconnect snapshots, backend-aligned validation, and privacy/startup hardening. Tasks 0–20 remain the historical base-port sequence; Task 21 applies this extension.
+- Original `2f5627b` GitHub archive rechecked on 2026-07-21: 71 files, byte-identical to the reviewed archive, aggregate sorted-file manifest SHA-256 `76a4502b8df5784bf178ccd2046e7207eb7949017e9e7a20398ead97fc5a3de4`.
 - Product design: `docs/superpowers/specs/2026-07-13-macos-native-port-design.md`.
 - Product name: `VoxHalo`; bundle identifier: `com.hellcatjack.voxhalo`; deployment target: macOS 26.0; architecture: arm64.
 - Apple frameworks only. No package dependencies, virtual audio driver, persisted password, sandbox, backend mutation, Intel slice, notarization, or App Store work.
@@ -1969,6 +1970,23 @@ git status --short
 
 Expected: commit succeeds and `git status --short` is empty.
 
+### Task 21: Port the latest ASR hotword-context extension
+
+**Files:**
+
+- Create: `Sources/VoxHaloKit/Networking/AsrContextTermsParser.swift`
+- Create: `Tests/VoxHaloKitTests/Networking/AsrContextTermsParserTests.swift`
+- Modify: networking protocol/message/event files
+- Modify: settings, operator model/view, session coordinator, diagnostics, tests, and user/privacy documentation
+
+- [x] **Step 1:** Lock the upstream range `2f5627b..0867afe` and port its parser contract: whitespace/English-comma/Chinese-comma splitting, first-spelling case-insensitive de-duplication, sentence-punctuation rules, 24-term limit, and 160-Unicode-scalar joined limit.
+- [x] **Step 2:** Always serialize `asr_context_terms`, including `[]`, and parse `asr_context_active`, `asr_context_term_count`, and `asr_context_chars`.
+- [x] **Step 3:** Preserve an immutable term snapshot through initial Start and reconnect; report acknowledgement/legacy status without a later Running update overwriting it.
+- [x] **Step 4:** Persist raw `AsrContextTermsText`, add the native multiline editor, validate before connecting, and roll back backend startup rejection without leaving capture running.
+- [x] **Step 5:** Restrict diagnostics to term counts/character counts/acknowledgement metadata and backend-error length. Never pass configured arrays or backend error text into the logger.
+- [x] **Step 6:** Run focused tests, the complete strict-concurrency/warnings-as-errors suite, packaging gate, bundle verifier, and privacy scan; add the manual hotword matrix.
+- [ ] **Step 7:** Execute the live backend/audio hotword rows against the unchanged signed bundle and record the result without storing live credentials or identifying terms.
+
 ## Completion gate and coverage map
 
 | Approved requirement | Implementing tasks | Proof |
@@ -1983,5 +2001,6 @@ Expected: commit succeeds and `git status --short` is empty.
 | Persistent multi-display click-through overlay | 16-18 | UUID/geometry, AppKit panel, layout, CoreText, coalescing tests |
 | Full operator feature set and lifecycle cleanup | 19 | model/view/bundle/environment tests |
 | arm64 locally signed `dist/VoxHalo.app` | 20 | packaging tests, verification script, unchanged-build acceptance |
+| Rare/professional vocabulary context with privacy hardening | 21 | parser/protocol/settings/operator/session/diagnostic tests plus live backend checklist |
 
-The port is complete only after Task 20's automated gate passes and the applicable manual rows are recorded. A green unit suite without real microphone/system-audio, real backend, permission, multi-display/full-screen, teardown, and relaunch checks is not the finished product.
+The port is complete only after Tasks 20–21 automated gates pass and the applicable manual rows are recorded. A green unit suite without real microphone/system-audio, real backend/hotword acknowledgement, permission, multi-display/full-screen, teardown, and relaunch checks is not the finished product.

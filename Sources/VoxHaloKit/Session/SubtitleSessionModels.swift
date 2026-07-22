@@ -5,17 +5,20 @@ public struct SubtitleSessionConfiguration: Equatable, Sendable {
     public let direction: TranslationDirection
     public let audioSource: AudioSource
     public let credentials: VoxBridgeAuthCredentials?
+    public let asrContextTerms: [String]
 
     public init(
         endpoint: VoxBridgeEndpoint,
         direction: TranslationDirection,
         audioSource: AudioSource,
-        credentials: VoxBridgeAuthCredentials?
+        credentials: VoxBridgeAuthCredentials?,
+        asrContextTerms: [String] = []
     ) {
         self.endpoint = endpoint
         self.direction = direction
         self.audioSource = audioSource
         self.credentials = credentials
+        self.asrContextTerms = Array(asrContextTerms)
     }
 }
 
@@ -48,11 +51,14 @@ public enum SubtitleSessionOutput: Equatable, Sendable {
 
 public enum SubtitleSessionError: LocalizedError, Equatable, Sendable {
     case alreadyActive
+    case backendRejected(String)
 
     public var errorDescription: String? {
         switch self {
         case .alreadyActive:
             "A subtitle session is already active."
+        case let .backendRejected(message):
+            "Start failed: \(message)"
         }
     }
 }

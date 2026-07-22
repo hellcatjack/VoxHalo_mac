@@ -42,10 +42,95 @@ final class SubtitleSessionCoordinatorStartTests: XCTestCase {
         XCTAssertEqual(receivedCredentials?.username, "operator")
         XCTAssertEqual(receivedCredentials?.password, "memory-only")
         XCTAssertEqual(receivedDirection, .chineseToEnglish)
+        let receivedContextTerms = await fixture.client.receivedContextTerms
+        XCTAssertEqual(receivedContextTerms, [])
         let publishedRunning = await waitUntil {
             await output.recorder.states == [.starting, .running]
         }
         XCTAssertTrue(publishedRunning)
+        output.task.cancel()
+    }
+
+    func testStartCopiesAndPassesTheRequestedHotwordContext() async throws {
+        var callerTerms = ["Elisha", "Qwen3-ASR"]
+        let fixture = try SubtitleSessionFixture(asrContextTerms: callerTerms)
+        callerTerms.append("caller-mutation")
+
+        try await fixture.coordinator.start(fixture.configuration)
+
+        let received = await fixture.client.receivedContextTerms
+        XCTAssertEqual(received, ["Elisha", "Qwen3-ASR"])
+    }
+
+    func testBackendStartRejectionDoesNotStartAudio() async throws {
+        let rejection = "ASR context accepts at most 160 characters"
+        let startFailure = "Start failed: \(rejection)"
+        let fixture = try SubtitleSessionFixture(asrContextTerms: ["Elisha"])
+        let output = await fixture.recordOutputs()
+        let client = fixture.client
+        let coordinator = fixture.coordinator
+        await client.setStartProbe {
+            await client.emit(.event(VoxBridgeEvent(
+                type: .error,
+                rawType: "error",
+                message: rejection
+            )))
+            _ = await waitUntil { await coordinator.backendSessionIsFaulted }
+        }
+
+        do {
+            try await coordinator.start(fixture.configuration)
+            XCTFail("Expected backend rejection")
+        } catch {
+            XCTAssertEqual(
+                error as? SubtitleSessionError,
+                .backendRejected(rejection)
+            )
+        }
+
+        let audioStarts = await fixture.audio.startCount
+        let disconnects = await client.disconnectCount
+        XCTAssertEqual(audioStarts, 0)
+        XCTAssertEqual(disconnects, 1)
+        let failed = await waitUntil {
+            await output.recorder.failures.contains(startFailure)
+        }
+        XCTAssertTrue(failed)
+        output.task.cancel()
+    }
+
+    func testBackendRejectionDuringAudioStartupStopsCaptureAndRemainsFailure() async throws {
+        let rejection = "ASR context rejected during startup"
+        let startFailure = "Start failed: \(rejection)"
+        let fixture = try SubtitleSessionFixture(asrContextTerms: ["Elisha"])
+        let output = await fixture.recordOutputs()
+        let client = fixture.client
+        let coordinator = fixture.coordinator
+        await fixture.audio.setStartProbe {
+            await client.emit(.event(VoxBridgeEvent(
+                type: .error,
+                rawType: "error",
+                message: rejection
+            )))
+            _ = await waitUntil { await coordinator.backendSessionIsFaulted }
+        }
+
+        do {
+            try await coordinator.start(fixture.configuration)
+            XCTFail("Expected backend rejection")
+        } catch {
+            XCTAssertEqual(
+                error as? SubtitleSessionError,
+                .backendRejected(rejection)
+            )
+        }
+
+        let starts = await fixture.audio.startCount
+        let stops = await fixture.audio.stopCount
+        XCTAssertEqual(starts, 1)
+        XCTAssertEqual(stops, 1)
+        let failures = await output.recorder.failures
+        XCTAssertEqual(failures.last, startFailure)
         output.task.cancel()
     }
 

@@ -11,7 +11,10 @@ final class VoxBridgeClientTests: XCTestCase {
         let client = makeClient(transport: transport)
         try await client.connect(to: endpoint, credentials: nil)
 
-        async let first: Void = client.start(direction: .chineseToEnglish)
+        async let first: Void = client.start(
+            direction: .chineseToEnglish,
+            asrContextTerms: ["Elisha", "Qwen3-ASR"]
+        )
         async let second: Void = client.sendAudioFrame(Data([1, 2, 3, 4]))
         _ = try await (first, second)
         try await client.setTranslationDirection(.englishToChinese)
@@ -24,7 +27,7 @@ final class VoxBridgeClientTests: XCTestCase {
         XCTAssertEqual(sentKinds, [.text, .binary, .text, .text])
         XCTAssertEqual(maximumConcurrentSendCount, 1)
         XCTAssertEqual(sentTexts, [
-            #"{"language":"Chinese","translation_direction":"zh2en","type":"start"}"#,
+            #"{"asr_context_terms":["Elisha","Qwen3-ASR"],"language":"Chinese","translation_direction":"zh2en","type":"start"}"#,
             #"{"translation_direction":"en2zh","type":"set_translation_direction"}"#,
             #"{"type":"finish"}"#
         ])

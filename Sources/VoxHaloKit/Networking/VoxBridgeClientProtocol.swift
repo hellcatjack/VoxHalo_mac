@@ -18,7 +18,10 @@ public protocol VoxBridgeClientProtocol: Sendable {
         to endpoint: VoxBridgeEndpoint,
         credentials: VoxBridgeAuthCredentials?
     ) async throws
-    func start(direction: TranslationDirection) async throws
+    func start(
+        direction: TranslationDirection,
+        asrContextTerms: [String]
+    ) async throws
     func sendAudioFrame(_ data: Data) async throws
     func setTranslationDirection(_ direction: TranslationDirection) async throws
     func finish() async throws

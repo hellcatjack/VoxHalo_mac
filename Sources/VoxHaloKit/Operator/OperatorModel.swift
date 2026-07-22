@@ -13,6 +13,10 @@ public final class OperatorModel: ObservableObject {
 
     @Published public var password: String = ""
 
+    @Published public var hotwordsText: String {
+        didSet { persistIfReady() }
+    }
+
     @Published public var direction: TranslationDirection {
         didSet { persistIfReady() }
     }
@@ -97,6 +101,7 @@ public final class OperatorModel: ObservableObject {
         username = Self.nonBlank(environment["VOXBRIDGE_AUTH_USERNAME"])
             ?? loadedSettings.authUsername
         password = environment["VOXBRIDGE_AUTH_PASSWORD"] ?? ""
+        hotwordsText = loadedSettings.asrContextTermsText
         direction = loadedSettings.direction
         layout = SubtitleLayoutSettings(settings: loadedSettings).normalized()
 
@@ -150,6 +155,7 @@ public final class OperatorModel: ObservableObject {
     public var canEditBackend: Bool { state == .stopped }
     public var canEditDirection: Bool { state == .stopped }
     public var canEditAudioSource: Bool { state == .stopped }
+    public var canEditHotwords: Bool { state == .stopped }
     public var canEditDisplayAndLayout: Bool { true }
 
     public var endpointIsInsecure: Bool {
@@ -195,6 +201,13 @@ public final class OperatorModel: ObservableObject {
             setFailure("Select an available audio source.")
             return
         }
+        let asrContextTerms: [String]
+        do {
+            asrContextTerms = try AsrContextTermsParser.parse(hotwordsText)
+        } catch {
+            setFailure(error.localizedDescription)
+            return
+        }
 
         errorMessage = nil
         permissionSettingsDestination = nil
@@ -210,7 +223,8 @@ public final class OperatorModel: ObservableObject {
             endpoint: endpoint,
             direction: direction,
             audioSource: source,
-            credentials: credentials
+            credentials: credentials,
+            asrContextTerms: asrContextTerms
         )
 
         do {
@@ -289,6 +303,7 @@ public final class OperatorModel: ObservableObject {
             referenceFontSize: Double(layout.referenceFontSize),
             referenceBottomOffset: Double(layout.referenceBottomOffset),
             referenceColor: layout.referenceColor,
+            asrContextTermsText: hotwordsText,
             unknownFields: settingsTemplate.unknownFields
         ).normalized()
         do {
@@ -435,6 +450,13 @@ public final class OperatorModel: ObservableObject {
             setFailure(Self.audioFailureMessage(failure))
         case let endpointError as VoxBridgeEndpointError:
             setFailure(endpointError.localizedDescription)
+        case let sessionError as SubtitleSessionError:
+            switch sessionError {
+            case let .backendRejected(message):
+                setFailure("Start failed: \(message)")
+            case .alreadyActive:
+                setFailure(sessionError.localizedDescription)
+            }
         default:
             if error.localizedDescription.localizedCaseInsensitiveContains(
                 "authentication"

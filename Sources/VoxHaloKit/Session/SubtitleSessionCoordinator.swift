@@ -30,6 +30,9 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
     private var sessionToken: UInt64 = 0
     private var captureWasStarted = false
     private var backendFaulted = false
+    private var backendSessionErrorMessage: String?
+    private var backendStartRejectedMessage: String?
+    private var runningStatus = "Running"
     private var audioOverloadReported = false
     private var sentFrameCount: UInt64 = 0
     private var lastAudioCallbackTimestamp: AudioCallbackTimestamp?
@@ -87,6 +90,8 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             throw SubtitleSessionError.alreadyActive
         }
 
+        resetBackendSessionFault()
+        runningStatus = "Running"
         sessionToken &+= 1
         let token = sessionToken
         transition(to: .starting)
@@ -152,7 +157,8 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 endpoint: endpoint,
                 direction: configuration.direction,
                 audioSource: configuration.audioSource,
-                credentials: configuration.credentials
+                credentials: configuration.credentials,
+                asrContextTerms: configuration.asrContextTerms
             )
             await installClientOutputTask(token: token)
             try ensureStarting(token)
@@ -175,8 +181,12 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             publish(.subtitle(currentSubtitle))
 
             startupStage = .startMessage
-            try await client.start(direction: configuration.direction)
+            try await client.start(
+                direction: configuration.direction,
+                asrContextTerms: configuration.asrContextTerms
+            )
             try ensureStarting(token)
+            try throwIfBackendStartRejected()
 
             startupStage = .audioCapture
             let generation = queue.reset()
@@ -214,12 +224,17 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             if let failure = failureGate.startupFailure {
                 throw failure
             }
+            try throwIfBackendStartRejected()
 
             await diagnostics.record(.sessionStart(
                 host: endpoint.webSocketURL.host ?? "unknown",
                 port: Self.effectivePort(for: endpoint),
                 direction: configuration.direction,
                 username: configuration.credentials?.username,
+                hotwordCount: configuration.asrContextTerms.count,
+                hotwordCharacters: AsrContextTermsParser.countJoinedCharacters(
+                    configuration.asrContextTerms
+                ),
                 deviceID: configuration.audioSource.id,
                 deviceName: configuration.audioSource.name
             ))
@@ -229,6 +244,7 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 throw failure
             }
             transition(to: .running)
+            publish(.status(runningStatus))
         } catch {
             let interruptedByStop = state == .finishing || token != sessionToken
             await rollbackStart(
@@ -267,7 +283,7 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         await stopAudioPipeline()
 
         let connected = await client.isConnected
-        if connected {
+        if connected && !backendFaulted {
             let (stream, continuation) = AsyncStream.makeStream(
                 of: Void.self,
                 bufferingPolicy: .bufferingNewest(1)
@@ -475,21 +491,28 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         }
 
         publish(.status("Reconnecting"))
+        runningStatus = "Running"
+        resetBackendSessionFault()
         let task = Task { [client] in
             try await client.connect(
                 to: configuration.endpoint,
                 credentials: configuration.credentials
             )
-            try await client.start(direction: configuration.direction)
+            try await client.start(
+                direction: configuration.direction,
+                asrContextTerms: configuration.asrContextTerms
+            )
         }
         reconnectTask = task
         do {
             try await task.value
             try ensureAudioWorkCurrent(generation: generation, token: token)
+            try throwIfBackendStartRejected()
             reconnectTask = nil
             backendFaulted = false
+            backendSessionErrorMessage = nil
             audioOverloadReported = false
-            publish(.status("Running"))
+            publish(.status(runningStatus))
         } catch {
             reconnectTask = nil
             if audioWorkIsCurrent(generation: generation, token: token) {
@@ -518,10 +541,20 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 publish(.subtitle(currentSubtitle))
             }
             if event.type == .error {
-                if state != .finishing { backendFaulted = true }
-                if let message = Self.conciseBackendMessage(event.message) {
+                let message = Self.conciseBackendMessage(event.message)
+                if state != .finishing {
+                    backendFaulted = true
+                    backendSessionErrorMessage = message
+                        ?? "Backend rejected the session start."
+                    backendStartRejectedMessage = backendSessionErrorMessage
+                }
+                if let message {
                     publish(.status(message))
                 }
+            }
+            if event.type == .started {
+                runningStatus = formatRunningStatus(event)
+                publish(.status(runningStatus))
             }
             if event.type == .final || event.type == .error {
                 resolveFinalSignal(token: token)
@@ -533,14 +566,20 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
                 await diagnostics.record(.connection(category: "connected"))
                 publish(.status("Connected"))
             case .disconnected:
-                if state != .finishing { backendFaulted = true }
+                if state != .finishing {
+                    backendFaulted = true
+                    backendSessionErrorMessage = "Disconnected"
+                }
                 await diagnostics.record(.connection(category: "disconnected"))
                 publish(.status("Disconnected"))
             case .parseError:
                 await diagnostics.record(.failure(category: "parse_error"))
                 publish(.status("Receive parse error"))
             case .receiveError:
-                if state != .finishing { backendFaulted = true }
+                if state != .finishing {
+                    backendFaulted = true
+                    backendSessionErrorMessage = "Receive error"
+                }
                 await diagnostics.record(.failure(category: "receive_error"))
                 publish(.status("Receive error"))
             }
@@ -562,6 +601,10 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
             sequence: event.sequence ?? event.stability?.sequence,
             textLength: transcript?.utf16.count ?? 0,
             translationLength: translation?.utf16.count ?? 0,
+            asrContextActive: event.asrContextActive,
+            asrContextTermCount: event.asrContextTermCount,
+            asrContextCharacters: event.asrContextCharacters,
+            messageLength: event.message?.utf16.count ?? 0,
             stability: event.stability,
             transcript: transcript,
             translation: translation
@@ -694,7 +737,8 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         captureFailureGate?.deactivate()
         captureFailureGate = nil
         activeConfiguration = nil
-        backendFaulted = false
+        resetBackendSessionFault()
+        runningStatus = "Running"
         audioOverloadReported = false
         sentFrameCount = 0
         lastAudioCallbackTimestamp = nil
@@ -729,6 +773,31 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
         }
     }
 
+    private func formatRunningStatus(_ event: VoxBridgeEvent) -> String {
+        let requestedCount = activeConfiguration?.asrContextTerms.count ?? 0
+        guard requestedCount > 0 else { return "Running" }
+        guard event.asrContextActive != nil
+                || event.asrContextTermCount != nil else {
+            return "Running · Hotwords not confirmed"
+        }
+        let activeCount = event.asrContextTermCount
+            ?? (event.asrContextActive == true ? requestedCount : 0)
+        return "Running · Hotwords: \(activeCount)"
+    }
+
+    private func throwIfBackendStartRejected() throws {
+        guard let backendStartRejectedMessage else { return }
+        throw SubtitleSessionError.backendRejected(
+            backendStartRejectedMessage
+        )
+    }
+
+    private func resetBackendSessionFault() {
+        backendFaulted = false
+        backendSessionErrorMessage = nil
+        backendStartRejectedMessage = nil
+    }
+
     private static func effectivePort(for endpoint: VoxBridgeEndpoint) -> Int {
         if let port = endpoint.webSocketURL.port { return port }
         return endpoint.isInsecure ? 80 : 443
@@ -756,6 +825,8 @@ public actor SubtitleSessionCoordinator: SubtitleSessionCoordinating {
 
     private static func failureMessage(for error: Error) -> String {
         switch error {
+        case let error as SubtitleSessionError:
+            error.localizedDescription
         case let error as VoxBridgeEndpointError:
             error.localizedDescription
         case let error as VoxBridgeAuthenticationError:

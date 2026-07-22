@@ -23,6 +23,7 @@ final class OperatorViewTests: XCTestCase {
             "operator.username",
             "operator.password",
             "operator.direction",
+            "operator.hotwords",
             "operator.audioSource",
             "operator.display",
             "operator.target.height",
@@ -37,6 +38,16 @@ final class OperatorViewTests: XCTestCase {
             "operator.stop",
             "operator.status",
         ]))
+    }
+
+    func testViewExposesMultilineHotwordGuidanceAndSizing() {
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("spaces"))
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("commas"))
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("new lines"))
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("24"))
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("160"))
+        XCTAssertTrue(OperatorView.hotwordGuidance.contains("Saved automatically"))
+        XCTAssertGreaterThanOrEqual(OperatorView.hotwordEditorHeight, 64)
     }
 
     func testViewExposesExactLayoutRanges() {

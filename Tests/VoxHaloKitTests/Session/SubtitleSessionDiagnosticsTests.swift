@@ -14,6 +14,7 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
         )
         let fixture = try SubtitleSessionFixture(
             direction: .englishToChinese,
+            asrContextTerms: ["private-hotword", "𠮷"],
             source: source,
             credentials: credentials
         )
@@ -28,6 +29,8 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
             port,
             direction,
             username,
+            hotwordCount,
+            hotwordCharacters,
             deviceID,
             deviceName
         ) = event else {
@@ -37,6 +40,8 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
         XCTAssertEqual(port, 18_024)
         XCTAssertEqual(direction, .englishToChinese)
         XCTAssertEqual(username, "private-operator")
+        XCTAssertEqual(hotwordCount, 2)
+        XCTAssertEqual(hotwordCharacters, 17)
         XCTAssertEqual(deviceID, "private-device-uid")
         XCTAssertEqual(deviceName, "Private Device Name")
     }
@@ -56,6 +61,9 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
             text: "private transcript",
             translation: "private translation",
             sequence: 42,
+            asrContextActive: true,
+            asrContextTermCount: 2,
+            asrContextCharacters: 17,
             stability: stability
         )
 
@@ -69,6 +77,10 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
             sequence,
             textLength,
             translationLength,
+            asrContextActive,
+            asrContextTermCount,
+            asrContextCharacters,
+            messageLength,
             recordedStability,
             transcript,
             translation
@@ -79,6 +91,10 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
         XCTAssertEqual(sequence, 42)
         XCTAssertEqual(textLength, "private transcript".count)
         XCTAssertEqual(translationLength, "private translation".count)
+        XCTAssertEqual(asrContextActive, true)
+        XCTAssertEqual(asrContextTermCount, 2)
+        XCTAssertEqual(asrContextCharacters, 17)
+        XCTAssertEqual(messageLength, 0)
         XCTAssertEqual(recordedStability, stability)
         XCTAssertEqual(transcript, "private transcript")
         XCTAssertEqual(translation, "private translation")
@@ -120,10 +136,37 @@ final class SubtitleSessionDiagnosticsTests: XCTestCase {
         let event = try await waitForDiagnostic(in: fixture.diagnostics) {
             if case .sessionStart = $0 { true } else { false }
         }
-        guard case let .sessionStart(_, port, _, _, _, _) = event else {
+        guard case let .sessionStart(_, port, _, _, _, _, _, _) = event else {
             return XCTFail("Expected session start diagnostic")
         }
         XCTAssertEqual(port, 443)
+    }
+
+    func testBackendErrorDiagnosticRetainsOnlyMessageLength() async throws {
+        let fixture = try SubtitleSessionFixture()
+        try await fixture.coordinator.start(fixture.configuration)
+        let privateMessage = "Context rejected for private-hotword"
+
+        await fixture.client.emit(.event(VoxBridgeEvent(
+            type: .error,
+            rawType: "error",
+            message: privateMessage
+        )))
+
+        let event = try await waitForDiagnostic(in: fixture.diagnostics) {
+            guard case let .backend(type, _, _, _, _, _, _, _, _, _, _) = $0 else {
+                return false
+            }
+            return type == "error"
+        }
+        guard case let .backend(
+            _, _, _, _, _, _, _, messageLength, _, transcript, translation
+        ) = event else {
+            return XCTFail("Expected backend diagnostic")
+        }
+        XCTAssertEqual(messageLength, privateMessage.utf16.count)
+        XCTAssertNil(transcript)
+        XCTAssertNil(translation)
     }
 
     func testAudioDiagnosticsAreThrottledAfterFirstThreeFrames() async throws {

@@ -12,7 +12,7 @@ All scripts set `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` where
 
 ## Source baseline
 
-The unchanged Windows behavioral reference is `https://github.com/hellcatjack/VoxHalo_win.git`, commit `2f5627b14b4af5f476fef50f03f4cd269b031c09`. Native implementations should preserve portable observable behavior rather than Windows API structure.
+The Windows behavioral reference is `https://github.com/hellcatjack/VoxHalo_win.git`, currently ported through commit `0867afe48e2196e84512c842aacb6117a1f8799e`. The original native-port baseline was `2f5627b14b4af5f476fef50f03f4cd269b031c09`; commits through `0867afe` add the complete ASR hotword-context feature and hardening. Native implementations preserve portable observable behavior rather than Windows API structure.
 
 ## Common commands
 
@@ -66,6 +66,7 @@ scripts                          build/run/verification helpers
 ## Test principles
 
 - Use synthetic credentials only; never add live passwords to source, tests, shell commands, fixtures, snapshots, or documentation.
+- Use synthetic hotwords in tests/docs and verify diagnostics receive only hotword metadata, never configured term arrays or backend error text.
 - Inject clocks, schedulers, transports, permission providers, catalogs, and Core Audio APIs.
 - Test a failure before implementing its fix.
 - Run focused tests, then the complete strict-concurrency/warnings-as-errors suite.

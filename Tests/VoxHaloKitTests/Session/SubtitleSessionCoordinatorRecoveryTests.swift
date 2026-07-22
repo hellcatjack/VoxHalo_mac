@@ -25,6 +25,28 @@ final class SubtitleSessionCoordinatorRecoveryTests: XCTestCase {
         XCTAssertEqual(connectCount, 2)
     }
 
+    func testReconnectResendsTheImmutableInitialHotwordSnapshot() async throws {
+        var callerTerms = ["Elisha", "Qwen3-ASR"]
+        let fixture = try SubtitleSessionFixture(asrContextTerms: callerTerms)
+        callerTerms[0] = "caller-mutation"
+        try await fixture.coordinator.start(fixture.configuration)
+        await fixture.client.emit(.connection(.receiveError("network")))
+        let faulted = await waitUntil {
+            await fixture.coordinator.backendSessionIsFaulted
+        }
+        XCTAssertTrue(faulted)
+
+        await fixture.audio.emit(sessionFrame(1))
+
+        let sent = await awaitSuccessfulAudioCount(1, fixture: fixture)
+        let contexts = await fixture.client.startContextTerms
+        XCTAssertTrue(sent)
+        XCTAssertEqual(contexts, [
+            ["Elisha", "Qwen3-ASR"],
+            ["Elisha", "Qwen3-ASR"]
+        ])
+    }
+
     func testSevenMinutesFiftyNineSecondsDoesNotReconnect() async throws {
         let fixture = try SubtitleSessionFixture()
         try await fixture.coordinator.start(fixture.configuration)

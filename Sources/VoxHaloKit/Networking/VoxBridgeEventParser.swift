@@ -39,6 +39,17 @@ public enum VoxBridgeEventParser {
             timestampMilliseconds: integer(root, "ts_ms", as: Int64.self),
             sliceCommit: boolean(root, "slice_commit"),
             isStable: boolean(root, "is_stable"),
+            asrContextActive: boolean(root, "asr_context_active"),
+            asrContextTermCount: integer(
+                root,
+                "asr_context_term_count",
+                as: Int.self
+            ),
+            asrContextCharacters: integer(
+                root,
+                "asr_context_chars",
+                as: Int.self
+            ),
             stability: stability(root)
         )
     }

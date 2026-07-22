@@ -7,6 +7,7 @@ public struct OperatorView: View {
         "operator.username",
         "operator.password",
         "operator.direction",
+        "operator.hotwords",
         "operator.audioSource",
         "operator.display",
         "operator.target.height",
@@ -28,6 +29,8 @@ public struct OperatorView: View {
     public static let referenceAreaHeightRange: ClosedRange<CGFloat> = 48 ... 360
     public static let referenceFontSizeRange: ClosedRange<CGFloat> = 16 ... 42
     public static let referenceBottomOffsetRange: ClosedRange<CGFloat> = 0 ... 900
+    public static let hotwordEditorHeight: CGFloat = 72
+    public static let hotwordGuidance = "Separate with spaces, English or Chinese commas, or new lines. Maximum 24 terms / 160 joined characters. Saved automatically."
 
     @ObservedObject private var model: OperatorModel
 
@@ -121,6 +124,29 @@ public struct OperatorView: View {
                     .labelsHidden()
                     .disabled(!model.canEditDirection)
                     .accessibilityIdentifier("operator.direction")
+                }
+                GridRow(alignment: .top) {
+                    fieldLabel("Hotwords")
+                        .padding(.top, 7)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextEditor(text: $model.hotwordsText)
+                            .font(.body)
+                            .frame(height: Self.hotwordEditorHeight)
+                            .padding(3)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color.secondary.opacity(0.35))
+                            }
+                            .disabled(!model.canEditHotwords)
+                            .help(Self.hotwordGuidance)
+                            .accessibilityLabel("Hotwords")
+                            .accessibilityHint(Self.hotwordGuidance)
+                            .accessibilityIdentifier("operator.hotwords")
+                        Text(Self.hotwordGuidance)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 GridRow {
                     fieldLabel("Audio source")

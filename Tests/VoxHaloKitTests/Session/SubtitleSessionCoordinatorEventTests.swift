@@ -74,6 +74,74 @@ final class SubtitleSessionCoordinatorEventTests: XCTestCase {
         output.task.cancel()
     }
 
+    func testStartedEventReportsAcknowledgedHotwordCount() async throws {
+        let fixture = try SubtitleSessionFixture(
+            asrContextTerms: ["Elisha", "Qwen3-ASR"]
+        )
+        let output = await fixture.recordOutputs()
+        let client = fixture.client
+        await client.setStartProbe {
+            await client.emit(.event(VoxBridgeEvent(
+                type: .started,
+                rawType: "started",
+                asrContextActive: true,
+                asrContextTermCount: 2,
+                asrContextCharacters: 17
+            )))
+            _ = await waitUntil {
+                await output.recorder.statuses.contains(
+                    "Running · Hotwords: 2"
+                )
+            }
+        }
+
+        try await fixture.coordinator.start(fixture.configuration)
+
+        let published = await waitUntil {
+            await output.recorder.statuses.last == "Running · Hotwords: 2"
+        }
+        XCTAssertTrue(published)
+        output.task.cancel()
+    }
+
+    func testStartedEventForEmptyRequestKeepsPlainRunningStatus() async throws {
+        let fixture = try SubtitleSessionFixture(asrContextTerms: [])
+        let output = await fixture.recordOutputs()
+        try await fixture.coordinator.start(fixture.configuration)
+
+        await fixture.client.emit(.event(VoxBridgeEvent(
+            type: .started,
+            rawType: "started",
+            asrContextActive: false,
+            asrContextTermCount: 0,
+            asrContextCharacters: 0
+        )))
+
+        let published = await waitUntil {
+            await output.recorder.statuses.last == "Running"
+        }
+        XCTAssertTrue(published)
+        output.task.cancel()
+    }
+
+    func testLegacyStartedEventReportsUnconfirmedNonemptyHotwords() async throws {
+        let fixture = try SubtitleSessionFixture(asrContextTerms: ["Elisha"])
+        let output = await fixture.recordOutputs()
+        try await fixture.coordinator.start(fixture.configuration)
+
+        await fixture.client.emit(.event(VoxBridgeEvent(
+            type: .started,
+            rawType: "started"
+        )))
+
+        let published = await waitUntil {
+            await output.recorder.statuses.last
+                == "Running · Hotwords not confirmed"
+        }
+        XCTAssertTrue(published)
+        output.task.cancel()
+    }
+
     func testCapturedFrameUsesOwnedBoundedQueueAndSerializedDrain() async throws {
         let fixture = try SubtitleSessionFixture()
         try await fixture.coordinator.start(fixture.configuration)

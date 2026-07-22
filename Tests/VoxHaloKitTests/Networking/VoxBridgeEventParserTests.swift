@@ -64,6 +64,17 @@ final class VoxBridgeEventParserTests: XCTestCase {
         }
     }
 
+    func testStartedEventParsesHotwordContextMetadata() throws {
+        let event = try VoxBridgeEventParser.parse(
+            #"{"type":"started","asr_context_active":true,"asr_context_term_count":2,"asr_context_chars":17}"#
+        )
+
+        XCTAssertEqual(event.type, .started)
+        XCTAssertEqual(event.asrContextActive, true)
+        XCTAssertEqual(event.asrContextTermCount, 2)
+        XCTAssertEqual(event.asrContextCharacters, 17)
+    }
+
     func testUnknownAndMissingTypesArePreservedAsUnknown() throws {
         let future = try VoxBridgeEventParser.parse(#"{"type":"future_event","seq":9}"#)
         XCTAssertEqual(future.type, .unknown)

@@ -51,6 +51,10 @@ public struct SettingsStore: Sendable {
             referenceFontSize: value(for: .referenceFontSize, in: root)?.doubleValue ?? 24,
             referenceBottomOffset: value(for: .referenceBottomOffset, in: root)?.doubleValue ?? 0,
             referenceColor: value(for: .referenceColor, in: root)?.stringValue ?? "#F4F4F4",
+            asrContextTermsText: value(
+                for: .asrContextTermsText,
+                in: root
+            )?.stringValue ?? "",
             unknownFields: unknown
         ).normalized()
 
@@ -79,6 +83,9 @@ public struct SettingsStore: Sendable {
         root[Field.referenceFontSize.rawValue] = .number(settings.referenceFontSize)
         root[Field.referenceBottomOffset.rawValue] = .number(settings.referenceBottomOffset)
         root[Field.referenceColor.rawValue] = .string(settings.referenceColor)
+        root[Field.asrContextTermsText.rawValue] = .string(
+            settings.asrContextTermsText
+        )
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -173,6 +180,7 @@ public struct SettingsStore: Sendable {
         case referenceFontSize = "RecognitionSubtitleFontSize"
         case referenceBottomOffset = "RecognitionSubtitleBottomOffset"
         case referenceColor = "RecognitionSubtitleColor"
+        case asrContextTermsText = "AsrContextTermsText"
     }
 }
 

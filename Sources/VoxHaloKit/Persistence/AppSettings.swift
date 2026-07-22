@@ -16,6 +16,7 @@ public struct AppSettings: Equatable, Sendable {
     public var referenceFontSize: Double
     public var referenceBottomOffset: Double
     public var referenceColor: String
+    public var asrContextTermsText: String
     public var unknownFields: [String: JSONValue]
 
     public init(
@@ -32,6 +33,7 @@ public struct AppSettings: Equatable, Sendable {
         referenceFontSize: Double = 24,
         referenceBottomOffset: Double = 0,
         referenceColor: String = "#F4F4F4",
+        asrContextTermsText: String = "",
         unknownFields: [String: JSONValue] = [:]
     ) {
         self.backendURL = backendURL
@@ -47,6 +49,7 @@ public struct AppSettings: Equatable, Sendable {
         self.referenceFontSize = referenceFontSize
         self.referenceBottomOffset = referenceBottomOffset
         self.referenceColor = referenceColor
+        self.asrContextTermsText = asrContextTermsText
         self.unknownFields = unknownFields
     }
 
@@ -116,6 +119,7 @@ public struct AppSettings: Equatable, Sendable {
             ),
             referenceBottomOffset: Self.normalizeOffset(referenceBottomOffset),
             referenceColor: Self.normalizeColor(referenceColor, default: "#F4F4F4"),
+            asrContextTermsText: asrContextTermsText,
             unknownFields: unknownFields
         )
     }

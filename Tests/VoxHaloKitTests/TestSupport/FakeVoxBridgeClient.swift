@@ -35,10 +35,12 @@ actor FakeVoxBridgeClient: VoxBridgeClientProtocol {
     private(set) var receivedEndpoint: VoxBridgeEndpoint?
     private(set) var receivedCredentials: VoxBridgeAuthCredentials?
     private(set) var receivedDirection: TranslationDirection?
+    private(set) var receivedContextTerms: [String]?
     private(set) var connectionRequests: [
         (VoxBridgeEndpoint, VoxBridgeAuthCredentials?)
     ] = []
     private(set) var startDirections: [TranslationDirection] = []
+    private(set) var startContextTerms: [[String]] = []
     private(set) var operations: [String] = []
 
     init(
@@ -89,12 +91,17 @@ actor FakeVoxBridgeClient: VoxBridgeClientProtocol {
         continuation?.yield(.connection(.connected))
     }
 
-    func start(direction: TranslationDirection) async throws {
+    func start(
+        direction: TranslationDirection,
+        asrContextTerms: [String]
+    ) async throws {
         calls.record("client.start:\(direction.backendDirection)")
         operations.append("start:\(direction.backendDirection)")
         startCount += 1
         receivedDirection = direction
+        receivedContextTerms = Array(asrContextTerms)
         startDirections.append(direction)
+        startContextTerms.append(Array(asrContextTerms))
         if let startProbe { await startProbe() }
         if let startError { throw startError }
     }

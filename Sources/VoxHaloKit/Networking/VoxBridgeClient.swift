@@ -66,8 +66,14 @@ public actor VoxBridgeClient: VoxBridgeClientProtocol {
         }
     }
 
-    public func start(direction: TranslationDirection) async throws {
-        try await sendText(VoxBridgeMessageEncoder.start(direction))
+    public func start(
+        direction: TranslationDirection,
+        asrContextTerms: [String]
+    ) async throws {
+        try await sendText(VoxBridgeMessageEncoder.start(
+            direction,
+            asrContextTerms: Array(asrContextTerms)
+        ))
     }
 
     public func sendAudioFrame(_ data: Data) async throws {

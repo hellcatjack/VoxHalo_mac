@@ -21,6 +21,21 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.referenceBottomOffset, 0)
         XCTAssertEqual(settings.referenceColor, "#F4F4F4")
         XCTAssertEqual(settings.authUsername, "admin")
+        XCTAssertEqual(settings.asrContextTermsText, "")
+    }
+
+    func testRawHotwordInputRoundTripsWithoutChangingFormatting() throws {
+        let directory = try TemporaryDirectory()
+        let store = SettingsStore(baseDirectory: directory.url)
+        let raw = "Elisha,\r\nQwen3-ASR，U.S."
+        var settings = AppSettings.defaults
+        settings.asrContextTermsText = raw
+
+        try store.save(settings)
+
+        XCTAssertEqual(try store.load().asrContextTermsText, raw)
+        let json = try jsonObject(at: store.settingsURL)
+        XCTAssertEqual(json["AsrContextTermsText"] as? String, raw)
     }
 
     func testSaveLoadsSafeFieldsWithoutAnyPasswordProperty() throws {
@@ -61,6 +76,7 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(loaded.direction, .englishToChinese)
         XCTAssertEqual(loaded.authUsername, "operator")
+        XCTAssertEqual(loaded.asrContextTermsText, "")
         XCTAssertFalse(persisted.contains("legacy-secret"))
         XCTAssertFalse(persisted.contains("secondary-secret"))
         XCTAssertEqual((json["FutureSetting"] as? [String: Any])?["Mode"] as? String,

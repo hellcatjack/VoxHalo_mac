@@ -36,9 +36,18 @@ If permission is denied:
 
 Permission approval is associated with the app identity/signature. Rebuilding an ad hoc-signed bundle can cause macOS to ask again. Run final checks against one unchanged build.
 
+## Hotword data
+
+- Hotwords can contain personal names, organization/customer names, or internal terminology and must be treated as potentially identifying data.
+- Raw input is automatically stored as plaintext in `AsrContextTermsText` under `~/Library/Application Support/VoxHalo/settings.json`.
+- The validated list is sent to the operator-selected VoxBridge backend on the initial `start` and on every backend-session reconnect.
+- Diagnostics never receive or write the configured list or backend error-message text. They receive only counts, Unicode character totals, acknowledgement metadata, and error-message length.
+- With transcript diagnostics explicitly enabled, recognized or translated text can naturally contain the same words. That is opted-in subtitle content, not a hotword configuration field.
+- Stop the session before editing or clearing hotwords. Clearing persists an empty string and the next Start explicitly sends an empty array.
+
 ## Diagnostics redaction
 
-Diagnostics are off by default. When opted in, allowed metadata includes endpoint host/port, event type, sequence, lengths, stability fields, nonsecret categories, and aggregate frame/byte counts.
+Diagnostics are off by default. When opted in, allowed metadata includes endpoint host/port, event type, sequence, lengths, stability fields, hotword count/character/activation metadata, nonsecret categories, and aggregate frame/byte counts.
 
 Permanent redactions apply even when transcript logging is separately enabled:
 
@@ -61,4 +70,4 @@ Ad hoc signing is suitable only for this Mac. The bundle is not notarized and is
 
 ## Backend boundary
 
-VoxHalo sends captured audio and receives subtitle events from the configured VoxBridge service. It does not operate or modify that backend and does not run recognition/translation locally. Operators should use only a backend whose data-handling policy they accept.
+VoxHalo sends captured audio and validated hotword context, then receives subtitle events from the configured VoxBridge service. It does not operate or modify that backend, control backend logging/retention, or run recognition/translation locally. Operators should use only a backend whose data-handling policy they accept.

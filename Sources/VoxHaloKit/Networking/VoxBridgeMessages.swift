@@ -1,11 +1,15 @@
 import Foundation
 
 public enum VoxBridgeMessageEncoder {
-    public static func start(_ direction: TranslationDirection) throws -> Data {
+    public static func start(
+        _ direction: TranslationDirection,
+        asrContextTerms: [String]
+    ) throws -> Data {
         try encoder.encode(StartMessage(
             type: "start",
             language: direction.backendLanguage,
-            translationDirection: direction.backendDirection
+            translationDirection: direction.backendDirection,
+            asrContextTerms: asrContextTerms
         ))
     }
 
@@ -31,11 +35,13 @@ private struct StartMessage: Encodable {
     let type: String
     let language: String
     let translationDirection: String
+    let asrContextTerms: [String]
 
     enum CodingKeys: String, CodingKey {
         case type
         case language
         case translationDirection = "translation_direction"
+        case asrContextTerms = "asr_context_terms"
     }
 }
 

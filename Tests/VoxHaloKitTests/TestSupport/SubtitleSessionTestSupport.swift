@@ -66,6 +66,7 @@ struct SubtitleSessionFixture: Sendable {
 
     init(
         direction: TranslationDirection = .chineseToEnglish,
+        asrContextTerms: [String] = [],
         source: AudioSource = .systemAudio,
         credentials: VoxBridgeAuthCredentials? = nil,
         endpointURL: URL = URL(string: "wss://example.test:18024/ws")!,
@@ -117,7 +118,8 @@ struct SubtitleSessionFixture: Sendable {
             endpoint: endpoint,
             direction: direction,
             audioSource: source,
-            credentials: credentials
+            credentials: credentials,
+            asrContextTerms: asrContextTerms
         )
         let store = initialStore ?? SubtitleStateStore(direction: direction)
 

@@ -7,6 +7,7 @@ actor FakeAudioCapture: AudioCapturing {
     private let failureDuringStart: AudioCaptureFailure?
     private var frameHandler: (@Sendable (CapturedAudioFrame) -> Void)?
     private var failureHandler: (@Sendable (AudioCaptureFailure) -> Void)?
+    private var startProbe: (@Sendable () async -> Void)?
     private var historicalFrameHandlers: [
         @Sendable (CapturedAudioFrame) -> Void
     ] = []
@@ -40,6 +41,7 @@ actor FakeAudioCapture: AudioCapturing {
         failureHandler = onFailure
         historicalFrameHandlers.append(onFrame)
         historicalFailureHandlers.append(onFailure)
+        if let startProbe { await startProbe() }
         if let failureDuringStart { onFailure(failureDuringStart) }
         if let startError { throw startError }
     }
@@ -73,5 +75,9 @@ actor FakeAudioCapture: AudioCapturing {
 
     func failFromStart(_ index: Int, failure: AudioCaptureFailure) {
         historicalFailureHandlers[index](failure)
+    }
+
+    func setStartProbe(_ probe: @escaping @Sendable () async -> Void) {
+        startProbe = probe
     }
 }

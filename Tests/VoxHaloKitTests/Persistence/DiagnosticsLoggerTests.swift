@@ -46,6 +46,8 @@ final class DiagnosticsLoggerTests: XCTestCase {
             port: 443,
             direction: .chineseToEnglish,
             username: "operator",
+            hotwordCount: 2,
+            hotwordCharacters: 17,
             deviceID: "uid-1",
             deviceName: "Studio Mic"
         ))
@@ -59,6 +61,8 @@ final class DiagnosticsLoggerTests: XCTestCase {
         XCTAssertEqual(object["username"] as? String, "[REDACTED]")
         XCTAssertEqual(object["device_id"] as? String, "[REDACTED]")
         XCTAssertEqual(object["device_name"] as? String, "[REDACTED]")
+        XCTAssertEqual(object["hotword_count"] as? Int, 2)
+        XCTAssertEqual(object["hotword_chars"] as? Int, 17)
     }
 
     func testTranscriptBodiesDefaultToRedactedWhileMetadataRemains() async throws {
@@ -84,6 +88,10 @@ final class DiagnosticsLoggerTests: XCTestCase {
             sequence: 42,
             textLength: 14,
             translationLength: 12,
+            asrContextActive: true,
+            asrContextTermCount: 2,
+            asrContextCharacters: 17,
+            messageLength: 0,
             stability: stability,
             transcript: "private transcript",
             translation: "private translation"
@@ -97,6 +105,10 @@ final class DiagnosticsLoggerTests: XCTestCase {
         XCTAssertEqual(object["text_length"] as? Int, 14)
         XCTAssertEqual(object["translation_length"] as? Int, 12)
         XCTAssertEqual(object["sequence"] as? Int, 42)
+        XCTAssertEqual(object["asr_context_active"] as? Bool, true)
+        XCTAssertEqual(object["asr_context_term_count"] as? Int, 2)
+        XCTAssertEqual(object["asr_context_chars"] as? Int, 17)
+        XCTAssertEqual(object["message_length"] as? Int, 0)
         XCTAssertEqual(metadata["is_stable"] as? Bool, false)
         XCTAssertEqual(metadata["phase"] as? String, "tentative")
         XCTAssertEqual(metadata["segment_id"] as? Int, 7)
@@ -118,6 +130,10 @@ final class DiagnosticsLoggerTests: XCTestCase {
             sequence: nil,
             textLength: 5,
             translationLength: 7,
+            asrContextActive: nil,
+            asrContextTermCount: nil,
+            asrContextCharacters: nil,
+            messageLength: 0,
             stability: nil,
             transcript: "hello",
             translation: "bonjour"
@@ -148,6 +164,10 @@ final class DiagnosticsLoggerTests: XCTestCase {
             sequence: nil,
             textLength: 1,
             translationLength: 1,
+            asrContextActive: nil,
+            asrContextTermCount: nil,
+            asrContextCharacters: nil,
+            messageLength: 0,
             stability: nil,
             transcript: "password=hunter2 Cookie: cookie-secret",
             translation: "Authorization: Bearer authorization-secret"
@@ -157,6 +177,8 @@ final class DiagnosticsLoggerTests: XCTestCase {
             port: 443,
             direction: .englishToChinese,
             username: nil,
+            hotwordCount: 0,
+            hotwordCharacters: 0,
             deviceID: "",
             deviceName: ""
         ))
@@ -168,6 +190,35 @@ final class DiagnosticsLoggerTests: XCTestCase {
         ] {
             XCTAssertFalse(text.contains(secret), secret)
         }
+    }
+
+    func testBackendErrorIsLoggedOnlyByLengthWithoutHotwordText() async throws {
+        let parent = try TemporaryDirectory()
+        let logger = try DiagnosticsLogger(environment: [
+            "TRANSLATEPCCS_DIAGNOSTICS": "1",
+            "TRANSLATEPCCS_DIAGNOSTIC_TRANSCRIPTS": "1"
+        ], logsDirectory: parent.url)
+        let privateMessage = "Context rejected for private-hotword"
+
+        await logger.record(.backend(
+            type: "error",
+            sequence: nil,
+            textLength: 0,
+            translationLength: 0,
+            asrContextActive: nil,
+            asrContextTermCount: nil,
+            asrContextCharacters: nil,
+            messageLength: privateMessage.utf16.count,
+            stability: nil,
+            transcript: nil,
+            translation: nil
+        ))
+
+        let object = try firstRecord(at: logger.fileURL)
+        let text = try String(contentsOf: logger.fileURL, encoding: .utf8)
+        XCTAssertEqual(object["message_length"] as? Int, privateMessage.utf16.count)
+        XCTAssertFalse(text.contains(privateMessage))
+        XCTAssertFalse(text.contains("private-hotword"))
     }
 
     func testStructuredCounterAndCategoryEventsAppendOneLineEach() async throws {

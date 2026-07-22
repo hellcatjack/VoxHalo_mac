@@ -2,7 +2,7 @@
 
 VoxHalo is a native Apple Silicon application for real-time Chinese ↔ English subtitles. It captures either the Mac's playing system audio or a selected microphone/input device, streams bounded PCM audio to VoxBridge, and renders a transparent click-through subtitle overlay on the chosen display.
 
-This repository is the macOS port of the Windows behavioral reference at `hellcatjack/VoxHalo_win`. The port was checked against Windows commit `2f5627b14b4af5f476fef50f03f4cd269b031c09` and preserves its login, WebSocket, subtitle reconciliation, reconnect, final-wait, settings, and privacy behavior with native macOS replacements.
+This repository is the macOS port of the Windows behavioral reference at `hellcatjack/VoxHalo_win`. The port is current through Windows commit `0867afe48e2196e84512c842aacb6117a1f8799e` and preserves its login, ASR hotword context, WebSocket, subtitle reconciliation, reconnect, final-wait, settings, and privacy behavior with native macOS replacements.
 
 ## Requirements
 
@@ -36,16 +36,17 @@ swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
 VOXHALO_RUN_PACKAGING_TESTS=1 swift test --filter ProjectPackagingTests
 ```
 
-The suite covers the wire protocol, authentication cookies, subtitle state, reconnect/final-wait behavior, Core Audio setup and rollback, PCM conversion/framing, bounded queues, persistence/privacy, multi-display overlay behavior, operator UI, shutdown, and release packaging.
+The suite covers hotword parsing and privacy, the wire protocol, authentication cookies, subtitle state, reconnect/final-wait behavior, Core Audio setup and rollback, PCM conversion/framing, bounded queues, persistence/privacy, multi-display overlay behavior, operator UI, shutdown, and release packaging.
 
 ## First use
 
 1. Launch `dist/VoxHalo.app`.
 2. Keep the default TLS endpoint or enter another absolute `ws://`/`wss://` endpoint.
 3. Enter the login username and password. The password remains in memory only.
-4. Choose a direction, audio source, and display.
-5. Click **Start** and approve the relevant macOS permission when prompted.
-6. Click **Stop** before changing the endpoint, direction, or audio source.
+4. Choose a direction and optionally enter rare names or professional terms in **Hotwords**.
+5. Choose an audio source and display.
+6. Click **Start** and approve the relevant macOS permission when prompted.
+7. Click **Stop** before changing the endpoint, direction, hotwords, or audio source.
 
 The overlay is transparent, always on top, nonactivating, click-through, and visible across Spaces/full-screen applications. Display and layout controls remain live while a session is running.
 
@@ -54,7 +55,7 @@ The overlay is transparent, always on top, nonactivating, click-through, and vis
 - Settings: `~/Library/Application Support/VoxHalo/settings.json`
 - Opt-in diagnostics: `~/Library/Logs/VoxHalo/client.log`
 
-Passwords are not written to settings, diagnostics, the bundle, or Keychain. Diagnostics are disabled by default. See [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), and the [user guide](docs/user-guide.md) for details.
+Passwords are not written to settings, diagnostics, the bundle, or Keychain. Hotword input is automatically stored as plaintext in the private settings file and sent to the selected backend, so inspect it before sharing that file. Hotword arrays and backend error text are never written as diagnostic fields. Diagnostics are disabled by default. See [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), and the [user guide](docs/user-guide.md) for details.
 
 ## Documentation
 

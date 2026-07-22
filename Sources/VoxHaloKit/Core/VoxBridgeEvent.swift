@@ -88,6 +88,9 @@ public struct VoxBridgeEvent: Equatable, Sendable {
     public let timestampMilliseconds: Int64?
     public let sliceCommit: Bool?
     public let isStable: Bool?
+    public let asrContextActive: Bool?
+    public let asrContextTermCount: Int?
+    public let asrContextCharacters: Int?
     public let stability: VoxBridgeStability?
 
     public init(
@@ -112,6 +115,9 @@ public struct VoxBridgeEvent: Equatable, Sendable {
         timestampMilliseconds: Int64? = nil,
         sliceCommit: Bool? = nil,
         isStable: Bool? = nil,
+        asrContextActive: Bool? = nil,
+        asrContextTermCount: Int? = nil,
+        asrContextCharacters: Int? = nil,
         stability: VoxBridgeStability? = nil
     ) {
         self.type = type
@@ -135,6 +141,9 @@ public struct VoxBridgeEvent: Equatable, Sendable {
         self.timestampMilliseconds = timestampMilliseconds
         self.sliceCommit = sliceCommit
         self.isStable = isStable
+        self.asrContextActive = asrContextActive
+        self.asrContextTermCount = asrContextTermCount
+        self.asrContextCharacters = asrContextCharacters
         self.stability = stability
     }
 }
