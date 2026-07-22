@@ -202,7 +202,16 @@ public final class SubtitleOverlayView: NSView {
     ) {
         let viewport = scrollView.contentView.bounds.size
         let width = max(1, viewport.width)
-        let height = max(viewport.height, textView.heightThatFits(width: width))
+        let contentHeight = textView.heightThatFits(width: width)
+        let overflow = max(0, contentHeight - viewport.height)
+        let lineHeight = max(1, textView.layoutLineHeight)
+        let alignedOverflow = overflow > 0
+            ? ceil(overflow / lineHeight) * lineHeight
+            : 0
+        let height = max(
+            viewport.height,
+            viewport.height + alignedOverflow
+        )
         textView.frame = CGRect(x: 0, y: 0, width: width, height: height)
         textView.prepareLayoutCache()
     }
@@ -308,7 +317,7 @@ public final class SubtitleOverlayView: NSView {
             return true
         }
 
-        if newSegments.count == SubtitleText.maximumSegments,
+        if newSegments.count == SubtitleText.maximumPrimarySegments,
            oldSegments.count == newSegments.count,
            Array(oldSegments.dropFirst()) == Array(newSegments.dropLast()) {
             return true

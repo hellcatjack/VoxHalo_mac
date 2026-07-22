@@ -112,6 +112,10 @@ public final class OutlinedTextView: NSView {
         }
     }
 
+    var layoutLineHeight: CGFloat {
+        Self.lineHeight(for: storedFont)
+    }
+
     public override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
@@ -204,13 +208,7 @@ public final class OutlinedTextView: NSView {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = storedAlignment
         paragraph.lineBreakMode = .byWordWrapping
-        let naturalLineHeight = storedFont.ascender
-            - storedFont.descender
-            + max(0, storedFont.leading)
-        let lineHeight = ceil(max(
-            storedFont.pointSize * 1.22,
-            naturalLineHeight * 1.06
-        ))
+        let lineHeight = Self.lineHeight(for: storedFont)
         paragraph.minimumLineHeight = lineHeight
         paragraph.maximumLineHeight = lineHeight
         let strokePercentage = storedOutlineWidth > 0
@@ -266,6 +264,16 @@ public final class OutlinedTextView: NSView {
         cachedPathIdentity = nil
         invalidateIntrinsicContentSize()
         needsDisplay = true
+    }
+
+    private static func lineHeight(for font: NSFont) -> CGFloat {
+        let naturalLineHeight = font.ascender
+            - font.descender
+            + max(0, font.leading)
+        return ceil(max(
+            font.pointSize * 1.22,
+            naturalLineHeight * 1.06
+        ))
     }
 
     private static func components(_ color: NSColor) -> ColorComponents {

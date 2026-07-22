@@ -25,6 +25,22 @@ swift test list
 
 Run focused tests with `swift test --filter TestClassName`.
 
+An opted-in live run can be replayed through the exact production state store
+and AppKit renderer without storing any transcript in the repository. Record the
+first diagnostic line before Start, then run:
+
+```bash
+VOXHALO_LIVE_DIAGNOSTIC_LOG="$HOME/Library/Logs/VoxHalo/client.log" \
+VOXHALO_LIVE_DIAGNOSTIC_FIRST_LINE=<first-line> \
+VOXHALO_LIVE_REPLAY_SNAPSHOT=/tmp/voxhalo-live-replay.png \
+swift test --filter LiveDiagnosticReplayTests
+```
+
+The gated test reconstructs production-shaped subtitle events, verifies that
+rendered history never changes after it leaves the live tail, simulates a reader
+scrolling back, asserts that later events preserve that position, and optionally
+writes a pixel snapshot. It skips in ordinary test runs.
+
 Build and verify the release application:
 
 ```bash
@@ -70,15 +86,15 @@ scripts                          build/run/verification helpers
 - Inject clocks, schedulers, transports, permission providers, catalogs, and Core Audio APIs.
 - Test a failure before implementing its fix.
 - Run focused tests, then the complete strict-concurrency/warnings-as-errors suite.
-- Real microphone, system audio, permissions, backend, display/Space, and shutdown behavior remain manual release gates.
+- Real microphone, permissions, display/Space, and shutdown behavior remain manual release gates. Real system audio and backend behavior can additionally feed the opt-in live diagnostic replay above.
 
 ## Release bundle
 
-`build-app.sh` performs a clean Release arm64 product build, recreates `dist/VoxHalo.app`, installs only the mode-0755 executable and mode-0644 Info.plist, ad hoc signs with Hardened Runtime and the audio-input entitlement, then calls the verifier.
+`build-app.sh` performs a clean Release arm64 product build, recreates `dist/VoxHalo.app`, installs only the mode-0755 executable and mode-0644 Info.plist, ad hoc signs with Hardened Runtime, the audio-input entitlement, and a bundle-identifier designated requirement, then calls the verifier.
 
-The verifier checks plist syntax/identity/minimum OS, exact arm64 architecture, strict signature validity, runtime flag, audio-input entitlement, absent sandbox entitlement, and absence of source, private runtime data, or Windows artifacts.
+The verifier checks plist syntax/identity/minimum OS, exact arm64 architecture, strict signature validity, runtime flag, stable non-CDHash designated requirement, audio-input entitlement, absent sandbox entitlement, and absence of source, private runtime data, or Windows artifacts.
 
-Do not rebuild between permission approval and the final manual checklist. Record the app commit and signature hash, then test the unchanged bundle. Rebuilding changes the local signature and may reset macOS privacy approval.
+Do not rebuild between permission approval and the final manual checklist. Record the app commit and signature hash, then test the unchanged bundle. The explicit designated requirement is stable, but an ad hoc signature is not a Developer ID identity; macOS can still retain legacy CDHash entries for Keychain and privacy authorization. Rebuilding may therefore require another local confirmation.
 
 ## Release scope
 

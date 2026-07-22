@@ -92,6 +92,28 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertFalse(view.referenceRegion.hasHorizontalScroller)
     }
 
+    func testTwoMinuteTargetHistoryDoesNotUseACharacterSlidingWindow() {
+        let view = makeView()
+        let values = (1...48).map {
+            "Stable translated sentence \($0) remains readable."
+        }
+        let model = SubtitleDisplayModel(
+            stablePrimaryLines: Array(values.dropLast()),
+            activePrimaryText: values.last!,
+            referenceText: "latest source",
+            targetLanguage: "English",
+            sourceLanguage: "Chinese",
+            isProcessing: false
+        )
+
+        view.apply(model: model)
+
+        XCTAssertTrue(view.targetTextView.text.hasPrefix(values[0]))
+        XCTAssertTrue(view.targetTextView.text.hasSuffix(values[47]))
+        XCTAssertFalse(view.targetTextView.text.hasPrefix("..."))
+        XCTAssertGreaterThan(view.targetTextView.text.utf16.count, 480)
+    }
+
     func testReferenceOnlyUpdateLeavesTargetGenerationAndFramesetterUntouched() {
         let view = makeView()
         view.apply(model: model(target: "same target", reference: "one"))
@@ -190,6 +212,22 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertGreaterThan(
             view.referenceRegion.contentView.bounds.origin.y,
             0
+        )
+        XCTAssertEqual(
+            view.targetRegion.contentView.bounds.origin.y
+                .truncatingRemainder(
+                    dividingBy: view.targetTextView.layoutLineHeight
+                ),
+            0,
+            accuracy: 0.01
+        )
+        XCTAssertEqual(
+            view.referenceRegion.contentView.bounds.origin.y
+                .truncatingRemainder(
+                    dividingBy: view.referenceTextView.layoutLineHeight
+                ),
+            0,
+            accuracy: 0.01
         )
     }
 

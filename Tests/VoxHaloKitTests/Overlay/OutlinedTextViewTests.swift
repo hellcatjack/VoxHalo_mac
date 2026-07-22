@@ -52,6 +52,7 @@ final class OutlinedTextViewTests: XCTestCase {
             paragraph.minimumLineHeight,
             ceil(naturalHeight * 1.06)
         )
+        XCTAssertEqual(view.layoutLineHeight, paragraph.minimumLineHeight)
     }
 
     func testUnchangedContentFontBoundsAndColorsReuseFramesetterAndPath() throws {

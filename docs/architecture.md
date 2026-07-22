@@ -42,9 +42,11 @@ operator Hotwords text
 
 ### Core
 
-`TranslationDirection`, protocol events, subtitle rows, display models, and `SubtitleStateStore` contain no UI, networking, or audio APIs. The store preserves authoritative translations, partial reference updates, late/out-of-order reconciliation, reset/final fallbacks, continuous target text, and a 24-segment bound.
+`TranslationDirection`, protocol events, subtitle rows, display models, and `SubtitleStateStore` contain no UI, networking, or audio APIs. The store preserves authoritative translations, partial reference updates, late/out-of-order reconciliation, reset/final fallbacks, and continuous target text. The target keeps 96 whole sentence segments while the lower reference remains bounded to 24.
 
-Rendered translations use a client-side stabilization layer without changing the backend protocol. Canonical rows continue to accept every backend revision, while visible history becomes immutable as soon as a newer source sentence arrives. Backend stable metadata and punctuation-complete prefixes freeze rendered text sooner. The unfinished active tail permits one structural correction, never accepts a shorter rollback, and always accepts append-only growth. This bounds reflow while retaining the latest canonical value for reconciliation and diagnostics-safe state handling.
+Rendered translations use a client-side stabilization layer without changing the backend protocol. Canonical rows continue to accept every backend revision, while visible history becomes immutable as soon as a newer source sentence arrives. Backend stable metadata and punctuation-complete prefixes freeze rendered text sooner. The unfinished active tail permits one structural correction, never accepts a shorter rollback, and always accepts append-only growth. Partial aggregate fallback text is append-only after first display. The rendered paragraph is bounded only at whole-sentence boundaries; it no longer deletes one leading character for every character appended after 480 UTF-16 units. Final redecode/reconciliation resets retain the old display while canonical rows rebuild, then replace it atomically on `final`.
+
+`LiveDiagnosticReplayTests` can consume an explicitly opted-in diagnostic slice after a real run. It reconstructs production-shaped events, applies the same state store and AppKit overlay, pins a simulated reader above the newest line, checks every later scroll origin and frozen prefix, and can render a pixel snapshot. No live transcript fixture is committed.
 
 ### Networking
 

@@ -10,6 +10,8 @@ public struct SubtitleStateStore: Sendable {
     private var frozenTranslationPrefixes: [String: String] = [:]
     private var translationRewriteCounts: [String: Int] = [:]
     private var aggregatePrimaryText = ""
+    private var displayedAggregatePrimaryText = ""
+    private var aggregateDisplayBaseText = ""
     private var aggregatePrimaryAllowsLooseTail = false
     private var committedReferenceAggregateRawText = ""
     private var committedReferenceAggregateText = ""
@@ -20,6 +22,7 @@ public struct SubtitleStateStore: Sendable {
     private var primarySegmentsDirty = false
     private var referenceSegmentsDirty = false
     private var isProcessing = false
+    private var reconciliationDisplaySnapshot: SubtitleDisplayModel?
 
     public init(direction: TranslationDirection) {
         self.direction = direction
@@ -28,6 +31,7 @@ public struct SubtitleStateStore: Sendable {
 
     public mutating func reset(direction: TranslationDirection) {
         self.direction = direction
+        reconciliationDisplaySnapshot = nil
         clearSubtitleState()
         current = .empty(for: direction)
     }
@@ -35,6 +39,7 @@ public struct SubtitleStateStore: Sendable {
     @discardableResult
     public mutating func apply(_ event: VoxBridgeEvent) -> SubtitleDisplayModel {
         recordSourceStability(event)
+        let releasesReconciliationSnapshot = event.type == .final
         switch event.type {
         case .sentenceCommitted:
             upsertSource(event)
@@ -46,7 +51,7 @@ public struct SubtitleStateStore: Sendable {
             applyPartialCommittedAggregate(event)
             applyLiveReference(event)
         case .sentenceReset:
-            clearSubtitleState()
+            beginSentenceReset(event)
         case .processing:
             isProcessing = true
         case .final:
@@ -55,8 +60,33 @@ public struct SubtitleStateStore: Sendable {
             break
         }
 
-        current = buildCurrent()
+        let rebuilt = buildCurrent()
+        if releasesReconciliationSnapshot {
+            if rebuilt.primaryText.isEmpty,
+               let snapshot = reconciliationDisplaySnapshot,
+               !snapshot.primaryText.isEmpty {
+                current = snapshot
+            } else {
+                current = rebuilt
+            }
+            reconciliationDisplaySnapshot = nil
+        } else if let snapshot = reconciliationDisplaySnapshot {
+            current = snapshot
+        } else {
+            current = rebuilt
+        }
         return current
+    }
+
+    private mutating func beginSentenceReset(_ event: VoxBridgeEvent) {
+        let reason = event.reason?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let preservesVisibleDisplay = reason == "final_redecode"
+            || reason == "final_commit_reconcile"
+        let snapshot = preservesVisibleDisplay ? current : nil
+        clearSubtitleState()
+        reconciliationDisplaySnapshot = snapshot
     }
 
     private mutating func upsertSource(_ event: VoxBridgeEvent) {
@@ -292,12 +322,31 @@ public struct SubtitleStateStore: Sendable {
 
     private mutating func applyPartialAggregateTranslation(_ value: String?) {
         let aggregate = SubtitleText.normalized(value ?? "")
+        let structuredText = SubtitleText.joined(buildDisplayedPrimarySegments())
         guard !aggregate.isEmpty,
               aggregate != aggregatePrimaryText,
               canUsePartialAggregateTranslation(aggregate) else {
             return
         }
-        applyAggregateTranslation(aggregate, allowLooseTail: false)
+        aggregatePrimaryText = aggregate
+        aggregatePrimaryAllowsLooseTail = false
+
+        if displayedAggregatePrimaryText.isEmpty
+            || aggregateDisplayBaseText != structuredText {
+            aggregateDisplayBaseText = structuredText
+            displayedAggregatePrimaryText = aggregate
+            primarySegmentsDirty = true
+            return
+        }
+
+        // Partial aggregate translations are fallback text. Once shown, they may
+        // grow but never structurally rewrite the reader's visible paragraph.
+        // A later canonical sentence_translation or final event can replace the
+        // fallback exactly once at its authoritative boundary.
+        if aggregate.hasPrefix(displayedAggregatePrimaryText) {
+            displayedAggregatePrimaryText = aggregate
+            primarySegmentsDirty = true
+        }
     }
 
     private func canUsePartialAggregateTranslation(_ aggregate: String) -> Bool {
@@ -312,6 +361,8 @@ public struct SubtitleStateStore: Sendable {
         }
         if aggregate != aggregatePrimaryText || aggregatePrimaryAllowsLooseTail != allowLooseTail {
             aggregatePrimaryText = aggregate
+            displayedAggregatePrimaryText = aggregate
+            aggregateDisplayBaseText = SubtitleText.joined(buildDisplayedPrimarySegments())
             aggregatePrimaryAllowsLooseTail = allowLooseTail
             primarySegmentsDirty = true
         }
@@ -382,6 +433,8 @@ public struct SubtitleStateStore: Sendable {
         frozenTranslationPrefixes.removeAll(keepingCapacity: true)
         translationRewriteCounts.removeAll(keepingCapacity: true)
         aggregatePrimaryText = ""
+        displayedAggregatePrimaryText = ""
+        aggregateDisplayBaseText = ""
         aggregatePrimaryAllowsLooseTail = false
         committedReferenceAggregateRawText = ""
         committedReferenceAggregateText = ""
@@ -426,11 +479,11 @@ public struct SubtitleStateStore: Sendable {
     private func buildPrimarySegments() -> [String] {
         var segments = buildDisplayedPrimarySegments()
         let structuredText = SubtitleText.joined(segments)
-        let aggregate = SubtitleText.normalized(aggregatePrimaryText)
+        let aggregate = SubtitleText.normalized(displayedAggregatePrimaryText)
 
         if segments.isEmpty {
             appendIfNotBlank(aggregate, to: &segments)
-            return Array(segments.suffix(SubtitleText.maximumSegments))
+            return Array(segments.suffix(SubtitleText.maximumPrimarySegments))
         }
 
         if aggregate.count > structuredText.count, aggregate.hasPrefix(structuredText) {
@@ -442,7 +495,7 @@ public struct SubtitleStateStore: Sendable {
             )
         }
 
-        return Array(segments.suffix(SubtitleText.maximumSegments))
+        return Array(segments.suffix(SubtitleText.maximumPrimarySegments))
     }
 
     private func buildDisplayedPrimarySegments() -> [String] {
@@ -472,7 +525,7 @@ public struct SubtitleStateStore: Sendable {
             segments.append(liveReference)
         }
 
-        return Array(segments.suffix(SubtitleText.maximumSegments))
+        return Array(segments.suffix(SubtitleText.maximumReferenceSegments))
     }
 
     private func addCommittedReferenceAggregateTail(

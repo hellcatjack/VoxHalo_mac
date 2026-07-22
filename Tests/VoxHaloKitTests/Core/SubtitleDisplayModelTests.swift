@@ -22,7 +22,7 @@ final class SubtitleDisplayModelTests: XCTestCase {
         XCTAssertTrue(model.isProcessing)
     }
 
-    func testPrimaryTextKeepsNewest480UTF16UnitsWithoutSplittingGraphemes() {
+    func testPrimaryTextKeepsWholeBoundedSegmentsWithoutCharacterSlidingWindow() {
         let old = String(repeating: "旧", count: 300)
         let active = String(repeating: "👨‍👩‍👧‍👦新", count: 80)
         let model = SubtitleDisplayModel(
@@ -34,13 +34,13 @@ final class SubtitleDisplayModelTests: XCTestCase {
             isProcessing: false
         )
 
-        XCTAssertTrue(model.primaryText.hasPrefix("..."))
-        XCTAssertLessThanOrEqual(model.primaryText.utf16.count, 483)
+        XCTAssertEqual(model.primaryText, old + " " + active)
+        XCTAssertFalse(model.primaryText.hasPrefix("..."))
         XCTAssertFalse(model.primaryText.contains("�"))
         XCTAssertTrue(model.primaryText.hasSuffix("新"))
     }
 
-    func testProvidedReferenceSegmentsWinAndBothHistoriesKeepNewest24() {
+    func testPrimaryHistoryKeepsTwoMinuteBufferWhileReferenceKeepsNewest24() {
         let values = (1...30).map { "segment \($0)" }
         let model = SubtitleDisplayModel(
             stablePrimaryLines: Array(values.dropLast()),
@@ -52,7 +52,7 @@ final class SubtitleDisplayModelTests: XCTestCase {
             isProcessing: false
         )
 
-        XCTAssertEqual(model.primarySegments, Array(values.suffix(24)))
+        XCTAssertEqual(model.primarySegments, values)
         XCTAssertEqual(model.referenceSegments, Array(values.suffix(24)))
     }
 

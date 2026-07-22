@@ -48,6 +48,12 @@ codesign --verify --deep --strict "$APP" 2>/dev/null \
 SIGNATURE_DETAILS="$(codesign -dvvv "$APP" 2>&1)"
 [[ "$SIGNATURE_DETAILS" == *"runtime"* ]] \
     || fail "Hardened Runtime flag is missing"
+DESIGNATED_REQUIREMENT="$(codesign -dr - "$APP" 2>&1)"
+[[ "$DESIGNATED_REQUIREMENT" == \
+    *'designated => identifier "com.hellcatjack.voxhalo"'* ]] \
+    || fail "stable designated requirement is missing"
+[[ "$DESIGNATED_REQUIREMENT" != *"cdhash"* ]] \
+    || fail "designated requirement must not change with every rebuild"
 
 TEMPORARY_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/voxhalo-verify.XXXXXX")"
 trap 'rm -rf "$TEMPORARY_DIRECTORY"' EXIT

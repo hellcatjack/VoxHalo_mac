@@ -15,7 +15,7 @@ The app never writes the password to:
 
 The settings JSON persists username only. Loading old JSON removes every case-insensitive `AuthPassword` key before rewriting it. URL sanitation removes userinfo, fragments, and credential-shaped query items. The Keychain item uses `kSecClassGenericPassword` with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`; it is local to this Mac and is not a configuration-file or bundle resource.
 
-Because the local release is ad hoc signed, rebuilding changes its code identity and macOS may request Keychain access again. Normal relaunches of the unchanged final bundle reuse the saved password without re-entry.
+The local release is ad hoc signed with an explicit designated requirement based on the fixed bundle identifier. Normal relaunches of one unchanged bundle reuse an approved Keychain item. A rebuilt ad hoc executable can still receive a new legacy CDHash identity from macOS and require another local confirmation, even though its displayed bundle identifier is unchanged. Eliminating that transition for independently rebuilt releases requires a persistent trusted signing identity such as Developer ID; weakening the Keychain item is not an acceptable workaround.
 
 ## Transport
 
@@ -67,7 +67,7 @@ Application Support and Logs directories are mode `0700`. Settings and diagnosti
 
 ## Signing and distribution boundary
 
-`scripts/build-app.sh` creates a Release arm64 bundle and signs it ad hoc with Hardened Runtime plus `com.apple.security.device.audio-input=true`. `scripts/verify-app.sh` checks metadata, architecture, signature flags, entitlements, and bundle privacy.
+`scripts/build-app.sh` creates a Release arm64 bundle and signs it ad hoc with Hardened Runtime, `com.apple.security.device.audio-input=true`, and the stable designated requirement `identifier "com.hellcatjack.voxhalo"`. `scripts/verify-app.sh` checks metadata, architecture, signature flags, designated requirement, entitlements, and bundle privacy.
 
 Ad hoc signing is suitable only for this Mac. The bundle is not notarized and is not intended for third-party distribution. Developer ID signing, notarization, App Store sandboxing, Intel support, and automatic updates are out of scope.
 

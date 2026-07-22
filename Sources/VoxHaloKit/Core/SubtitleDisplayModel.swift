@@ -21,7 +21,10 @@ public struct SubtitleDisplayModel: Equatable, Sendable {
     ) {
         let stable = stablePrimaryLines.map(SubtitleText.normalized).filter { !$0.isEmpty }
         let active = SubtitleText.normalized(activePrimaryText)
-        let allPrimary = SubtitleText.normalizedSegments(stable + (active.isEmpty ? [] : [active]))
+        let allPrimary = SubtitleText.normalizedSegments(
+            stable + (active.isEmpty ? [] : [active]),
+            limit: SubtitleText.maximumPrimarySegments
+        )
 
         if active.isEmpty {
             self.stablePrimaryLines = allPrimary
@@ -33,12 +36,18 @@ public struct SubtitleDisplayModel: Equatable, Sendable {
 
         self.primarySegments = allPrimary
         self.stablePrimaryText = SubtitleText.joined(self.stablePrimaryLines)
-        self.primaryText = SubtitleText.recentWindow(SubtitleText.joined(allPrimary))
+        self.primaryText = SubtitleText.joined(allPrimary)
         self.referenceText = SubtitleText.normalized(referenceText)
 
-        let suppliedReference = SubtitleText.normalizedSegments(referenceSegments ?? [])
+        let suppliedReference = SubtitleText.normalizedSegments(
+            referenceSegments ?? [],
+            limit: SubtitleText.maximumReferenceSegments
+        )
         self.referenceSegments = suppliedReference.isEmpty
-            ? SubtitleText.normalizedSegments([self.referenceText])
+            ? SubtitleText.normalizedSegments(
+                [self.referenceText],
+                limit: SubtitleText.maximumReferenceSegments
+            )
             : suppliedReference
 
         self.targetLanguage = targetLanguage
@@ -82,18 +91,18 @@ public struct SubtitleDisplayModel: Equatable, Sendable {
         sourceLanguage: String,
         isProcessing: Bool
     ) {
-        let primary = cachedPrimarySegments.count <= SubtitleText.maximumSegments
+        let primary = cachedPrimarySegments.count <= SubtitleText.maximumPrimarySegments
             ? cachedPrimarySegments
-            : Array(cachedPrimarySegments.suffix(SubtitleText.maximumSegments))
+            : Array(cachedPrimarySegments.suffix(SubtitleText.maximumPrimarySegments))
         self.primarySegments = primary
         self.stablePrimaryLines = primary.isEmpty ? [] : Array(primary.dropLast())
         self.activePrimaryText = primary.last ?? ""
         self.stablePrimaryText = SubtitleText.joined(stablePrimaryLines)
-        self.primaryText = SubtitleText.recentWindow(SubtitleText.joined(primary))
+        self.primaryText = SubtitleText.joined(primary)
         self.referenceText = SubtitleText.normalized(referenceText)
-        self.referenceSegments = cachedReferenceSegments.count <= SubtitleText.maximumSegments
+        self.referenceSegments = cachedReferenceSegments.count <= SubtitleText.maximumReferenceSegments
             ? cachedReferenceSegments
-            : Array(cachedReferenceSegments.suffix(SubtitleText.maximumSegments))
+            : Array(cachedReferenceSegments.suffix(SubtitleText.maximumReferenceSegments))
         self.targetLanguage = targetLanguage
         self.sourceLanguage = sourceLanguage
         self.isProcessing = isProcessing

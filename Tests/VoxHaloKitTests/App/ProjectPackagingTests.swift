@@ -25,6 +25,10 @@ final class ProjectPackagingTests: XCTestCase {
         XCTAssertTrue(script.contains("Config/Info.plist"))
         XCTAssertTrue(script.contains("--options runtime"))
         XCTAssertTrue(script.contains("Config/VoxHalo.entitlements"))
+        XCTAssertTrue(script.contains("--requirements"))
+        XCTAssertTrue(script.contains(
+            "designated => identifier \"com.hellcatjack.voxhalo\""
+        ))
         XCTAssertTrue(script.contains("scripts/verify-app.sh"))
     }
 
@@ -61,6 +65,8 @@ final class ProjectPackagingTests: XCTestCase {
             "arm64",
             "Security.framework",
             "codesign --verify --deep --strict",
+            "codesign -dr -",
+            "stable designated requirement",
             "runtime",
             "com.apple.security.device.audio-input",
             "com.apple.security.app-sandbox",

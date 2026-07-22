@@ -102,4 +102,72 @@ final class SubtitleStateStoreAggregateTests: XCTestCase {
         ))
         XCTAssertEqual(store.current.primarySegments, ["hello"])
     }
+
+    func testPartialAggregateTailOnlyGrowsAndNeverStructurallyRewritesOnScreen() {
+        var store = makeTranslatedStore((
+            "s1",
+            "Opening source.",
+            "Opening translation."
+        ))
+        store.apply(.partial(
+            tentative: "Live source one",
+            committed: "Opening source. Live source one.",
+            translation: "Opening translation. First visible aggregate tail",
+            sequence: 3
+        ))
+        store.apply(.partial(
+            tentative: "Live source two",
+            committed: "Opening source. Live source two.",
+            translation: "Opening translation. Completely rewritten aggregate tail",
+            sequence: 4
+        ))
+
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Opening translation. First visible aggregate tail"
+        )
+
+        store.apply(.partial(
+            tentative: "Live source three",
+            committed: "Opening source. Live source three.",
+            translation: "Opening translation. First visible aggregate tail with appended words",
+            sequence: 5
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Opening translation. First visible aggregate tail with appended words"
+        )
+    }
+
+    func testCanonicalTranslationAtomicallyReplacesDifferentAggregateFallback() {
+        var store = makeTranslatedStore((
+            "s1",
+            "Opening source.",
+            "Opening translation."
+        ))
+        store.apply(.partial(
+            tentative: "Second source draft",
+            committed: "Opening source. Second source draft.",
+            translation: "Opening translation. Rough aggregate fallback.",
+            sequence: 3
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Opening translation. Rough aggregate fallback."
+        )
+
+        addTranslatedSentence(
+            &store,
+            id: "s2",
+            source: "Second source final.",
+            translation: "Authoritative canonical translation.",
+            sequence: 4
+        )
+
+        XCTAssertEqual(store.current.primarySegments, [
+            "Opening translation.",
+            "Authoritative canonical translation."
+        ])
+        XCTAssertFalse(store.current.primaryText.contains("Rough aggregate"))
+    }
 }

@@ -33,7 +33,9 @@ install -m 0755 "$BINARY" "$EXECUTABLE"
 install -m 0644 Config/Info.plist "$APP/Contents/Info.plist"
 
 codesign --force --sign - --timestamp=none --options runtime \
-    --entitlements Config/VoxHalo.entitlements "$APP"
+    --entitlements Config/VoxHalo.entitlements \
+    --requirements '=designated => identifier "com.hellcatjack.voxhalo"' \
+    "$APP"
 
 scripts/verify-app.sh "$APP_REL"
 print "Built and verified $APP_REL"
