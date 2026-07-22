@@ -38,11 +38,12 @@ swift test --filter LiveDiagnosticReplayTests
 ```
 
 The gated test reconstructs production-shaped subtitle events, verifies that
+every matched explicit revision refreshes the active translation immediately,
+reports numeric-only backend latency and reflection metrics, verifies that
 rendered history never changes after it leaves the live tail, simulates a reader
 scrolling back, asserts that later events preserve that position, requires at
 least 95% bidirectional word-sequence coverage against a completed backend
-`final`, reports numeric-only coverage metrics, and optionally writes a pixel
-snapshot. It skips in ordinary test runs.
+`final`, and optionally writes a pixel snapshot. It skips in ordinary test runs.
 
 Build and verify the release application:
 

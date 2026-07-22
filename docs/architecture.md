@@ -11,7 +11,7 @@ VoxHalo is a native Swift/AppKit/SwiftUI port of the Windows source through comm
 | WASAPI/NAudio capture | Core Audio process tap and AUHAL input |
 | .NET WebSocket/HTTP | ephemeral `URLSession` HTTP and WebSocket transports |
 | JSON settings under AppData | atomic private JSON under Application Support |
-| Dispatcher throttling | main-actor 150 ms coalescing pump |
+| Dispatcher throttling | main-actor 80 ms coalescing pump |
 
 The executable depends only on `VoxHaloKit` and the small C++ real-time ring target. There are no third-party packages.
 
@@ -28,7 +28,7 @@ selected system/hardware source
   → authenticated WebSocket
   → typed VoxBridge events
   → SubtitleStateStore
-  → 150 ms main-actor update pump
+  → 80 ms main-actor update pump
   → click-through AppKit overlay
 
 operator Hotwords text
@@ -44,9 +44,9 @@ operator Hotwords text
 
 `TranslationDirection`, protocol events, subtitle rows, display models, and `SubtitleStateStore` contain no UI, networking, or audio APIs. The store preserves authoritative translations, partial reference updates, late/out-of-order reconciliation, reset/final fallbacks, and continuous target text. The target keeps 96 whole sentence segments while the lower reference remains bounded to 24.
 
-Rendered translations use a client-side stabilization layer without changing the backend protocol. Canonical rows continue to accept every backend revision, while visible history becomes immutable as soon as a newer source sentence arrives. Backend stable metadata and punctuation-complete prefixes freeze rendered text sooner. The unfinished active tail permits one structural correction only after an explicit `sentence_updated`, never accepts an ordinary shorter rollback, and always accepts append-only growth. When the next source sentence arrives—or the session reaches `final`—the active row's latest translation is promoted once at that boundary and then becomes immutable. This prevents the rough first translation from permanently hiding words added by the backend's canonical source revision without allowing older sentences to churn. Partial aggregate fallback text is append-only after first display. The rendered paragraph is bounded only at whole-sentence boundaries; it no longer deletes one leading character for every character appended after 480 UTF-16 units. Final redecode/reconciliation resets retain the old display while canonical rows rebuild, then replace it atomically on `final`.
+Rendered translations use a client-side stabilization layer without changing the backend protocol. Canonical rows continue to accept every backend revision, while visible history becomes immutable as soon as a newer source sentence arrives. Backend stable metadata and punctuation-complete prefixes freeze rendered text sooner. While a sentence is still the active tail, every explicit `sentence_updated` authorizes its matching translation to refresh immediately, including shorter or structurally different corrections; sequence-aware pending revisions prevent an older response from hiding a newer one. Ordinary translation-only rewrites and shorter rollbacks remain blocked, while append-only growth remains visible. When the next source sentence arrives—or the session reaches `final`—the latest active translation is finalized and becomes immutable. This keeps the current sentence live without allowing older sentences or a reader's scroll anchor to churn. Partial aggregate fallback text is append-only after first display. The rendered paragraph is bounded only at whole-sentence boundaries; it no longer deletes one leading character for every character appended after 480 UTF-16 units. Final redecode/reconciliation resets retain the old display while canonical rows rebuild, then replace it atomically on `final`.
 
-`LiveDiagnosticReplayTests` can consume an explicitly opted-in diagnostic slice after a real run. It reconstructs production-shaped events, applies the same state store and AppKit overlay, pins a simulated reader above the newest line, checks every later scroll origin and frozen prefix, and can render a pixel snapshot. For a completed slice it also compares the rendered target against the authoritative final with a longest-common-subsequence metric and requires at least 95% coverage in both directions. No live transcript fixture is committed.
+`LiveDiagnosticReplayTests` can consume an explicitly opted-in diagnostic slice after a real run. It reconstructs production-shaped events, applies the same state store and AppKit overlay, requires every matched active source revision to appear in the returned display model immediately, reports backend revision-to-translation latency, pins a simulated reader above the newest line, checks every later scroll origin and frozen prefix, and can render a pixel snapshot. For a completed slice it also compares the rendered target against the authoritative final with a longest-common-subsequence metric and requires at least 95% coverage in both directions. No live transcript fixture is committed.
 
 ### Networking
 
