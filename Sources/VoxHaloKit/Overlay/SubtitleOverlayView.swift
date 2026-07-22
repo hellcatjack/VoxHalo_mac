@@ -4,6 +4,7 @@ import AppKit
 public final class SubtitleOverlayView: NSView {
     private static let edgeInset: CGFloat = 64
     private static let regionGap: CGFloat = 14
+    private static let bottomFollowTolerance: CGFloat = 2
 
     public let targetRegion: NSScrollView
     public let referenceRegion: NSScrollView
@@ -16,6 +17,8 @@ public final class SubtitleOverlayView: NSView {
     private(set) var referenceScrollScheduleCount = 0
     private(set) var isTargetScrollPending = false
     private(set) var isReferenceScrollPending = false
+    private var targetScrollFollowsBottom = false
+    private var lastPrimarySegments: [String] = []
 
     public override init(frame frameRect: NSRect) {
         targetTextView = OutlinedTextView(frame: .zero)
@@ -64,9 +67,17 @@ public final class SubtitleOverlayView: NSView {
         let target = model.primaryText
         let reference = SubtitleText.joined(model.referenceSegments)
         if targetTextView.text != target {
+            let timelineAdvanced = Self.targetTimelineAdvanced(
+                oldText: targetTextView.text,
+                newText: target,
+                oldSegments: lastPrimarySegments,
+                newSegments: model.primarySegments
+            )
+            let followsBottom = timelineAdvanced && shouldFollowTargetBottom()
             targetTextView.text = target
-            queueTargetScroll()
+            queueTargetScroll(followsBottom: followsBottom)
         }
+        lastPrimarySegments = model.primarySegments
         if referenceTextView.text != reference {
             referenceTextView.text = reference
             queueReferenceScroll()
@@ -196,7 +207,8 @@ public final class SubtitleOverlayView: NSView {
         textView.prepareLayoutCache()
     }
 
-    private func queueTargetScroll() {
+    private func queueTargetScroll(followsBottom: Bool = true) {
+        targetScrollFollowsBottom = targetScrollFollowsBottom || followsBottom
         guard !isTargetScrollPending else { return }
         isTargetScrollPending = true
         targetScrollScheduleCount += 1
@@ -217,8 +229,15 @@ public final class SubtitleOverlayView: NSView {
     private func performTargetScroll() {
         guard isTargetScrollPending else { return }
         isTargetScrollPending = false
+        let followsBottom = targetScrollFollowsBottom
+        targetScrollFollowsBottom = false
+        let previousOrigin = targetRegion.contentView.bounds.origin
         layoutDocument(targetTextView, in: targetRegion)
-        scrollToBottom(targetRegion)
+        if followsBottom {
+            scrollToBottom(targetRegion)
+        } else {
+            restoreScrollPosition(previousOrigin, in: targetRegion)
+        }
     }
 
     private func performReferenceScroll() {
@@ -236,6 +255,66 @@ public final class SubtitleOverlayView: NSView {
         )
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func restoreScrollPosition(
+        _ origin: NSPoint,
+        in scrollView: NSScrollView
+    ) {
+        guard let documentView = scrollView.documentView else { return }
+        let maximumY = max(
+            0,
+            documentView.frame.height - scrollView.contentView.bounds.height
+        )
+        scrollView.contentView.scroll(to: NSPoint(
+            x: 0,
+            y: min(max(0, origin.y), maximumY)
+        ))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func shouldFollowTargetBottom() -> Bool {
+        if targetTextView.text.isEmpty { return true }
+        if isTargetScrollPending, targetScrollFollowsBottom { return true }
+        guard let documentView = targetRegion.documentView else { return true }
+        let maximumY = max(
+            0,
+            documentView.frame.height - targetRegion.contentView.bounds.height
+        )
+        return maximumY - targetRegion.contentView.bounds.origin.y
+            <= Self.bottomFollowTolerance
+    }
+
+    private static func targetTimelineAdvanced(
+        oldText: String,
+        newText: String,
+        oldSegments: [String],
+        newSegments: [String]
+    ) -> Bool {
+        if oldText.isEmpty { return true }
+        if newText.hasPrefix(oldText) { return true }
+
+        if newSegments.count > oldSegments.count,
+           Array(newSegments.prefix(oldSegments.count)) == oldSegments {
+            return true
+        }
+
+        if newSegments.count == oldSegments.count,
+           !oldSegments.isEmpty,
+           Array(newSegments.dropLast()) == Array(oldSegments.dropLast()),
+           let oldTail = oldSegments.last,
+           let newTail = newSegments.last,
+           newTail.hasPrefix(oldTail) {
+            return true
+        }
+
+        if newSegments.count == SubtitleText.maximumSegments,
+           oldSegments.count == newSegments.count,
+           Array(oldSegments.dropFirst()) == Array(newSegments.dropLast()) {
+            return true
+        }
+
+        return false
     }
 }
 

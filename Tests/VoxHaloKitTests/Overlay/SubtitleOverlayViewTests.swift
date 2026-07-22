@@ -193,6 +193,105 @@ final class SubtitleOverlayViewTests: XCTestCase {
         )
     }
 
+    func testTargetRewritePreservesReadingPositionInsteadOfJumpingToBottom() {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 420, height: 420)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 120,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#FFFFFF",
+            referenceAreaHeight: 80,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#F4F4F4"
+        ), display: display(width: 420, height: 420))
+        let original = String(repeating: "original translation words ", count: 40)
+        view.apply(model: model(target: original, reference: "source"))
+        view.layoutSubtreeIfNeeded()
+        view.flushPendingScrolls()
+        view.targetRegion.contentView.scroll(to: .zero)
+
+        let correction = String(repeating: "corrected translation words ", count: 40)
+        view.apply(model: model(target: correction, reference: "source"))
+        view.flushPendingScrolls()
+
+        XCTAssertEqual(view.targetRegion.contentView.bounds.origin.y, 0)
+        XCTAssertEqual(
+            view.targetTextView.text,
+            model(target: correction, reference: "source").primaryText
+        )
+    }
+
+    func testAppendOnlyTargetGrowthFollowsNewestEdgeWhenAlreadyAtBottom() {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 420, height: 420)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 120,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#FFFFFF",
+            referenceAreaHeight: 80,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#F4F4F4"
+        ), display: display(width: 420, height: 420))
+        let original = String(repeating: "stable translation words ", count: 30)
+        view.apply(model: model(target: original, reference: "source"))
+        view.layoutSubtreeIfNeeded()
+        view.flushPendingScrolls()
+        let originalBottom = view.targetRegion.contentView.bounds.origin.y
+        XCTAssertGreaterThan(originalBottom, 0)
+
+        view.apply(model: model(
+            target: original + String(repeating: "new tail words ", count: 20),
+            reference: "source"
+        ))
+        view.flushPendingScrolls()
+
+        let expectedBottom = max(
+            0,
+            view.targetTextView.frame.height
+                - view.targetRegion.contentView.bounds.height
+        )
+        XCTAssertEqual(
+            view.targetRegion.contentView.bounds.origin.y,
+            expectedBottom,
+            accuracy: 0.01
+        )
+    }
+
+    func testAppendOnlyTargetGrowthPreservesPositionWhenReaderScrolledUp() {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 420, height: 420)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 120,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#FFFFFF",
+            referenceAreaHeight: 80,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#F4F4F4"
+        ), display: display(width: 420, height: 420))
+        let original = String(repeating: "stable translation words ", count: 30)
+        view.apply(model: model(target: original, reference: "source"))
+        view.layoutSubtreeIfNeeded()
+        view.flushPendingScrolls()
+        view.targetRegion.contentView.scroll(to: .zero)
+
+        view.apply(model: model(
+            target: original + String(repeating: "new tail words ", count: 20),
+            reference: "source"
+        ))
+        view.flushPendingScrolls()
+
+        XCTAssertEqual(view.targetRegion.contentView.bounds.origin.y, 0)
+    }
+
     func testBilingualOverlayRendersForVisualRegression() throws {
         let view = SubtitleOverlayView(
             frame: NSRect(x: 0, y: 0, width: 1_440, height: 900)

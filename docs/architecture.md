@@ -42,7 +42,9 @@ operator Hotwords text
 
 ### Core
 
-`TranslationDirection`, protocol events, subtitle rows, display models, and `SubtitleStateStore` contain no UI, networking, or audio APIs. The store preserves authoritative translations, partial reference updates, late/out-of-order reconciliation, corrected-source holdback, reset/final fallbacks, continuous target text, and a 24-segment bound.
+`TranslationDirection`, protocol events, subtitle rows, display models, and `SubtitleStateStore` contain no UI, networking, or audio APIs. The store preserves authoritative translations, partial reference updates, late/out-of-order reconciliation, reset/final fallbacks, continuous target text, and a 24-segment bound.
+
+Rendered translations use a client-side stabilization layer without changing the backend protocol. Canonical rows continue to accept every backend revision, while visible history becomes immutable as soon as a newer source sentence arrives. Backend stable metadata and punctuation-complete prefixes freeze rendered text sooner. The unfinished active tail permits one structural correction, never accepts a shorter rollback, and always accepts append-only growth. This bounds reflow while retaining the latest canonical value for reconciliation and diagnostics-safe state handling.
 
 ### Networking
 
@@ -76,7 +78,7 @@ Stop is shared and idempotent. It stops capture, drains/cancels audio work, send
 
 `OperatorView` uses a compact two-column SwiftUI hierarchy with no scroll container. `OperatorWindowLayout` selects a 1020 × 540-point preferred size, enforces a 900 × 500-point minimum, and caps the initial window to the active display's visible frame so every setting and action remains visible together.
 
-The overlay is a borderless nonactivating transparent `NSPanel` at `.screenSaver` level. It ignores mouse events and uses `.canJoinAllSpaces`, `.fullScreenAuxiliary`, `.stationary`, and `.ignoresCycle`. Bilingual text uses PingFang SC Semibold/Medium with natural font-metric line heights and separate outline-then-fill Core Text passes, keeping Chinese and Latin glyphs solid on complex video. Persistent display selection uses a CG display UUID, so array order and transient display IDs are irrelevant.
+The overlay is a borderless nonactivating transparent `NSPanel` at `.screenSaver` level. It ignores mouse events and uses `.canJoinAllSpaces`, `.fullScreenAuxiliary`, `.stationary`, and `.ignoresCycle`. Bilingual text uses PingFang SC Semibold/Medium with natural font-metric line heights and separate outline-then-fill Core Text passes, keeping Chinese and Latin glyphs solid on complex video. Target-text relayout distinguishes timeline growth from a correction: corrections restore the prior clip-view position, while genuine appends follow the bottom only when the view was already following the newest content. Persistent display selection uses a CG display UUID, so array order and transient display IDs are irrelevant.
 
 ### Persistence and diagnostics
 

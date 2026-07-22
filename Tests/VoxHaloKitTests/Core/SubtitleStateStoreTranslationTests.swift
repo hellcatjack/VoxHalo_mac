@@ -139,7 +139,7 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
                        ["First translation", "Second translation"])
     }
 
-    func testHistoricalSentenceUpdateAuthorizesReplacementTranslation() {
+    func testHistoricalSentenceUpdateNeverRewritesDisplayedTranslation() {
         var store = makeTranslatedStore(
             ("s1", "Elijah said stay here.", "Elijah said stay here."),
             ("s2", "They went on.", "They went on.")
@@ -155,13 +155,15 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
             sequence: 6
         ))
 
+        XCTAssertEqual(store.rows[0].translation,
+                       "Elijah said, please stay here, for the Lord has sent me to the Jordan.")
         XCTAssertEqual(store.current.primarySegments, [
-            "Elijah said, please stay here, for the Lord has sent me to the Jordan.",
+            "Elijah said stay here.",
             "They went on."
         ])
     }
 
-    func testStableChineseTranslationIsDisplayedWithoutLocalHoldback() {
+    func testStableSourceFreezesFirstDisplayedTranslation() {
         var store = SubtitleStateStore(direction: .chineseToEnglish)
         store.apply(.committed(
             "s1",
@@ -190,8 +192,119 @@ final class SubtitleStateStoreTranslationTests: XCTestCase {
             "He then said, \"Brothers and sisters, I mean the time is short.\"",
             sequence: 4
         ))
-        XCTAssertEqual(store.current.primaryText,
+        XCTAssertEqual(store.rows[0].translation,
                        "He then said, \"Brothers and sisters, I mean the time is short.\"")
+        XCTAssertEqual(store.current.primaryText,
+                       "He then said, \"Brothers and sisters, I.\"")
+    }
+
+    func testCompletedSentencePrefixFreezesWhileCurrentTailCanCorrect() {
+        var store = makeTranslatedStore((
+            "s1",
+            "Long source",
+            "The first sentence is complete. Mutable tail version one"
+        ))
+
+        store.apply(.translated(
+            "s1",
+            "The first sentence is complete. Mutable tail version two",
+            sequence: 3
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The first sentence is complete. Mutable tail version two"
+        )
+
+        store.apply(.translated(
+            "s1",
+            "The first sentence is complete. Mutable tail version three",
+            sequence: 4
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The first sentence is complete. Mutable tail version two"
+        )
+
+        store.apply(.translated(
+            "s1",
+            "A rewritten first sentence. Mutable tail version three",
+            sequence: 5
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "The first sentence is complete. Mutable tail version two"
+        )
+    }
+
+    func testStableMetadataFreezesUnpunctuatedTranslation() {
+        var store = SubtitleStateStore(direction: .englishToChinese)
+        store.apply(.committed(
+            "s1",
+            "Stable source without punctuation",
+            sequence: 1,
+            isStable: true
+        ))
+        store.apply(.translated("s1", "Initial stable wording", sequence: 2))
+        store.apply(.updated("s1", "Corrected stable source", sequence: 3))
+        store.apply(.translated("s1", "Corrected stable wording", sequence: 4))
+
+        XCTAssertEqual(store.rows[0].translation, "Corrected stable wording")
+        XCTAssertEqual(store.current.primaryText, "Initial stable wording")
+    }
+
+    func testUnpunctuatedActiveTranslationAllowsOnlyOneStructuralRewrite() {
+        var store = makeTranslatedStore(("s1", "Source", "Initial draft wording"))
+
+        store.apply(.translated("s1", "Improved draft wording", sequence: 3))
+        store.apply(.translated("s1", "Another entirely different draft", sequence: 4))
+
+        XCTAssertEqual(store.rows[0].translation, "Another entirely different draft")
+        XCTAssertEqual(store.current.primaryText, "Improved draft wording")
+    }
+
+    func testAppendOnlyGrowthRemainsVisibleAfterRewriteBudgetIsUsed() {
+        var store = makeTranslatedStore(("s1", "Source", "Initial draft"))
+        store.apply(.translated("s1", "Improved draft", sequence: 3))
+        store.apply(.translated("s1", "Improved draft with a stable extension.", sequence: 4))
+
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Improved draft with a stable extension."
+        )
+
+        store.apply(.translated(
+            "s1",
+            "Improved draft with a stable extension. New live tail",
+            sequence: 5
+        ))
+        XCTAssertEqual(
+            store.current.primaryText,
+            "Improved draft with a stable extension. New live tail"
+        )
+    }
+
+    func testShorterActiveTranslationNeverMovesDisplayBackward() {
+        var store = makeTranslatedStore((
+            "s1",
+            "Source",
+            "A complete sentence. A readable live tail"
+        ))
+
+        store.apply(.translated("s1", "A complete sentence.", sequence: 3))
+
+        XCTAssertEqual(
+            store.current.primaryText,
+            "A complete sentence. A readable live tail"
+        )
+    }
+
+    func testNewSourceSentenceFreezesPreviousTranslationBeforeNextTranslationArrives() {
+        var store = makeTranslatedStore(("s1", "First source", "First translation"))
+        store.apply(.committed("s2", "Second source", sequence: 3))
+        store.apply(.updated("s1", "Corrected first source", sequence: 4))
+        store.apply(.translated("s1", "Corrected first translation", sequence: 5))
+
+        XCTAssertEqual(store.current.primarySegments, ["First translation"])
     }
 
     func testChineseSentenceEndingWithObjectPronounIsDisplayed() {

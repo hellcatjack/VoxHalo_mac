@@ -6,7 +6,9 @@ public struct SubtitleStateStore: Sendable {
     public private(set) var current: SubtitleDisplayModel
 
     private var displayedTranslations: [String: String] = [:]
-    private var translationRefreshSentenceIDs: Set<String> = []
+    private var stableSourceSentenceIDs: Set<String> = []
+    private var frozenTranslationPrefixes: [String: String] = [:]
+    private var translationRewriteCounts: [String: Int] = [:]
     private var aggregatePrimaryText = ""
     private var aggregatePrimaryAllowsLooseTail = false
     private var committedReferenceAggregateRawText = ""
@@ -32,11 +34,12 @@ public struct SubtitleStateStore: Sendable {
 
     @discardableResult
     public mutating func apply(_ event: VoxBridgeEvent) -> SubtitleDisplayModel {
+        recordSourceStability(event)
         switch event.type {
         case .sentenceCommitted:
-            upsertSource(event, marksTranslationRefresh: false)
+            upsertSource(event)
         case .sentenceUpdated:
-            upsertSource(event, marksTranslationRefresh: true)
+            upsertSource(event)
         case .sentenceTranslation:
             applyTranslation(event)
         case .partial:
@@ -56,10 +59,7 @@ public struct SubtitleStateStore: Sendable {
         return current
     }
 
-    private mutating func upsertSource(
-        _ event: VoxBridgeEvent,
-        marksTranslationRefresh: Bool
-    ) {
+    private mutating func upsertSource(_ event: VoxBridgeEvent) {
         guard let sentenceID = nonBlank(event.sentenceID),
               let source = nonBlank(event.text) else {
             return
@@ -85,10 +85,27 @@ public struct SubtitleStateStore: Sendable {
             updateReferenceText(sentenceID: sentenceID, text: row.sourceText)
         }
 
-        if marksTranslationRefresh {
-            translationRefreshSentenceIDs.insert(sentenceID)
-        }
         referenceSegmentsDirty = true
+    }
+
+    private mutating func recordSourceStability(_ event: VoxBridgeEvent) {
+        let phase = event.stability?.phase?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard event.isStable == true
+            || event.stability?.isStable == true
+            || phase == "solidified" else {
+            return
+        }
+        guard let sentenceID = nonBlank(
+            event.sentenceID ?? event.stability?.sentenceID
+        ) else {
+            return
+        }
+        stableSourceSentenceIDs.insert(sentenceID)
+        if let displayed = displayedTranslations[sentenceID] {
+            frozenTranslationPrefixes[sentenceID] = displayed
+        }
     }
 
     private mutating func updateReferenceText(sentenceID: String?, text: String) {
@@ -134,14 +151,106 @@ public struct SubtitleStateStore: Sendable {
             timestampMilliseconds: event.timestampMilliseconds ?? oldRow.timestampMilliseconds
         )
 
-        let lastDisplayedID = lastDisplayedSentenceID()
-        let pendingRefresh = translationRefreshSentenceIDs.remove(sentenceID) != nil
-        if displayedTranslations[sentenceID] == nil ||
-            sentenceID == lastDisplayedID ||
-            pendingRefresh {
-            displayedTranslations[sentenceID] = translation
-            primarySegmentsDirty = true
+        updateDisplayedTranslation(
+            translation,
+            sentenceID: sentenceID
+        )
+    }
+
+    private mutating func updateDisplayedTranslation(
+        _ value: String,
+        sentenceID: String
+    ) {
+        let translation = SubtitleText.normalized(value)
+        guard !translation.isEmpty else { return }
+
+        guard let displayed = displayedTranslations[sentenceID] else {
+            acceptDisplayedTranslation(translation, sentenceID: sentenceID)
+            return
         }
+        guard translation != displayed else { return }
+
+        // Once a newer source sentence exists, every earlier rendered sentence
+        // becomes immutable. Canonical rows still receive backend corrections,
+        // but the reader's visible history and scroll anchor do not move.
+        guard rows.last?.sentenceID == sentenceID else { return }
+
+        // Growth that preserves every already-rendered character is always safe.
+        if translation.hasPrefix(displayed) {
+            acceptDisplayedTranslation(translation, sentenceID: sentenceID)
+            return
+        }
+
+        // Never move the live translation backwards. A shorter revision causes
+        // the most disruptive reflow and usually represents an intermediate ASR
+        // rollback rather than useful new information.
+        guard translation.count >= displayed.count else { return }
+
+        if let frozenPrefix = frozenTranslationPrefixes[sentenceID],
+           !frozenPrefix.isEmpty {
+            guard translation.hasPrefix(frozenPrefix) else { return }
+            guard !stableSourceSentenceIDs.contains(sentenceID) else { return }
+            let rewriteCount = translationRewriteCounts[sentenceID, default: 0]
+            guard rewriteCount == 0 else { return }
+            translationRewriteCounts[sentenceID] = rewriteCount + 1
+            acceptDisplayedTranslation(translation, sentenceID: sentenceID)
+            return
+        }
+
+        guard !stableSourceSentenceIDs.contains(sentenceID) else { return }
+
+        // For an unpunctuated live tail, permit one structural correction. This
+        // avoids locking the very first rough draft while bounding visual churn.
+        let rewriteCount = translationRewriteCounts[sentenceID, default: 0]
+        guard rewriteCount == 0 else { return }
+        translationRewriteCounts[sentenceID] = rewriteCount + 1
+        acceptDisplayedTranslation(translation, sentenceID: sentenceID)
+    }
+
+    private mutating func acceptDisplayedTranslation(
+        _ translation: String,
+        sentenceID: String
+    ) {
+        displayedTranslations[sentenceID] = translation
+        if stableSourceSentenceIDs.contains(sentenceID) {
+            frozenTranslationPrefixes[sentenceID] = translation
+            translationRewriteCounts[sentenceID] = 0
+        } else {
+            let completedPrefix = completedTranslationPrefix(translation)
+            let oldPrefix = frozenTranslationPrefixes[sentenceID] ?? ""
+            if completedPrefix.count > oldPrefix.count,
+               completedPrefix.hasPrefix(oldPrefix) {
+                frozenTranslationPrefixes[sentenceID] = completedPrefix
+                translationRewriteCounts[sentenceID] = 0
+            }
+        }
+        primarySegmentsDirty = true
+    }
+
+    private func completedTranslationPrefix(_ translation: String) -> String {
+        let terminators: Set<Character> = [".", "!", "?", "。", "！", "？", "…", ";", "；"]
+        let closingCharacters: Set<Character> = [
+            "\"", "'", "”", "’", ")", "]", "}", "）", "】", "》", "」", "』"
+        ]
+        var completedEnd: String.Index?
+
+        var index = translation.startIndex
+        while index < translation.endIndex {
+            let character = translation[index]
+            let next = translation.index(after: index)
+            if terminators.contains(character) {
+                var end = next
+                while end < translation.endIndex,
+                      closingCharacters.contains(translation[end]) {
+                    end = translation.index(after: end)
+                }
+                completedEnd = end
+            }
+            index = next
+        }
+
+        guard let completedEnd else { return "" }
+        return SubtitleText.normalized(String(translation[..<completedEnd]))
     }
 
     private mutating func applyFinal(_ event: VoxBridgeEvent) {
@@ -269,7 +378,9 @@ public struct SubtitleStateStore: Sendable {
     private mutating func clearSubtitleState() {
         rows.removeAll(keepingCapacity: true)
         displayedTranslations.removeAll(keepingCapacity: true)
-        translationRefreshSentenceIDs.removeAll(keepingCapacity: true)
+        stableSourceSentenceIDs.removeAll(keepingCapacity: true)
+        frozenTranslationPrefixes.removeAll(keepingCapacity: true)
+        translationRewriteCounts.removeAll(keepingCapacity: true)
         aggregatePrimaryText = ""
         aggregatePrimaryAllowsLooseTail = false
         committedReferenceAggregateRawText = ""
@@ -400,10 +511,6 @@ public struct SubtitleStateStore: Sendable {
             return ""
         }
         return String(aggregate[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func lastDisplayedSentenceID() -> String? {
-        rows.reversed().first { displayedTranslations[$0.sentenceID] != nil }?.sentenceID
     }
 
     private func firstNonBlank(_ values: [String?]) -> String? {

@@ -35,7 +35,9 @@ Because this release is locally signed, rebuilding may cause permission approval
 
 ## Overlay and layout
 
-The upper region displays translated target text as a continuous outlined stream. The lower region displays recent recognized source/reference text. Both regions auto-scroll to the newest bounded content.
+The upper region displays translated target text as a continuous outlined stream. The lower region displays recent recognized source/reference text. New target content follows the newest edge while the view is already following it; a backend correction preserves the current vertical reading position instead of forcing a jump.
+
+VoxHalo stabilizes translated text locally. Once a newer source sentence appears, earlier rendered translations no longer change even if the backend later revises its canonical result. A punctuation-complete prefix is frozen sooner; only the unfinished tail may receive one structural correction. Append-only growth remains visible, and shorter intermediate rollbacks are ignored. This affects display behavior only and requires no backend change.
 
 You can change these while running:
 
