@@ -48,6 +48,17 @@ active-tail correction. It requires at least 95% bidirectional word-sequence
 coverage against a completed backend `final` and can write separate pixel
 snapshots for the reader and follower views. It skips in ordinary test runs.
 
+Render and pixel-check white, yellow, and cyan subtitles against video panels
+of the exact same colors:
+
+```bash
+VOXHALO_CONTRAST_SNAPSHOT=/tmp/voxhalo-contrast.png \
+swift test --filter SubtitleOverlayViewTests.testSameColorBackgroundsRetainDarkSubtitleEdges
+```
+
+The test requires dark separating edge pixels in every panel and optionally
+writes the complete bilingual comparison board for visual inspection.
+
 Build and verify the release application:
 
 ```bash

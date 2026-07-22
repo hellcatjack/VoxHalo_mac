@@ -8,17 +8,17 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-22 10:05 EDT (-0400) |
+| Date/time and timezone | 2026-07-22 10:38 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `63b2b64b2c0a8bf335cba0d4a1ecfd336930b4a0` (the committed source tree used by the recorded executable) |
+| App Git commit | `f087b24b4934b43d3e30214cb41b1aabc2cbfc9c` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `a6e8727cf50ace3fa630373f6006ac5f92b4ca94fc1418b7433fc131eb3dc815` |
-| Code-signature CDHash | `52e8d84f577610c75f827544360590acf96ac3b9`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `1a6209a16acd30d102718d1bb1476b84f9b2a73dda0e583e34ea6cb6fa1b30d3` |
+| Code-signature CDHash | `72efae199a59e0f5a6795a0cecf9cdfed00cea02`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
 | Tested audio device UID (outside logs only) | System Audio synthetic source; no external hardware UID recorded |
 | Tester | Codex + local operator |
@@ -27,8 +27,8 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 
 ## A. Automated and bundle gate
 
-1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 327 tests, two intentionally environment-gated tests skipped, zero failures.
-2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 327 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs and the current incident slice.
+1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 330 tests, two intentionally environment-gated tests skipped, zero failures.
+2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 330 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs and the current incident slice.
 3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
 4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
 5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the new arm64 process on the unlocked GUI session. Access to the previously saved password was gated by the expected one-time macOS login-Keychain authorization for the new ad-hoc CDHash; the prompt was cancelled without changing access policy, the process was terminated, and zero VoxHalo or SecurityAgent windows remained afterward.
@@ -66,7 +66,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 ## E. Overlay, displays, Spaces, and interaction
 
 27. `[x] Pass  [ ] Fail  [ ] N/A` Empty overlay appears at launch before a session. Evidence: a full-display layer-1000 VoxHalo panel appeared on both clean launches.
-28. `[ ] Pass  [ ] Fail  [ ] N/A` Overlay is transparent, target above reference, outlined/readable over both bright and dark content.
+28. `[x] Pass  [ ] Fail  [ ] N/A` Overlay is transparent, target above reference, outlined/readable over both bright and dark content. Evidence: an actual AppKit comparison board rendered white-on-white, yellow-on-yellow, and cyan-on-cyan bilingual subtitles. Every panel passed the dark-edge pixel threshold and was visually inspected; the current real-session follower snapshot was also inspected on black. The font-scaled adaptive outline and soft halo remain local to glyphs, so no opaque video-covering band was introduced.
 29. `[ ] Pass  [ ] Fail  [ ] N/A` Overlay is click-through and never steals keyboard focus from the underlying app.
 30. `[ ] Pass  [ ] Fail  [x] N/A` Main and secondary display selection moves the visible overlay immediately and persists by UUID. Notes: only the built-in display is attached; UUID/move/persistence is covered automatically.
 31. `[ ] Pass  [ ] Fail  [x] N/A` Negative-coordinate display placement fills the intended screen in points. Notes: no secondary display is attached; negative-coordinate geometry is covered automatically.
