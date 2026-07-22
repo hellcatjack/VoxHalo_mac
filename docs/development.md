@@ -94,7 +94,7 @@ Sources/VoxHaloKit/App           live dependency environment
 Sources/VoxHaloApp               SwiftUI entry point and AppKit delegate
 Sources/VoxHaloRealtimeAudio     native real-time ring boundary
 Tests/VoxHaloKitTests            deterministic unit/native integration tests
-Config                           bundle property list and entitlements
+Config                           bundle metadata, entitlements, PCCS icon source
 scripts                          build/run/verification helpers
 ```
 
@@ -109,9 +109,11 @@ scripts                          build/run/verification helpers
 
 ## Release bundle
 
-`build-app.sh` performs a clean Release arm64 product build, recreates `dist/VoxHalo.app`, installs only the mode-0755 executable and mode-0644 Info.plist, ad hoc signs with Hardened Runtime, the audio-input entitlement, and a bundle-identifier designated requirement, then calls the verifier.
+`build-app.sh` performs a clean Release arm64 product build, recreates `dist/VoxHalo.app`, installs the mode-0755 executable and mode-0644 Info.plist, generates every 16–1024-pixel macOS icon representation from the vendored square PCCS source, compiles `VoxHalo.icns`, ad hoc signs with Hardened Runtime, the audio-input entitlement, and a bundle-identifier designated requirement, then calls the verifier.
 
-The verifier checks plist syntax/identity/minimum OS, exact arm64 architecture, strict signature validity, runtime flag, stable non-CDHash designated requirement, audio-input entitlement, absent sandbox entitlement, and absence of source, private runtime data, or Windows artifacts.
+The verifier checks plist syntax/identity/minimum OS/icon name, the valid ICNS 1024-pixel representation, exact arm64 architecture, strict signature validity, runtime flag, stable non-CDHash designated requirement, audio-input entitlement, absent sandbox entitlement, and absence of source, private runtime data, or Windows artifacts.
+
+`Config/PCCSAppIconSource.png` is the exact 512 × 512 square brand image published by the official PCC South site at `https://pcc-south.org/assets/wechat-share-logo.png` (SHA-256 `952e3bf721b3746565b2d01b4a47a0788dfb3a5076fae1663f63285d017fc34d`). The asset is vendored, so ordinary builds do not contact the site. `sips` performs deterministic size generation and `iconutil` produces the signed bundle resource.
 
 Do not rebuild between permission approval and the final manual checklist. Record the app commit and signature hash, then test the unchanged bundle. The explicit designated requirement is stable, but an ad hoc signature is not a Developer ID identity; macOS can still retain legacy CDHash entries for Keychain and privacy authorization. Rebuilding may therefore require another local confirmation.
 

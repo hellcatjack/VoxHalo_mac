@@ -8,17 +8,18 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-22 11:39 EDT (-0400) |
+| Date/time and timezone | 2026-07-22 12:06 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `85894f85ac6921d485acdd0793b3f2cea0766411` (the committed source tree used by the recorded executable) |
+| App Git commit | `8fd804e2ef14e72a5937c7af49b9a0d4a81d03f8` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `b50030e49bde69fbd76d0d794a97de2df833c6fd15e7f3db55da5a4f9c53f674` |
-| Code-signature CDHash | `eb5bed0dac144e34d824e2307ba0b900e1984a5d`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `5a1eef34cade58a3db235046cf38d099e0e3080af46960d12bde2a54ee06d3f3` |
+| App icon | Official PCCS square source SHA-256 `952e3bf721b3746565b2d01b4a47a0788dfb3a5076fae1663f63285d017fc34d`; bundled ICNS SHA-256 `f5d655b541ac71ea9b10df11506a1f81f9e83a05a474f999fbe23a6cf2b7f377` |
+| Code-signature CDHash | `e577e29c7efa6a0166ebe8dfb1ddf151c7ce98e2`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
 | Tested audio device UID (outside logs only) | System Audio synthetic source; no external hardware UID recorded |
 | Tester | Codex + local operator |
@@ -27,11 +28,11 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 
 ## A. Automated and bundle gate
 
-1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 333 tests, two intentionally environment-gated tests skipped, zero failures.
-2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 333 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs and the current incident slice.
-3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
-4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
-5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the new arm64 process on the unlocked GUI session. Access to the previously saved password was gated by the expected one-time macOS login-Keychain authorization for the new ad-hoc CDHash; the prompt was cancelled without changing access policy, the process was terminated, and zero VoxHalo or SecurityAgent windows remained afterward.
+1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 335 tests, two intentionally environment-gated tests skipped, zero failures.
+2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 335 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs and the current incident slice.
+3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 11/11 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
+4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist/icon metadata, valid ICNS with a 1024-pixel representation, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
+5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the new arm64 process on the unlocked GUI session; `NSWorkspace` loaded and rendered the bundled PCCS mark with the macOS system icon mask. Access to the previously saved password was gated by the expected one-time macOS login-Keychain authorization for the new ad-hoc CDHash; automation cancelled it without changing access policy, terminated the process, and left zero VoxHalo or SecurityAgent processes afterward.
 
 ## B. Permission grant, denial, and recovery
 
@@ -57,7 +58,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 19. `[ ] Pass  [ ] Fail  [ ] N/A` Authenticated English → Chinese session reaches Running and displays Chinese target plus English reference. Notes: Pending.
 20. `[ ] Pass  [ ] Fail  [ ] N/A` Wrong authentication is rejected without exposing username/password/cookie/body, then correct credentials recover. Notes: Pending.
 21. `[x] Pass  [ ] Fail  [ ] N/A` Partial reference updates do not rewrite already stable target translation. Evidence: every explicit source revision may refresh only the active tail; every earlier segment and the simulated reader's scroll origin remained unchanged across both real ten-minute replays and the current incident replay.
-22. `[x] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Evidence: the two ten-minute slices contained 67/62 commits, 67/60 updates, 133/120 sentence translations, and one final each. Of 123 matched translations that were still active, all 123 appeared immediately in the production display model. The current live incident slice contained 16 commits, 27 updates, 43 translations, and one final; all 27/27 matched active translations appeared immediately, and the rendered/final longest-common subsequence was 373/373 words. During its exact replay, every event containing both history and an active tail retained distinct history/latest fill colors. Sequence-aware overlap tests prove a late older response cannot hide the newest revision. Final rendered coverage was 98.2%, 100%, and 100% respectively.
+22. `[x] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Evidence: the two ten-minute slices contained 67/62 commits, 67/60 updates, 133/120 sentence translations, and one final each. Of 123 matched translations that were still active, all 123 appeared immediately in the production display model. The current live incident slice contained 16 commits, 27 updates, 43 translations, and one final; all 27/27 matched active translations appeared immediately, and the rendered/final longest-common subsequence was 373/373 words. During its exact replay, every event containing both history and an active tail retained a latest/history relative-luminance gap greater than 0.40. Sequence-aware overlap tests prove a late older response cannot hide the newest revision. Final rendered coverage was 98.2%, 100%, and 100% respectively.
 23. `[ ] Pass  [ ] Fail  [ ] N/A` Backend/socket interruption preserves stable text; next fresh frame performs one reconnect and resumes. Notes: Pending.
 24. `[x] Pass  [ ] Fail  [ ] N/A` Eight-minute callback-gap recovery behavior is exercised or explicitly covered by the deterministic clock test. Notes: deterministic session-clock recovery tests passed at the exact 480-second boundary.
 25. `[x] Pass  [ ] Fail  [ ] N/A` Normal Stop sends finish, receives final, and returns Stopped. Evidence: both ten-minute sessions received one final and disconnected without a failure; round one returned through Stop and round two exercised the shared quit/Stop teardown after the automation window closed.
@@ -66,7 +67,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 ## E. Overlay, displays, Spaces, and interaction
 
 27. `[x] Pass  [ ] Fail  [ ] N/A` Empty overlay appears at launch before a session. Evidence: a full-display layer-1000 VoxHalo panel appeared on both clean launches.
-28. `[x] Pass  [ ] Fail  [ ] N/A` Overlay is transparent, target above reference, outlined/readable over both bright and dark content. Evidence: an actual AppKit comparison board rendered white-on-white, yellow-on-yellow, and cyan-on-cyan bilingual subtitles, with a quieter historical sentence followed by a brighter newest sentence. Every panel passed the dark-edge pixel threshold and was visually inspected; the current real-session follower snapshot was also inspected on black. The font-scaled adaptive outline and soft halo remain local to glyphs, so no opaque video-covering band was introduced.
+28. `[x] Pass  [ ] Fail  [ ] N/A` Overlay is transparent, target above reference, outlined/readable over both bright and dark content. Evidence: an actual AppKit comparison board rendered white-on-white, yellow-on-yellow, and cyan-on-cyan bilingual subtitles, with `#C2C2C2` default history followed by `#FFFFFF` newest text. Every panel passed the dark-edge pixel threshold and was visually inspected; all six target palette choices passed a greater-than-0.28 luminance-gap assertion, and the current real-session follower snapshot was inspected on black. The font-scaled adaptive outline and soft halo remain local to glyphs, so no opaque video-covering band was introduced.
 29. `[ ] Pass  [ ] Fail  [ ] N/A` Overlay is click-through and never steals keyboard focus from the underlying app.
 30. `[ ] Pass  [ ] Fail  [x] N/A` Main and secondary display selection moves the visible overlay immediately and persists by UUID. Notes: only the built-in display is attached; UUID/move/persistence is covered automatically.
 31. `[ ] Pass  [ ] Fail  [x] N/A` Negative-coordinate display placement fills the intended screen in points. Notes: no secondary display is attached; negative-coordinate geometry is covered automatically.

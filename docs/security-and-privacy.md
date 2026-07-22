@@ -63,11 +63,11 @@ Recognition and translation bodies are redacted by default and appear only under
 
 ## Local files
 
-Application Support and Logs directories are mode `0700`. Settings and diagnostics files are mode `0600`. Settings writes are atomic. The release bundle contains only the executable, Info.plist, empty Resources directory, and code-signature material; it does not package settings, logs, source, tests, Windows files, or runtime credentials.
+Application Support and Logs directories are mode `0700`. Settings and diagnostics files are mode `0600`. Settings writes are atomic. The release bundle contains only the executable, Info.plist, the public PCCS `VoxHalo.icns` brand resource, and code-signature material; it does not package settings, logs, source, tests, Windows files, or runtime credentials. The icon source is vendored, so release builds make no network request.
 
 ## Signing and distribution boundary
 
-`scripts/build-app.sh` creates a Release arm64 bundle and signs it ad hoc with Hardened Runtime, `com.apple.security.device.audio-input=true`, and the stable designated requirement `identifier "com.hellcatjack.voxhalo"`. `scripts/verify-app.sh` checks metadata, architecture, signature flags, designated requirement, entitlements, and bundle privacy.
+`scripts/build-app.sh` creates a Release arm64 bundle and signs it ad hoc with Hardened Runtime, `com.apple.security.device.audio-input=true`, and the stable designated requirement `identifier "com.hellcatjack.voxhalo"`. `scripts/verify-app.sh` checks metadata, the declared ICNS resource, architecture, signature flags, designated requirement, entitlements, and bundle privacy.
 
 Ad hoc signing is suitable only for this Mac. The bundle is not notarized and is not intended for third-party distribution. Developer ID signing, notarization, App Store sandboxing, Intel support, and automatic updates are out of scope.
 
