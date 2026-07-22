@@ -8,17 +8,17 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-21 22:04 EDT (-0400) |
+| Date/time and timezone | 2026-07-21 22:08 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `8859ef0ae1907acc65b9a6a1ae9dec883e5f0b7b` (the committed source tree used by the recorded executable) |
+| App Git commit | `4e784c97f8563fe7f2486cbd313e83a4bd120e75` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `65d4f0f695b58e0600b34f1b7fd9aa24c9823219f469ba572e3e4c4cdbf5a32f` |
-| Code-signature CDHash | `930ff8f29090c0280ba06c36bedd5dcab2bf11d4`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `7118e351c805ff0a79abc9f4a73cbbab7afd96ee0fae1148d62d2bb82a0353f1` |
+| Code-signature CDHash | `416d7007d943acede91e4b8ddd028017e972543d`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
 | Tested audio device UID (outside logs only) | N/A pending live session; no external input is attached |
 | Tester | Codex + local operator |
