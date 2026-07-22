@@ -34,6 +34,7 @@ VOXHALO_LIVE_DIAGNOSTIC_LOG="$HOME/Library/Logs/VoxHalo/client.log" \
 VOXHALO_LIVE_DIAGNOSTIC_FIRST_LINE=<first-line> \
 VOXHALO_LIVE_DIAGNOSTIC_LAST_LINE=<last-line> \
 VOXHALO_LIVE_REPLAY_SNAPSHOT=/tmp/voxhalo-live-replay.png \
+VOXHALO_LIVE_FOLLOWER_SNAPSHOT=/tmp/voxhalo-live-follower.png \
 swift test --filter LiveDiagnosticReplayTests
 ```
 
@@ -41,9 +42,11 @@ The gated test reconstructs production-shaped subtitle events, verifies that
 every matched explicit revision refreshes the active translation immediately,
 reports numeric-only backend latency and reflection metrics, verifies that
 rendered history never changes after it leaves the live tail, simulates a reader
-scrolling back, asserts that later events preserve that position, requires at
-least 95% bidirectional word-sequence coverage against a completed backend
-`final`, and optionally writes a pixel snapshot. It skips in ordinary test runs.
+scrolling back, asserts that later events preserve that position, and drives a
+second view that must remain exactly at the newest edge through every append and
+active-tail correction. It requires at least 95% bidirectional word-sequence
+coverage against a completed backend `final` and can write separate pixel
+snapshots for the reader and follower views. It skips in ordinary test runs.
 
 Build and verify the release application:
 

@@ -35,7 +35,7 @@ Because this release is locally signed, rebuilding may cause permission approval
 
 ## Overlay and layout
 
-The upper region displays translated target text as a continuous outlined stream. The lower region displays recent recognized source/reference text. New target content follows the newest edge while the view is already following it; a backend correction preserves the current vertical reading position instead of forcing a jump.
+The upper region displays translated target text as a continuous outlined stream. The lower region displays recent recognized source/reference text. If the view is already following the newest edge, both new content and a correction to the active sentence remain visible at that edge. If you deliberately scroll up to reread earlier text, both kinds of update preserve that reading position instead of forcing a jump.
 
 VoxHalo stabilizes translated text locally. Once a newer source sentence appears, earlier rendered translations no longer change even if the backend later revises its canonical result. A punctuation-complete prefix is frozen sooner. While the current sentence is unfinished, each explicit backend source revision may refresh that active translation immediately; overlapping revisions are ordered so an older response cannot hide the newest translation. When the next sentence arrives or the session finishes, the latest translation for that active sentence is frozen. Partial aggregate fallback text can grow but cannot rewrite what is already visible. Append-only growth remains visible, and ordinary shorter intermediate rollbacks are ignored. Subtitle snapshots are coalesced within an 80 ms client budget so bursts remain responsive without appearing stuck.
 

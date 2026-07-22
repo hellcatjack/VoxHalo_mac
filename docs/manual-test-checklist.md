@@ -8,17 +8,17 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-22 02:47 EDT (-0400) |
+| Date/time and timezone | 2026-07-22 10:05 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `1ccce47e413edad079811c59692af3784470cac3` (the committed source tree used by the recorded executable) |
+| App Git commit | `63b2b64b2c0a8bf335cba0d4a1ecfd336930b4a0` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `998166f548b4036de30e94fa34d68a6d2fddf1adbea44e4251390b1d37906afb` |
-| Code-signature CDHash | `1a8735806516cce08aa8aa800ce8f6717f53958b`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `a6e8727cf50ace3fa630373f6006ac5f92b4ca94fc1418b7433fc131eb3dc815` |
+| Code-signature CDHash | `52e8d84f577610c75f827544360590acf96ac3b9`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
 | Tested audio device UID (outside logs only) | System Audio synthetic source; no external hardware UID recorded |
 | Tester | Codex + local operator |
@@ -27,11 +27,11 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 
 ## A. Automated and bundle gate
 
-1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 326 tests, two intentionally environment-gated tests skipped, zero failures.
-2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 326 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs.
+1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 327 tests, two intentionally environment-gated tests skipped, zero failures.
+2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 327 tests, zero failures/warnings; the live diagnostic gate was also exercised separately for both ten-minute runs and the current incident slice.
 3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
 4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
-5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the new arm64 process on the unlocked GUI session. Its main window remained gated by the expected one-time Keychain authorization for the new ad-hoc CDHash; the smoke process was terminated without changing access policy, and a Core Graphics check confirmed zero on-screen VoxHalo or SecurityAgent windows afterward.
+5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the new arm64 process on the unlocked GUI session. Access to the previously saved password was gated by the expected one-time macOS login-Keychain authorization for the new ad-hoc CDHash; the prompt was cancelled without changing access policy, the process was terminated, and zero VoxHalo or SecurityAgent windows remained afterward.
 
 ## B. Permission grant, denial, and recovery
 
@@ -56,8 +56,8 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 18. `[x] Pass  [ ] Fail  [ ] N/A` Authenticated Chinese → English session reaches Running and displays English target plus Chinese reference. Evidence: the previously approved unchanged signed bundle completed both ten-minute real backend/system-audio runs; the new committed production store and renderer replayed both complete event slices into visually inspected bilingual pixel snapshots.
 19. `[ ] Pass  [ ] Fail  [ ] N/A` Authenticated English → Chinese session reaches Running and displays Chinese target plus English reference. Notes: Pending.
 20. `[ ] Pass  [ ] Fail  [ ] N/A` Wrong authentication is rejected without exposing username/password/cookie/body, then correct credentials recover. Notes: Pending.
-21. `[x] Pass  [ ] Fail  [ ] N/A` Partial reference updates do not rewrite already stable target translation. Evidence: every explicit source revision may refresh only the active tail; every earlier segment and the simulated reader's scroll origin remained unchanged across both real ten-minute replays.
-22. `[x] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Evidence: the two slices contained 67/62 commits, 67/60 updates, 133/120 sentence translations, and one final each. Of 123 matched translations that were still active, all 123 appeared immediately in the production display model. Sequence-aware overlap tests prove a late older response cannot hide the newest revision. Final rendered coverage remained 98.2% in round one and 100% in round two.
+21. `[x] Pass  [ ] Fail  [ ] N/A` Partial reference updates do not rewrite already stable target translation. Evidence: every explicit source revision may refresh only the active tail; every earlier segment and the simulated reader's scroll origin remained unchanged across both real ten-minute replays and the current incident replay.
+22. `[x] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Evidence: the two ten-minute slices contained 67/62 commits, 67/60 updates, 133/120 sentence translations, and one final each. Of 123 matched translations that were still active, all 123 appeared immediately in the production display model. The current live incident slice contained 16 commits, 27 updates, 43 translations, and one final; all 27/27 matched active translations appeared immediately, and the rendered/final longest-common subsequence was 373/373 words. Sequence-aware overlap tests prove a late older response cannot hide the newest revision. Final rendered coverage was 98.2%, 100%, and 100% respectively.
 23. `[ ] Pass  [ ] Fail  [ ] N/A` Backend/socket interruption preserves stable text; next fresh frame performs one reconnect and resumes. Notes: Pending.
 24. `[x] Pass  [ ] Fail  [ ] N/A` Eight-minute callback-gap recovery behavior is exercised or explicitly covered by the deterministic clock test. Notes: deterministic session-clock recovery tests passed at the exact 480-second boundary.
 25. `[x] Pass  [ ] Fail  [ ] N/A` Normal Stop sends finish, receives final, and returns Stopped. Evidence: both ten-minute sessions received one final and disconnected without a failure; round one returned through Stop and round two exercised the shared quit/Stop teardown after the automation window closed.
@@ -75,7 +75,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 34. `[ ] Pass  [ ] Fail  [ ] N/A` Overlay remains visible across Spaces and as an auxiliary panel above a full-screen app.
 35. `[ ] Pass  [ ] Fail  [ ] N/A` Target height/font/top offset/color update live while Running.
 36. `[ ] Pass  [ ] Fail  [ ] N/A` Reference height/font/bottom offset/color update live while Running.
-37. `[x] Pass  [ ] Fail  [ ] N/A` Burst subtitle updates coalesce without freezing scrolling or the operator window. Evidence: 3,607 live partial events across both runs remained responsive; the client apply budget is now 80 ms, and coalescing, continuous active-tail revision, sequence-overlap, rendered-generation, frozen-prefix, pinned-reader, and pixel-render tests all passed.
+37. `[x] Pass  [ ] Fail  [ ] N/A` Burst subtitle updates coalesce without freezing scrolling or the operator window. Evidence: live sampling during the reported freeze showed the capture, WebSocket receive loop, state store, and translation events continuing. The renderer had preserved the old absolute scroll origin during a structural correction: in the regression, it remained at 3,186 points after the new bottom moved to 7,182 points, making every later translation appear frozen. The view now captures follow intent before relayout, keeps a follower at the newest edge for both corrections and appends, and still preserves a deliberately scrolled-up reader. The exact 1,043-line incident slice passed this invariant after every event, while both pixel snapshots showed the intended position. The client apply budget remains 80 ms.
 
 ## F. Persistence, diagnostics, teardown, and relaunch
 
@@ -111,4 +111,4 @@ Use synthetic/nonidentifying terms for this section and remove them afterward.
 - `[ ] Accepted with N/A hardware rows documented`
 - `[ ] Rejected; blocking rows listed below`
 
-Blocking rows / notes: Two exact YouTube 18:00–28:00 Chinese → English runs pass audio continuity, backend finalization, 100% immediate reflection for all 123 matched active revisions, frozen-history/scroll stability, and 98.2%/100% rendered-final coverage under the new state logic. The rebuilt local-only bundle still needs one macOS Keychain authorization because its ad-hoc CDHash changed; repeat live Start and unchanged-bundle relaunch remain pending after that one-time approval. Unrelated hardware-input, second-direction, multi-display/Spaces, permission-denial, and destructive timeout rows remain pending or N/A as marked.
+Blocking rows / notes: Two exact YouTube 18:00–28:00 Chinese → English runs pass audio continuity, backend finalization, 100% immediate reflection for all 123 matched active revisions, frozen-history/scroll stability, and 98.2%/100% rendered-final coverage. The exact current freeze incident additionally passes 27/27 immediate active-translation reflection, 373/373 rendered-final words, bottom-follow after every event, and preserved scrolled-reader position under the repaired renderer. The rebuilt local-only bundle still needs one macOS login-Keychain authorization because its ad-hoc CDHash changed; repeat live Start and unchanged-bundle relaunch remain pending after that one-time system approval. Unrelated hardware-input, second-direction, multi-display/Spaces, permission-denial, and destructive timeout rows remain pending or N/A as marked.
