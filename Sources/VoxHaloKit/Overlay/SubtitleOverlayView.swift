@@ -18,7 +18,6 @@ public final class SubtitleOverlayView: NSView {
     private(set) var isTargetScrollPending = false
     private(set) var isReferenceScrollPending = false
     private var targetScrollFollowsBottom = false
-    private var lastPrimarySegments: [String] = []
 
     public override init(frame frameRect: NSRect) {
         targetTextView = OutlinedTextView(frame: .zero)
@@ -28,6 +27,10 @@ public final class SubtitleOverlayView: NSView {
         super.init(frame: frameRect)
 
         wantsLayer = false
+        targetTextView.setAccessibilityIdentifier("overlay.translation")
+        targetTextView.setAccessibilityLabel("Translation subtitles")
+        referenceTextView.setAccessibilityIdentifier("overlay.recognition")
+        referenceTextView.setAccessibilityLabel("Recognition subtitles")
         addSubview(targetRegion)
         addSubview(referenceRegion)
         applyTextStyle()
@@ -67,17 +70,16 @@ public final class SubtitleOverlayView: NSView {
         let target = model.primaryText
         let reference = SubtitleText.joined(model.referenceSegments)
         if targetTextView.text != target {
-            let timelineAdvanced = Self.targetTimelineAdvanced(
-                oldText: targetTextView.text,
-                newText: target,
-                oldSegments: lastPrimarySegments,
-                newSegments: model.primarySegments
-            )
-            let followsBottom = timelineAdvanced && shouldFollowTargetBottom()
+            // Capture the reader's intent before changing the text or its
+            // document height. A structural correction must keep following
+            // the newest edge when the reader was already there; otherwise a
+            // single extra wrapped line permanently strands the viewport above
+            // every later translation. A reader who actually scrolled up still
+            // keeps the same position across both corrections and appends.
+            let followsBottom = shouldFollowTargetBottom()
             targetTextView.text = target
             queueTargetScroll(followsBottom: followsBottom)
         }
-        lastPrimarySegments = model.primarySegments
         if referenceTextView.text != reference {
             referenceTextView.text = reference
             queueReferenceScroll()
@@ -294,37 +296,6 @@ public final class SubtitleOverlayView: NSView {
             <= Self.bottomFollowTolerance
     }
 
-    private static func targetTimelineAdvanced(
-        oldText: String,
-        newText: String,
-        oldSegments: [String],
-        newSegments: [String]
-    ) -> Bool {
-        if oldText.isEmpty { return true }
-        if newText.hasPrefix(oldText) { return true }
-
-        if newSegments.count > oldSegments.count,
-           Array(newSegments.prefix(oldSegments.count)) == oldSegments {
-            return true
-        }
-
-        if newSegments.count == oldSegments.count,
-           !oldSegments.isEmpty,
-           Array(newSegments.dropLast()) == Array(oldSegments.dropLast()),
-           let oldTail = oldSegments.last,
-           let newTail = newSegments.last,
-           newTail.hasPrefix(oldTail) {
-            return true
-        }
-
-        if newSegments.count == SubtitleText.maximumPrimarySegments,
-           oldSegments.count == newSegments.count,
-           Array(oldSegments.dropFirst()) == Array(newSegments.dropLast()) {
-            return true
-        }
-
-        return false
-    }
 }
 
 private extension NSColor {

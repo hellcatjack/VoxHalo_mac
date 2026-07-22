@@ -52,8 +52,10 @@ final class LiveDiagnosticReplayTests: XCTestCase {
 
         var store = SubtitleStateStore(direction: .chineseToEnglish)
         let view = makeReplayView()
+        let followingView = makeReplayView()
         var readerPinned = false
         var verifiedFrozenPrefixes = 0
+        var verifiedFollowingPositions = 0
         var pendingExplicitRevisions: [Int: LivePendingRevision] = [:]
         var pendingUnsequencedRevisions: [LivePendingRevision] = []
         var explicitSourceRevisions = 0
@@ -137,6 +139,22 @@ final class LiveDiagnosticReplayTests: XCTestCase {
             view.layoutSubtreeIfNeeded()
             view.flushPendingScrolls()
 
+            followingView.apply(model: model)
+            followingView.layoutSubtreeIfNeeded()
+            followingView.flushPendingScrolls()
+            let followingMaximumY = max(
+                0,
+                followingView.targetTextView.frame.height
+                    - followingView.targetRegion.contentView.bounds.height
+            )
+            XCTAssertEqual(
+                followingView.targetRegion.contentView.bounds.origin.y,
+                followingMaximumY,
+                accuracy: 0.01,
+                "an active-tail correction stranded the live viewport above the newest text"
+            )
+            verifiedFollowingPositions += 1
+
             if readerPinned {
                 XCTAssertEqual(
                     view.targetRegion.contentView.bounds.origin.y,
@@ -162,6 +180,7 @@ final class LiveDiagnosticReplayTests: XCTestCase {
 
         XCTAssertTrue(readerPinned)
         XCTAssertGreaterThan(verifiedFrozenPrefixes, 50)
+        XCTAssertGreaterThan(verifiedFollowingPositions, 100)
         XCTAssertGreaterThan(store.current.primarySegments.count, 10)
         XCTAssertGreaterThan(store.current.primaryText.utf16.count, 480)
         XCTAssertEqual(view.targetTextView.text, store.current.primaryText)
@@ -250,6 +269,21 @@ final class LiveDiagnosticReplayTests: XCTestCase {
                 view.bitmapImageRepForCachingDisplay(in: view.bounds)
             )
             view.cacheDisplay(in: view.bounds, to: bitmap)
+            let png = try XCTUnwrap(bitmap.representation(
+                using: .png,
+                properties: [:]
+            ))
+            try png.write(to: URL(fileURLWithPath: outputPath))
+        }
+
+        if let outputPath = environment["VOXHALO_LIVE_FOLLOWER_SNAPSHOT"],
+           !outputPath.isEmpty {
+            let bitmap = try XCTUnwrap(
+                followingView.bitmapImageRepForCachingDisplay(
+                    in: followingView.bounds
+                )
+            )
+            followingView.cacheDisplay(in: followingView.bounds, to: bitmap)
             let png = try XCTUnwrap(bitmap.representation(
                 using: .png,
                 properties: [:]

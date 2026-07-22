@@ -44,6 +44,9 @@ public final class OutlinedTextView: NSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = false
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityValue("")
     }
 
     @available(*, unavailable)
@@ -61,6 +64,7 @@ public final class OutlinedTextView: NSView {
             let normalized = SubtitleText.normalized(newValue)
             guard normalized != storedText else { return }
             storedText = normalized
+            setAccessibilityValue(normalized)
             contentGeneration &+= 1
             invalidateTextLayout()
         }

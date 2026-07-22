@@ -22,6 +22,12 @@ final class OutlinedTextViewTests: XCTestCase {
         XCTAssertNil(view.hitTest(NSPoint(x: 10, y: 10)))
         XCTAssertFalse(view.wantsLayer)
         XCTAssertNil(view.layer)
+        XCTAssertTrue(view.isAccessibilityElement())
+        XCTAssertEqual(view.accessibilityRole(), .staticText)
+        XCTAssertEqual(
+            view.accessibilityValue() as? String,
+            "In the beginning was the Word."
+        )
 
         let fill = try XCTUnwrap(view.cachedAttributedText)
         let fillAttributes = fill.attributes(at: 0, effectiveRange: nil)

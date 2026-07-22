@@ -86,6 +86,14 @@ final class SubtitleOverlayViewTests: XCTestCase {
 
         XCTAssertEqual(view.targetTextView.text, "first second third")
         XCTAssertEqual(view.referenceTextView.text, "source one source two")
+        XCTAssertEqual(
+            view.targetTextView.accessibilityIdentifier(),
+            "overlay.translation"
+        )
+        XCTAssertEqual(
+            view.referenceTextView.accessibilityIdentifier(),
+            "overlay.recognition"
+        )
         XCTAssertFalse(view.targetRegion.drawsBackground)
         XCTAssertFalse(view.referenceRegion.drawsBackground)
         XCTAssertFalse(view.targetRegion.hasVerticalScroller)
@@ -259,6 +267,47 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertEqual(
             view.targetTextView.text,
             model(target: correction, reference: "source").primaryText
+        )
+    }
+
+    func testTargetRewriteKeepsFollowingNewestEdgeWhenReaderWasAtBottom() {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 420, height: 420)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 120,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#FFFFFF",
+            referenceAreaHeight: 80,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#F4F4F4"
+        ), display: display(width: 420, height: 420))
+        let original = String(repeating: "original translation words ", count: 30)
+        view.apply(model: model(target: original, reference: "source"))
+        view.layoutSubtreeIfNeeded()
+        view.flushPendingScrolls()
+        let originalBottom = view.targetRegion.contentView.bounds.origin.y
+        XCTAssertGreaterThan(originalBottom, 0)
+
+        let correction = String(
+            repeating: "corrected translation with additional words ",
+            count: 45
+        )
+        view.apply(model: model(target: correction, reference: "source"))
+        view.flushPendingScrolls()
+
+        let expectedBottom = max(
+            0,
+            view.targetTextView.frame.height
+                - view.targetRegion.contentView.bounds.height
+        )
+        XCTAssertGreaterThan(expectedBottom, originalBottom)
+        XCTAssertEqual(
+            view.targetRegion.contentView.bounds.origin.y,
+            expectedBottom,
+            accuracy: 0.01
         )
     }
 
