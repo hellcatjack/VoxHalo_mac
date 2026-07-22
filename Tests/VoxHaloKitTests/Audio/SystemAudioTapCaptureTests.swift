@@ -6,6 +6,13 @@ import XCTest
 @testable import VoxHaloKit
 
 final class SystemAudioTapCaptureTests: XCTestCase {
+    func testDefaultSystemCaptureUsesDirectAudioDeviceInput() {
+        XCTAssertTrue(
+            SystemAudioTapCapture.makeDefaultInputUnit()
+                is AudioDeviceInputUnit
+        )
+    }
+
     func testSystemTapUsesActualTapUIDPrivateAggregateAndBindsAUHAL() async throws {
         let api = FakeCoreAudioTapAPI(createdTapUID: "actual-tap-uid")
         let hal = FakeAUHAL()
@@ -155,6 +162,50 @@ final class SystemAudioTapCaptureTests: XCTestCase {
         await capture.stop()
     }
 
+    func testSystemAudioForwardsPrivacySafePipelineProgress() async throws {
+        let api = FakeCoreAudioTapAPI()
+        let hal = FakeAUHAL()
+        let received = expectation(description: "capture progress")
+        let progress = SystemLockedProgress()
+        let capture = SystemAudioTapCapture(
+            api: api,
+            halFactory: { hal },
+            onProgress: { value in
+                progress.append(value)
+                received.fulfill()
+            }
+        )
+        try await capture.start(
+            source: .systemAudio,
+            onFrame: { _ in },
+            onFailure: { _ in }
+        )
+
+        hal.emitProgress(AudioCapturePipelineProgress(
+            callbackCount: 20,
+            sourcePacketCount: 19,
+            sourceFrameCount: 9_728,
+            sourceByteCount: 77_824,
+            ringWriteFailureCount: 1,
+            lastNativeStatus: -50,
+            convertedByteCount: 0,
+            deliveredFrameCount: 0
+        ))
+        await fulfillment(of: [received], timeout: 2)
+
+        XCTAssertEqual(progress.values, [AudioCapturePipelineProgress(
+            callbackCount: 20,
+            sourcePacketCount: 19,
+            sourceFrameCount: 9_728,
+            sourceByteCount: 77_824,
+            ringWriteFailureCount: 1,
+            lastNativeStatus: -50,
+            convertedByteCount: 0,
+            deliveredFrameCount: 0
+        )])
+        await capture.stop()
+    }
+
     func testRepeatedStopIsIdempotentAndRetriesFailedNativeCleanup() async throws {
         let api = FakeCoreAudioTapAPI(
             failingAt: .destroyAggregate,
@@ -250,4 +301,13 @@ private final class SystemLockedFrames: @unchecked Sendable {
     private var storage: [CapturedAudioFrame] = []
     var values: [CapturedAudioFrame] { lock.withLock { storage } }
     func append(_ frame: CapturedAudioFrame) { lock.withLock { storage.append(frame) } }
+}
+
+private final class SystemLockedProgress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [AudioCapturePipelineProgress] = []
+    var values: [AudioCapturePipelineProgress] { lock.withLock { storage } }
+    func append(_ value: AudioCapturePipelineProgress) {
+        lock.withLock { storage.append(value) }
+    }
 }

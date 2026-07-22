@@ -33,7 +33,9 @@ public final class AppEnvironment {
         let permissionProvider = AudioPermissionProvider()
         let captureDeviceCatalog = CoreAudioDeviceCatalog()
         let operatorAudioCatalog = CoreAudioDeviceCatalog()
-        let systemAudioCapture = SystemAudioTapCapture()
+        let systemAudioCapture = SystemAudioTapCapture(
+            onProgress: captureProgressHandler(diagnostics: diagnostics)
+        )
         let hardwareInputCapture = HardwareInputCapture(
             deviceCatalog: captureDeviceCatalog,
             permissionProvider: permissionProvider
@@ -79,6 +81,17 @@ public final class AppEnvironment {
                 captureDeviceCatalog.stopObserving()
             }
         )
+    }
+
+    static func captureProgressHandler(
+        diagnostics: any DiagnosticsLogging
+    ) -> SystemAudioTapCapture.ProgressHandler {
+        { progress in
+            guard diagnostics.isEnabled else { return }
+            Task {
+                await diagnostics.record(.capturePipeline(progress))
+            }
+        }
     }
 
     public func applicationDidFinishLaunching() {

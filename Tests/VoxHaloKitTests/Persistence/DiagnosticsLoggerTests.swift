@@ -240,6 +240,39 @@ final class DiagnosticsLoggerTests: XCTestCase {
         XCTAssertEqual(audio["byte_count"] as? Int, 10_240)
     }
 
+    func testCapturePipelineDiagnosticContainsOnlyStageCountersAndStatus() async throws {
+        let parent = try TemporaryDirectory()
+        let logger = try DiagnosticsLogger(
+            environment: ["TRANSLATEPCCS_DIAGNOSTICS": "1"],
+            logsDirectory: parent.url
+        )
+
+        await logger.record(.capturePipeline(AudioCapturePipelineProgress(
+            callbackCount: 20,
+            sourcePacketCount: 19,
+            sourceFrameCount: 9_728,
+            sourceByteCount: 77_824,
+            ringWriteFailureCount: 1,
+            lastNativeStatus: -50,
+            convertedByteCount: 6_484,
+            deliveredFrameCount: 0
+        )))
+
+        let object = try firstRecord(at: logger.fileURL)
+        XCTAssertEqual(object["event"] as? String, "capture_pipeline")
+        XCTAssertEqual(object["callback_count"] as? Int, 20)
+        XCTAssertEqual(object["source_packet_count"] as? Int, 19)
+        XCTAssertEqual(object["source_frame_count"] as? Int, 9_728)
+        XCTAssertEqual(object["source_byte_count"] as? Int, 77_824)
+        XCTAssertEqual(object["ring_write_failure_count"] as? Int, 1)
+        XCTAssertEqual(object["last_native_status"] as? Int, -50)
+        XCTAssertEqual(object["converted_byte_count"] as? Int, 6_484)
+        XCTAssertEqual(object["delivered_frame_count"] as? Int, 0)
+        XCTAssertNil(object["audio"])
+        XCTAssertNil(object["transcript"])
+        XCTAssertNil(object["username"])
+    }
+
     private func firstRecord(at url: URL) throws -> [String: Any] {
         let line = try XCTUnwrap(
             String(contentsOf: url, encoding: .utf8).split(separator: "\n").first

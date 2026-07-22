@@ -146,6 +146,10 @@ final class FakeAUHAL: AUHALInputUnitProtocol, @unchecked Sendable {
         lock.withLock { events.append(.overflow) }
     }
 
+    func emitProgress(_ progress: AudioCapturePipelineProgress) {
+        lock.withLock { events.append(.progress(progress)) }
+    }
+
     static func defaultFormat() -> AVAudioFormat {
         AVAudioFormat(
             commonFormat: .pcmFormatFloat32,

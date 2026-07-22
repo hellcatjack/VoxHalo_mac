@@ -8,9 +8,12 @@
 #include <limits>
 #include <mach/mach_time.h>
 #include <new>
+#include <vector>
 
 static_assert(std::atomic<uint64_t>::is_always_lock_free,
               "The real-time ring requires lock-free 64-bit atomics");
+static_assert(std::atomic<int32_t>::is_always_lock_free,
+              "The real-time input requires lock-free status atomics");
 
 struct VHRealtimeRing {
     uint32_t slotCount = 0;
@@ -36,6 +39,25 @@ struct VHAUHALInput {
     mach_timebase_info_data_t timebase {0, 0};
     bool callbackInstalled = false;
     bool initialized = false;
+    bool started = false;
+};
+
+struct VHAudioDeviceInput {
+    AudioDeviceID deviceID = kAudioObjectUnknown;
+    AudioDeviceIOProcID ioProcID = nullptr;
+    VHRealtimeRing *ring = nullptr;
+    AudioStreamBasicDescription format {};
+    UInt32 bufferFrameSize = 0;
+    UInt32 bufferCount = 0;
+    uint8_t *packetStorage = nullptr;
+    uint32_t packetCapacity = 0;
+    mach_timebase_info_data_t timebase {0, 0};
+    std::atomic<uint64_t> callbackCount {0};
+    std::atomic<uint64_t> sourcePacketCount {0};
+    std::atomic<uint64_t> sourceFrameCount {0};
+    std::atomic<uint64_t> sourceByteCount {0};
+    std::atomic<uint64_t> ringWriteFailureCount {0};
+    std::atomic<int32_t> lastStatus {noErr};
     bool started = false;
 };
 
@@ -175,6 +197,223 @@ uint64_t MonotonicNanoseconds(const VHAUHALInput *input) {
         return std::numeric_limits<uint64_t>::max();
     }
     return static_cast<uint64_t>(scaled);
+}
+
+uint64_t MonotonicNanoseconds(const VHAudioDeviceInput *input) {
+    const uint64_t ticks = mach_continuous_time();
+    const __uint128_t scaled = static_cast<__uint128_t>(ticks)
+        * input->timebase.numer / input->timebase.denom;
+    if (scaled > std::numeric_limits<uint64_t>::max()) {
+        return std::numeric_limits<uint64_t>::max();
+    }
+    return static_cast<uint64_t>(scaled);
+}
+
+OSStatus ReadSingleInputStreamFormat(
+    AudioDeviceID deviceID,
+    AudioStreamBasicDescription *format
+) {
+    AudioObjectPropertyAddress streamsAddress {
+        kAudioDevicePropertyStreams,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 streamsSize = 0;
+    OSStatus status = AudioObjectGetPropertyDataSize(
+        deviceID,
+        &streamsAddress,
+        0,
+        nullptr,
+        &streamsSize
+    );
+    if (status != noErr || streamsSize < sizeof(AudioObjectID)) {
+        return status == noErr ? kAudioFormatUnsupportedDataFormatError : status;
+    }
+
+    std::vector<AudioObjectID> streams(
+        streamsSize / static_cast<UInt32>(sizeof(AudioObjectID))
+    );
+    status = AudioObjectGetPropertyData(
+        deviceID,
+        &streamsAddress,
+        0,
+        nullptr,
+        &streamsSize,
+        streams.data()
+    );
+    if (status != noErr) {
+        return status;
+    }
+    streams.resize(streamsSize / sizeof(AudioObjectID));
+
+    AudioObjectID inputStream = kAudioObjectUnknown;
+    for (const AudioObjectID stream : streams) {
+        AudioObjectPropertyAddress directionAddress {
+            kAudioStreamPropertyDirection,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        UInt32 direction = 0;
+        UInt32 directionSize = sizeof(direction);
+        status = AudioObjectGetPropertyData(
+            stream,
+            &directionAddress,
+            0,
+            nullptr,
+            &directionSize,
+            &direction
+        );
+        if (status != noErr) {
+            return status;
+        }
+        if (direction == 0) {
+            continue;
+        }
+        if (inputStream != kAudioObjectUnknown) {
+            return kAudioFormatUnsupportedDataFormatError;
+        }
+        inputStream = stream;
+    }
+    if (inputStream == kAudioObjectUnknown) {
+        return kAudioFormatUnsupportedDataFormatError;
+    }
+
+    AudioObjectPropertyAddress formatAddress {
+        kAudioStreamPropertyVirtualFormat,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 formatSize = sizeof(*format);
+    return AudioObjectGetPropertyData(
+        inputStream,
+        &formatAddress,
+        0,
+        nullptr,
+        &formatSize,
+        format
+    );
+}
+
+OSStatus AllocateDeviceInputStorage(VHAudioDeviceInput *input) {
+    if (input->format.mFormatID != kAudioFormatLinearPCM
+        || input->format.mSampleRate <= 0
+        || input->format.mChannelsPerFrame == 0
+        || input->format.mBytesPerFrame == 0
+        || input->bufferFrameSize == 0) {
+        return kAudioFormatUnsupportedDataFormatError;
+    }
+
+    const bool noninterleaved =
+        (input->format.mFormatFlags & kAudioFormatFlagIsNonInterleaved) != 0;
+    input->bufferCount = noninterleaved
+        ? input->format.mChannelsPerFrame
+        : 1;
+    uint32_t bytesPerBuffer = 0;
+    if (!MultiplyFits(
+            input->bufferFrameSize,
+            input->format.mBytesPerFrame,
+            &bytesPerBuffer
+        )
+        || !MultiplyFits(
+            input->bufferCount,
+            bytesPerBuffer,
+            &input->packetCapacity
+        )) {
+        return kAudio_ParamError;
+    }
+
+    input->packetStorage = new (std::nothrow) uint8_t[input->packetCapacity];
+    if (input->packetStorage == nullptr) {
+        return memFullErr;
+    }
+    const double desiredFrames = input->format.mSampleRate
+        * kMinimumBufferedSeconds;
+    const uint64_t calculatedSlots = static_cast<uint64_t>(std::ceil(
+        desiredFrames / static_cast<double>(input->bufferFrameSize)
+    ));
+    const uint64_t slotCount64 = std::max<uint64_t>(4, calculatedSlots);
+    if (slotCount64 > std::numeric_limits<uint32_t>::max()
+        || !ConfigureRing(
+            input->ring,
+            static_cast<uint32_t>(slotCount64),
+            input->packetCapacity
+        )) {
+        delete[] input->packetStorage;
+        input->packetStorage = nullptr;
+        input->packetCapacity = 0;
+        return memFullErr;
+    }
+    return noErr;
+}
+
+OSStatus DeviceInputIOProc(
+    AudioObjectID,
+    const AudioTimeStamp *,
+    const AudioBufferList *inputData,
+    const AudioTimeStamp *,
+    AudioBufferList *,
+    const AudioTimeStamp *,
+    void *reference
+) {
+    auto *input = static_cast<VHAudioDeviceInput *>(reference);
+    if (input == nullptr) {
+        return noErr;
+    }
+    input->callbackCount.fetch_add(1, std::memory_order_relaxed);
+
+    auto reject = [input](OSStatus status) {
+        input->lastStatus.store(status, std::memory_order_relaxed);
+        return noErr;
+    };
+    if (inputData == nullptr
+        || inputData->mNumberBuffers != input->bufferCount) {
+        return reject(kAudio_ParamError);
+    }
+
+    UInt32 frameCount = 0;
+    uint32_t packetBytes = 0;
+    for (UInt32 index = 0; index < inputData->mNumberBuffers; ++index) {
+        const AudioBuffer &buffer = inputData->mBuffers[index];
+        if (buffer.mData == nullptr
+            || buffer.mDataByteSize == 0
+            || buffer.mDataByteSize % input->format.mBytesPerFrame != 0
+            || buffer.mDataByteSize > input->packetCapacity - packetBytes) {
+            return reject(kAudio_ParamError);
+        }
+        const UInt32 bufferFrames = buffer.mDataByteSize
+            / input->format.mBytesPerFrame;
+        if (index == 0) {
+            frameCount = bufferFrames;
+        } else if (bufferFrames != frameCount) {
+            return reject(kAudio_ParamError);
+        }
+        std::memcpy(
+            input->packetStorage + packetBytes,
+            buffer.mData,
+            buffer.mDataByteSize
+        );
+        packetBytes += buffer.mDataByteSize;
+    }
+    if (frameCount == 0 || frameCount > input->bufferFrameSize) {
+        return reject(kAudio_ParamError);
+    }
+
+    const bool wrote = VHRealtimeRingWrite(
+        input->ring,
+        input->packetStorage,
+        packetBytes,
+        frameCount,
+        MonotonicNanoseconds(input)
+    );
+    if (!wrote) {
+        input->ringWriteFailureCount.fetch_add(1, std::memory_order_relaxed);
+        return reject(kAudioHardwareUnspecifiedError);
+    }
+    input->sourcePacketCount.fetch_add(1, std::memory_order_relaxed);
+    input->sourceFrameCount.fetch_add(frameCount, std::memory_order_relaxed);
+    input->sourceByteCount.fetch_add(packetBytes, std::memory_order_relaxed);
+    input->lastStatus.store(noErr, std::memory_order_relaxed);
+    return noErr;
 }
 
 OSStatus RenderInput(void *reference,
@@ -580,5 +819,152 @@ void VHAUHALInputDispose(VHAUHALInput *input) {
         AudioComponentInstanceDispose(input->unit);
         input->unit = nullptr;
     }
+    delete input;
+}
+
+OSStatus VHAudioDeviceInputCreate(
+    AudioDeviceID deviceID,
+    VHRealtimeRing *ring,
+    VHAudioDeviceInput **output
+) {
+    if (deviceID == kAudioObjectUnknown || ring == nullptr || output == nullptr) {
+        return kAudio_ParamError;
+    }
+    *output = nullptr;
+    auto *input = new (std::nothrow) VHAudioDeviceInput();
+    if (input == nullptr) {
+        return memFullErr;
+    }
+    input->deviceID = deviceID;
+    input->ring = ring;
+
+    OSStatus status = ReadSingleInputStreamFormat(deviceID, &input->format);
+    if (status != noErr) {
+        delete input;
+        return status;
+    }
+
+    AudioObjectPropertyAddress frameSizeAddress {
+        kAudioDevicePropertyBufferFrameSize,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 frameSizeValueSize = sizeof(input->bufferFrameSize);
+    status = AudioObjectGetPropertyData(
+        deviceID,
+        &frameSizeAddress,
+        0,
+        nullptr,
+        &frameSizeValueSize,
+        &input->bufferFrameSize
+    );
+    if (status != noErr) {
+        delete input;
+        return status;
+    }
+
+    status = AllocateDeviceInputStorage(input);
+    if (status != noErr) {
+        delete input;
+        return status;
+    }
+    mach_timebase_info(&input->timebase);
+    if (input->timebase.denom == 0) {
+        delete[] input->packetStorage;
+        delete input;
+        return kAudio_ParamError;
+    }
+
+    status = AudioDeviceCreateIOProcID(
+        deviceID,
+        DeviceInputIOProc,
+        input,
+        &input->ioProcID
+    );
+    if (status != noErr) {
+        delete[] input->packetStorage;
+        delete input;
+        return status;
+    }
+    *output = input;
+    return noErr;
+}
+
+OSStatus VHAudioDeviceInputGetFormat(
+    VHAudioDeviceInput *input,
+    AudioStreamBasicDescription *format
+) {
+    if (input == nullptr || format == nullptr) {
+        return kAudio_ParamError;
+    }
+    *format = input->format;
+    return noErr;
+}
+
+OSStatus VHAudioDeviceInputGetMetrics(
+    VHAudioDeviceInput *input,
+    VHAudioDeviceInputMetrics *metrics
+) {
+    if (input == nullptr || metrics == nullptr) {
+        return kAudio_ParamError;
+    }
+    metrics->callbackCount = input->callbackCount.load(
+        std::memory_order_relaxed
+    );
+    metrics->sourcePacketCount = input->sourcePacketCount.load(
+        std::memory_order_relaxed
+    );
+    metrics->sourceFrameCount = input->sourceFrameCount.load(
+        std::memory_order_relaxed
+    );
+    metrics->sourceByteCount = input->sourceByteCount.load(
+        std::memory_order_relaxed
+    );
+    metrics->ringWriteFailureCount = input->ringWriteFailureCount.load(
+        std::memory_order_relaxed
+    );
+    metrics->lastStatus = input->lastStatus.load(std::memory_order_relaxed);
+    return noErr;
+}
+
+OSStatus VHAudioDeviceInputStart(VHAudioDeviceInput *input) {
+    if (input == nullptr
+        || input->deviceID == kAudioObjectUnknown
+        || input->ioProcID == nullptr) {
+        return kAudio_ParamError;
+    }
+    if (input->started) {
+        return noErr;
+    }
+    const OSStatus status = AudioDeviceStart(input->deviceID, input->ioProcID);
+    if (status == noErr) {
+        input->started = true;
+    }
+    return status;
+}
+
+OSStatus VHAudioDeviceInputStop(VHAudioDeviceInput *input) {
+    if (input == nullptr) {
+        return kAudio_ParamError;
+    }
+    if (!input->started) {
+        return noErr;
+    }
+    const OSStatus status = AudioDeviceStop(input->deviceID, input->ioProcID);
+    input->started = false;
+    return status;
+}
+
+void VHAudioDeviceInputDispose(VHAudioDeviceInput *input) {
+    if (input == nullptr) {
+        return;
+    }
+    VHAudioDeviceInputStop(input);
+    if (input->ioProcID != nullptr) {
+        AudioDeviceDestroyIOProcID(input->deviceID, input->ioProcID);
+        input->ioProcID = nullptr;
+    }
+    delete[] input->packetStorage;
+    input->packetStorage = nullptr;
     delete input;
 }

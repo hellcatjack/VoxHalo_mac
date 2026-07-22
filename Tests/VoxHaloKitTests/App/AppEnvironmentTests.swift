@@ -6,6 +6,35 @@ import XCTest
 
 @MainActor
 final class AppEnvironmentTests: XCTestCase {
+    func testLiveCaptureProgressHandlerRecordsStructuredDiagnostic() async {
+        let diagnostics = RecordingDiagnosticsLogger()
+        let handler = AppEnvironment.captureProgressHandler(
+            diagnostics: diagnostics
+        )
+        let progress = AudioCapturePipelineProgress(
+            callbackCount: 2,
+            sourcePacketCount: 1,
+            sourceFrameCount: 512,
+            sourceByteCount: 4_096,
+            ringWriteFailureCount: 0,
+            lastNativeStatus: 0,
+            convertedByteCount: 342,
+            deliveredFrameCount: 0
+        )
+
+        handler(progress)
+
+        let recorded = await waitUntil {
+            await diagnostics.events.contains { event in
+                guard case let .capturePipeline(value) = event else {
+                    return false
+                }
+                return value == progress
+            }
+        }
+        XCTAssertTrue(recorded)
+    }
+
     func testMalformedSettingsUseDefaultsAndExposeOneConciseFailure() throws {
         let directory = try TemporaryDirectory()
         let store = SettingsStore(baseDirectory: directory.url)

@@ -14,12 +14,22 @@ int32_t VHRealtimeAudioBridgeVersion(void);
 
 typedef struct VHRealtimeRing VHRealtimeRing;
 typedef struct VHAUHALInput VHAUHALInput;
+typedef struct VHAudioDeviceInput VHAudioDeviceInput;
 
 typedef struct {
     uint32_t byteCount;
     uint32_t frameCount;
     uint64_t callbackNanoseconds;
 } VHRealtimePacket;
+
+typedef struct {
+    uint64_t callbackCount;
+    uint64_t sourcePacketCount;
+    uint64_t sourceFrameCount;
+    uint64_t sourceByteCount;
+    uint64_t ringWriteFailureCount;
+    int32_t lastStatus;
+} VHAudioDeviceInputMetrics;
 
 VHRealtimeRing *VHRealtimeRingCreate(uint32_t slotCount, uint32_t bytesPerSlot);
 void VHRealtimeRingDestroy(VHRealtimeRing *ring);
@@ -43,6 +53,19 @@ OSStatus VHAUHALInputGetFormat(VHAUHALInput *input,
 OSStatus VHAUHALInputStart(VHAUHALInput *input);
 OSStatus VHAUHALInputStop(VHAUHALInput *input);
 void VHAUHALInputDispose(VHAUHALInput *input);
+
+OSStatus VHAudioDeviceInputCreate(AudioDeviceID deviceID,
+                                  VHRealtimeRing *ring,
+                                  VHAudioDeviceInput **output);
+OSStatus VHAudioDeviceInputGetFormat(VHAudioDeviceInput *input,
+                                     AudioStreamBasicDescription *format);
+OSStatus VHAudioDeviceInputGetMetrics(
+    VHAudioDeviceInput *input,
+    VHAudioDeviceInputMetrics *metrics
+);
+OSStatus VHAudioDeviceInputStart(VHAudioDeviceInput *input);
+OSStatus VHAudioDeviceInputStop(VHAudioDeviceInput *input);
+void VHAudioDeviceInputDispose(VHAudioDeviceInput *input);
 
 #ifdef __cplusplus
 }

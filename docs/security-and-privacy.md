@@ -47,7 +47,7 @@ Permission approval is associated with the app identity/signature. Rebuilding an
 
 ## Diagnostics redaction
 
-Diagnostics are off by default. When opted in, allowed metadata includes endpoint host/port, event type, sequence, lengths, stability fields, hotword count/character/activation metadata, nonsecret categories, and aggregate frame/byte counts.
+Diagnostics are off by default. When opted in, allowed metadata includes endpoint host/port, event type, sequence, lengths, stability fields, hotword count/character/activation metadata, nonsecret categories, aggregate frame/byte counts, and audio-pipeline stage counters plus native status codes. Pipeline diagnostics never contain captured samples.
 
 Permanent redactions apply even when transcript logging is separately enabled:
 

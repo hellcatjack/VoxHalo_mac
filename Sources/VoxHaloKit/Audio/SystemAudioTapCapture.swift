@@ -5,6 +5,9 @@ import Foundation
 
 public actor SystemAudioTapCapture: AudioCapturing {
     public typealias HALFactory = @Sendable () -> any AUHALInputUnitProtocol
+    public typealias ProgressHandler = @Sendable (
+        AudioCapturePipelineProgress
+    ) -> Void
 
     static let permissionDeniedStatuses: [OSStatus] = [
         kAudioHardwareIllegalOperationError,
@@ -22,6 +25,7 @@ public actor SystemAudioTapCapture: AudioCapturing {
     private let api: any CoreAudioTapAPI
     private let halFactory: HALFactory
     private let uuidGenerator: @Sendable () -> UUID
+    private let onProgress: ProgressHandler
 
     private var lifecycle: Lifecycle = .stopped
     private var resources: CoreAudioTapResources?
@@ -32,12 +36,16 @@ public actor SystemAudioTapCapture: AudioCapturing {
 
     public init(
         api: any CoreAudioTapAPI = AppleCoreAudioTapAPI(),
-        halFactory: @escaping HALFactory = { AUHALInputUnit() },
-        uuidGenerator: @escaping @Sendable () -> UUID = { UUID() }
+        halFactory: @escaping HALFactory = {
+            SystemAudioTapCapture.makeDefaultInputUnit()
+        },
+        uuidGenerator: @escaping @Sendable () -> UUID = { UUID() },
+        onProgress: @escaping ProgressHandler = { _ in }
     ) {
         self.api = api
         self.halFactory = halFactory
         self.uuidGenerator = uuidGenerator
+        self.onProgress = onProgress
     }
 
     public func start(
@@ -80,7 +88,8 @@ public actor SystemAudioTapCapture: AudioCapturing {
             )
             let gate = AUHALCaptureDeliveryGate(
                 onFrame: onFrame,
-                onFailure: onFailure
+                onFailure: onFailure,
+                onProgress: onProgress
             )
             deliveryGate = gate
             try newHAL.start()
@@ -105,6 +114,10 @@ public actor SystemAudioTapCapture: AudioCapturing {
             lifecycle = .stopped
             throw Self.mapStartupError(error)
         }
+    }
+
+    public static func makeDefaultInputUnit() -> any AUHALInputUnitProtocol {
+        AudioDeviceInputUnit()
     }
 
     public func stop() async {

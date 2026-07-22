@@ -50,9 +50,9 @@ operator Hotwords text
 
 ### Audio
 
-`CoreAudioDeviceCatalog` exposes a synthetic System Audio source plus live hardware input devices identified by persistent Core Audio UID. `SystemAudioTapCapture` creates a private global process tap and aggregate device. `HardwareInputCapture` binds AUHAL to the selected device. Both feed the same converter and accumulator.
+`CoreAudioDeviceCatalog` exposes a synthetic System Audio source plus live hardware input devices identified by persistent Core Audio UID. `SystemAudioTapCapture` creates a private global process tap and aggregate device, then reads that device through the direct `AudioDeviceIOProc` path used by Apple's tap sample. `HardwareInputCapture` keeps AUHAL for the selected physical input device. Both feed the same converter and accumulator.
 
-The real-time callback never performs disk, network, actor, or main-thread work. Complete frames enter a fixed four-frame queue. Overflow clears stale frames, faults the backend session, and allows a later fresh frame to reconnect rather than allowing unbounded latency or memory.
+The real-time callback never performs disk, network, actor, or main-thread work. Lock-free counters expose callback, packet, byte, native-status, conversion, and completed-frame progress to opt-in diagnostics without retaining audio content. Complete frames enter a fixed four-frame queue. Overflow clears stale frames, faults the backend session, and allows a later fresh frame to reconnect rather than allowing unbounded latency or memory.
 
 ### Session
 

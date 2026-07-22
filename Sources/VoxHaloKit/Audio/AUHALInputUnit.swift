@@ -19,6 +19,7 @@ public struct AUHALCapturedAudio: @unchecked Sendable {
 public enum AUHALInputEvent: @unchecked Sendable {
     case audio(AUHALCapturedAudio)
     case overflow
+    case progress(AudioCapturePipelineProgress)
 }
 
 public protocol AUHALInputUnitProtocol: Sendable {
@@ -230,15 +231,18 @@ final class AUHALCaptureDeliveryGate: @unchecked Sendable {
     private let lock = NSLock()
     private let onFrame: @Sendable (CapturedAudioFrame) -> Void
     private let onFailure: @Sendable (AudioCaptureFailure) -> Void
+    private let onProgress: @Sendable (AudioCapturePipelineProgress) -> Void
     private var isActive = true
     private var fatalFailureWasReported = false
 
     init(
         onFrame: @escaping @Sendable (CapturedAudioFrame) -> Void,
-        onFailure: @escaping @Sendable (AudioCaptureFailure) -> Void
+        onFailure: @escaping @Sendable (AudioCaptureFailure) -> Void,
+        onProgress: @escaping @Sendable (AudioCapturePipelineProgress) -> Void = { _ in }
     ) {
         self.onFrame = onFrame
         self.onFailure = onFailure
+        self.onProgress = onProgress
     }
 
     func deliver(_ frame: CapturedAudioFrame) {
@@ -249,6 +253,11 @@ final class AUHALCaptureDeliveryGate: @unchecked Sendable {
     func reportOverflow() {
         let callback = lock.withLock { isActive ? onFailure : nil }
         callback?(.pipelineOverloaded)
+    }
+
+    func reportProgress(_ progress: AudioCapturePipelineProgress) {
+        let callback = lock.withLock { isActive ? onProgress : nil }
+        callback?(progress)
     }
 
     func reportFatal(_ failure: AudioCaptureFailure) {
@@ -274,6 +283,8 @@ func makeAUHALCaptureWorker(
     Task.detached(priority: .high) {
         let accumulator = PCMFrameAccumulator()
         var activeConverter = converter
+        var convertedByteCount: UInt64 = 0
+        var deliveredFrameCount: UInt64 = 0
         defer { accumulator.discardRemainder() }
         do {
             while !Task.isCancelled,
@@ -281,7 +292,10 @@ func makeAUHALCaptureWorker(
                 switch event {
                 case let .audio(captured):
                     let converted = try activeConverter.convert(captured.buffer)
-                    for bytes in accumulator.append(converted) {
+                    convertedByteCount &+= UInt64(converted.count)
+                    let frames = accumulator.append(converted)
+                    deliveredFrameCount &+= UInt64(frames.count)
+                    for bytes in frames {
                         gate.deliver(CapturedAudioFrame(
                             pcm16LE: bytes,
                             callbackTimestamp: captured.callbackTimestamp
@@ -293,6 +307,11 @@ func makeAUHALCaptureWorker(
                         sourceFormat: activeConverter.sourceFormat
                     )
                     gate.reportOverflow()
+                case let .progress(progress):
+                    gate.reportProgress(progress.includingWorkerCounts(
+                        convertedByteCount: convertedByteCount,
+                        deliveredFrameCount: deliveredFrameCount
+                    ))
                 }
             }
         } catch is CancellationError {

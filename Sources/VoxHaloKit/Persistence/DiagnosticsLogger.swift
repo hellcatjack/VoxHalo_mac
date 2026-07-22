@@ -26,6 +26,7 @@ public enum DiagnosticEvent: Sendable {
     )
     case connection(category: String)
     case audio(frameCount: UInt64, byteCount: Int)
+    case capturePipeline(AudioCapturePipelineProgress)
     case capture(category: String)
     case failure(category: String)
 }
@@ -166,6 +167,33 @@ public actor DiagnosticsLogger: DiagnosticsLogging {
             record["event"] = .string("audio")
             record["frame_count"] = .integer(Int64(clamping: frameCount))
             record["byte_count"] = .integer(Int64(max(0, byteCount)))
+
+        case let .capturePipeline(progress):
+            record["event"] = .string("capture_pipeline")
+            record["callback_count"] = .integer(
+                Int64(clamping: progress.callbackCount)
+            )
+            record["source_packet_count"] = .integer(
+                Int64(clamping: progress.sourcePacketCount)
+            )
+            record["source_frame_count"] = .integer(
+                Int64(clamping: progress.sourceFrameCount)
+            )
+            record["source_byte_count"] = .integer(
+                Int64(clamping: progress.sourceByteCount)
+            )
+            record["ring_write_failure_count"] = .integer(
+                Int64(clamping: progress.ringWriteFailureCount)
+            )
+            record["last_native_status"] = .integer(
+                Int64(progress.lastNativeStatus)
+            )
+            record["converted_byte_count"] = .integer(
+                Int64(clamping: progress.convertedByteCount)
+            )
+            record["delivered_frame_count"] = .integer(
+                Int64(clamping: progress.deliveredFrameCount)
+            )
 
         case let .capture(category):
             record["event"] = .string("capture")
