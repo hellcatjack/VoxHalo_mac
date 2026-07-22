@@ -3,3 +3,12 @@
 dist/
 .DS_Store
 xcuserdata/
+/.tools/
+/.tools8/
+/artifacts/
+/youtube-playwright-state.png
+.env
+.env.*
+*.key
+*.pem
+*.pfx
