@@ -26,6 +26,8 @@ public final class OutlinedTextView: NSView {
     private var storedTextColor = NSColor.white
     private var storedOutlineColor = NSColor.black.withAlphaComponent(0.9)
     private var storedOutlineWidth: CGFloat = 1.8
+    private var storedOutlineShadowColor = NSColor.black.withAlphaComponent(0.9)
+    private var storedOutlineShadowBlur: CGFloat = 2.5
     private var storedAlignment = NSTextAlignment.left
     private var cachedKey: FramesetterKey?
     private var cachedFramesetter: CTFramesetter?
@@ -104,6 +106,25 @@ public final class OutlinedTextView: NSView {
             guard normalized != storedOutlineWidth else { return }
             storedOutlineWidth = normalized
             invalidateTextLayout()
+        }
+    }
+
+    public var outlineShadowColor: NSColor {
+        get { storedOutlineShadowColor }
+        set {
+            guard !storedOutlineShadowColor.isEqual(newValue) else { return }
+            storedOutlineShadowColor = newValue
+            needsDisplay = true
+        }
+    }
+
+    public var outlineShadowBlur: CGFloat {
+        get { storedOutlineShadowBlur }
+        set {
+            let normalized = max(0, newValue.isFinite ? newValue : 0)
+            guard normalized != storedOutlineShadowBlur else { return }
+            storedOutlineShadowBlur = normalized
+            needsDisplay = true
         }
     }
 
@@ -190,7 +211,19 @@ public final class OutlinedTextView: NSView {
                 cachedPath,
                 nil
             )
+            context.saveGState()
+            if storedOutlineShadowBlur > 0,
+               let shadowColor = storedOutlineShadowColor.usingColorSpace(
+                   .deviceRGB
+               )?.cgColor {
+                context.setShadow(
+                    offset: .zero,
+                    blur: storedOutlineShadowBlur,
+                    color: shadowColor
+                )
+            }
             CTFrameDraw(outlineFrame, context)
+            context.restoreGState()
         }
         CTFrameDraw(fillFrame, context)
         context.restoreGState()

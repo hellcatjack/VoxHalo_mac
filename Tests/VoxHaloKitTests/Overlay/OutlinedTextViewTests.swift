@@ -14,6 +14,8 @@ final class OutlinedTextViewTests: XCTestCase {
         view.textColor = .white
         view.outlineColor = NSColor.black.withAlphaComponent(0.9)
         view.outlineWidth = 1.8
+        view.outlineShadowColor = NSColor.black.withAlphaComponent(0.9)
+        view.outlineShadowBlur = 2.5
 
         view.prepareLayoutCache()
 
@@ -45,6 +47,11 @@ final class OutlinedTextViewTests: XCTestCase {
             try XCTUnwrap(outlineAttributes[.strokeWidth] as? CGFloat),
             0
         )
+        XCTAssertGreaterThan(view.outlineShadowBlur, view.outlineWidth)
+        let shadowColor = try XCTUnwrap(
+            view.outlineShadowColor.usingColorSpace(.deviceRGB)
+        )
+        XCTAssertEqual(shadowColor.alphaComponent, 0.9, accuracy: 0.001)
         XCTAssertNil(fillAttributes[.backgroundColor])
         let paragraph = try XCTUnwrap(
             fillAttributes[.paragraphStyle] as? NSParagraphStyle
@@ -76,6 +83,8 @@ final class OutlinedTextViewTests: XCTestCase {
         view.textColor = view.textColor
         view.outlineColor = view.outlineColor
         view.outlineWidth = view.outlineWidth
+        view.outlineShadowColor = view.outlineShadowColor
+        view.outlineShadowBlur = view.outlineShadowBlur
         view.prepareLayoutCache()
 
         XCTAssertEqual(view.cachedFramesetterIdentity, firstFramesetter)
@@ -101,5 +110,23 @@ final class OutlinedTextViewTests: XCTestCase {
         XCTAssertGreaterThan(height, view.textFont.pointSize * 2)
         view.text = "replacement"
         XCTAssertEqual(view.contentGeneration, 2)
+    }
+
+    func testShadowPropertiesNormalizeWithoutRebuildingTextLayout() throws {
+        let view = OutlinedTextView(
+            frame: NSRect(x: 0, y: 0, width: 420, height: 120)
+        )
+        view.text = "High contrast subtitle"
+        view.prepareLayoutCache()
+        let framesetter = try XCTUnwrap(view.cachedFramesetterIdentity)
+        let buildCount = view.cacheBuildCount
+
+        view.outlineShadowColor = NSColor.black.withAlphaComponent(0.75)
+        view.outlineShadowBlur = .nan
+        view.prepareLayoutCache()
+
+        XCTAssertEqual(view.outlineShadowBlur, 0)
+        XCTAssertEqual(view.cachedFramesetterIdentity, framesetter)
+        XCTAssertEqual(view.cacheBuildCount, buildCount)
     }
 }

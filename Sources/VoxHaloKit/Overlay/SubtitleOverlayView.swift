@@ -153,11 +153,19 @@ public final class SubtitleOverlayView: NSView {
             size: layoutSettings.targetFontSize,
             fallbackWeight: .semibold
         )
-        targetTextView.textColor = NSColor(
+        let targetColor = NSColor(
             voxHaloHex: layoutSettings.targetColor,
             fallback: .white
         )
-        targetTextView.outlineWidth = 1.0
+        targetTextView.textColor = targetColor
+        targetTextView.outlineColor = Self.contrastingOutline(for: targetColor)
+        targetTextView.outlineWidth = Self.outlineWidth(
+            for: layoutSettings.targetFontSize
+        )
+        targetTextView.outlineShadowColor = NSColor.black.withAlphaComponent(0.9)
+        targetTextView.outlineShadowBlur = Self.shadowBlur(
+            for: targetTextView.outlineWidth
+        )
 
         referenceTextView.alignment = .left
         referenceTextView.textFont = Self.font(
@@ -165,11 +173,48 @@ public final class SubtitleOverlayView: NSView {
             size: layoutSettings.referenceFontSize,
             fallbackWeight: .medium
         )
-        referenceTextView.textColor = NSColor(
+        let referenceColor = NSColor(
             voxHaloHex: layoutSettings.referenceColor,
             fallback: NSColor(white: 0.96, alpha: 1)
         )
-        referenceTextView.outlineWidth = 0.85
+        referenceTextView.textColor = referenceColor
+        referenceTextView.outlineColor = Self.contrastingOutline(
+            for: referenceColor
+        )
+        referenceTextView.outlineWidth = Self.outlineWidth(
+            for: layoutSettings.referenceFontSize
+        )
+        referenceTextView.outlineShadowColor = NSColor.black.withAlphaComponent(
+            0.9
+        )
+        referenceTextView.outlineShadowBlur = Self.shadowBlur(
+            for: referenceTextView.outlineWidth
+        )
+    }
+
+    private static func outlineWidth(for fontSize: CGFloat) -> CGFloat {
+        min(3.6, max(1.6, fontSize * 0.07))
+    }
+
+    private static func shadowBlur(for outlineWidth: CGFloat) -> CGFloat {
+        max(2.5, outlineWidth * 1.15)
+    }
+
+    private static func contrastingOutline(for textColor: NSColor) -> NSColor {
+        guard let rgb = textColor.usingColorSpace(.deviceRGB) else {
+            return NSColor.black.withAlphaComponent(0.96)
+        }
+        let luminance = 0.2126 * linearized(rgb.redComponent)
+            + 0.7152 * linearized(rgb.greenComponent)
+            + 0.0722 * linearized(rgb.blueComponent)
+        let color = luminance > 0.42 ? NSColor.black : NSColor.white
+        return color.withAlphaComponent(0.96)
+    }
+
+    private static func linearized(_ component: CGFloat) -> CGFloat {
+        component <= 0.04045
+            ? component / 12.92
+            : pow((component + 0.055) / 1.055, 2.4)
     }
 
     private static func font(

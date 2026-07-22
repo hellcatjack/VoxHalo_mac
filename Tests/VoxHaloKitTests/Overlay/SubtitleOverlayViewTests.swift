@@ -34,8 +34,18 @@ final class SubtitleOverlayViewTests: XCTestCase {
             view.referenceTextView.textFont.fontName,
             "PingFangSC-Medium"
         )
-        XCTAssertEqual(view.targetTextView.outlineWidth, 1.0)
-        XCTAssertEqual(view.referenceTextView.outlineWidth, 0.85)
+        XCTAssertGreaterThanOrEqual(view.targetTextView.outlineWidth, 2.4)
+        XCTAssertGreaterThanOrEqual(view.referenceTextView.outlineWidth, 1.6)
+        XCTAssertGreaterThan(
+            view.targetTextView.outlineShadowBlur,
+            view.targetTextView.outlineWidth
+        )
+        XCTAssertGreaterThan(
+            view.referenceTextView.outlineShadowBlur,
+            view.referenceTextView.outlineWidth
+        )
+        XCTAssertEqual(view.targetTextView.outlineColor.hexRGB, "#000000")
+        XCTAssertEqual(view.referenceTextView.outlineColor.hexRGB, "#000000")
     }
 
     func testLayoutClampsEveryDimensionBeforeComputingNonoverlappingFrames() {
@@ -68,6 +78,25 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertEqual(view.referenceTextView.textFont.pointSize, 16)
         XCTAssertEqual(view.targetTextView.textColor.hexRGB, "#FFD966")
         XCTAssertEqual(view.referenceTextView.textColor.hexRGB, "#8FE8FF")
+    }
+
+    func testDarkSubtitleColorAutomaticallyUsesALightOutline() {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 800, height: 600)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 264,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#101010",
+            referenceAreaHeight: 96,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#202020"
+        ), display: display(width: 800, height: 600))
+
+        XCTAssertEqual(view.targetTextView.outlineColor.hexRGB, "#FFFFFF")
+        XCTAssertEqual(view.referenceTextView.outlineColor.hexRGB, "#FFFFFF")
     }
 
     func testTargetIsOneContinuousBlockAndReferenceUsesBoundedSegments() {
@@ -418,6 +447,99 @@ final class SubtitleOverlayViewTests: XCTestCase {
         }
     }
 
+    func testSameColorBackgroundsRetainDarkSubtitleEdges() throws {
+        let panelSize = CGSize(width: 480, height: 360)
+        let colors = ["#FFFFFF", "#FFD966", "#8FE8FF"]
+        let panelColors = [
+            NSColor.white,
+            NSColor(
+                calibratedRed: 1,
+                green: 217.0 / 255.0,
+                blue: 102.0 / 255.0,
+                alpha: 1
+            ),
+            NSColor(
+                calibratedRed: 143.0 / 255.0,
+                green: 232.0 / 255.0,
+                blue: 1,
+                alpha: 1
+            ),
+        ]
+        let canvas = ContrastSnapshotCanvas(
+            frame: CGRect(
+                origin: .zero,
+                size: CGSize(width: panelSize.width * 3, height: panelSize.height)
+            ),
+            panelColors: panelColors
+        )
+
+        for (index, color) in colors.enumerated() {
+            let overlay = SubtitleOverlayView(frame: CGRect(
+                x: CGFloat(index) * panelSize.width,
+                y: 0,
+                width: panelSize.width,
+                height: panelSize.height
+            ))
+            overlay.apply(layout: SubtitleLayoutSettings(
+                targetAreaHeight: 156,
+                targetFontSize: 36,
+                targetTopOffset: 0,
+                targetColor: color,
+                referenceAreaHeight: 64,
+                referenceFontSize: 24,
+                referenceBottomOffset: 0,
+                referenceColor: color
+            ), display: display(width: panelSize.width, height: panelSize.height))
+            overlay.apply(model: model(
+                target: "Same-color video remains readable",
+                reference: "同色画面上的字幕仍然清晰可读"
+            ))
+            canvas.addSubview(overlay)
+            overlay.layoutSubtreeIfNeeded()
+            overlay.flushPendingScrolls()
+            overlay.layoutSubtreeIfNeeded()
+        }
+
+        let bitmap = try XCTUnwrap(
+            canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds)
+        )
+        canvas.cacheDisplay(in: canvas.bounds, to: bitmap)
+        let panelPixelWidth = bitmap.pixelsWide / colors.count
+        for index in colors.indices {
+            var darkEdgePixels = 0
+            let startX = index * panelPixelWidth
+            let endX = min(bitmap.pixelsWide, startX + panelPixelWidth)
+            for x in stride(from: startX, to: endX, by: 2) {
+                for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                    guard let color = bitmap.colorAt(x: x, y: y)?
+                        .usingColorSpace(.deviceRGB) else { continue }
+                    let luminance = 0.2126 * color.redComponent
+                        + 0.7152 * color.greenComponent
+                        + 0.0722 * color.blueComponent
+                    if luminance < 0.25 {
+                        darkEdgePixels += 1
+                    }
+                }
+            }
+            XCTAssertGreaterThan(
+                darkEdgePixels,
+                200,
+                "panel \(index) lost its dark contrast outline"
+            )
+        }
+
+        let png = try XCTUnwrap(bitmap.representation(
+            using: .png,
+            properties: [:]
+        ))
+        XCTAssertGreaterThan(png.count, 20_000)
+        if let outputPath = ProcessInfo.processInfo.environment[
+            "VOXHALO_CONTRAST_SNAPSHOT"
+        ], !outputPath.isEmpty {
+            try png.write(to: URL(fileURLWithPath: outputPath))
+        }
+    }
+
     private func makeView() -> SubtitleOverlayView {
         let view = SubtitleOverlayView(
             frame: NSRect(x: 0, y: 0, width: 1_200, height: 800)
@@ -454,6 +576,36 @@ final class SubtitleOverlayViewTests: XCTestCase {
             scale: 2,
             isMain: true
         )
+    }
+}
+
+@MainActor
+private final class ContrastSnapshotCanvas: NSView {
+    private let panelColors: [NSColor]
+
+    init(frame frameRect: NSRect, panelColors: [NSColor]) {
+        self.panelColors = panelColors
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard !panelColors.isEmpty else { return }
+        let panelWidth = bounds.width / CGFloat(panelColors.count)
+        for (index, color) in panelColors.enumerated() {
+            color.setFill()
+            CGRect(
+                x: CGFloat(index) * panelWidth,
+                y: 0,
+                width: panelWidth,
+                height: bounds.height
+            ).fill()
+        }
     }
 }
 
