@@ -18,7 +18,7 @@ public actor HardwareInputCapture: AudioCapturing {
     private var lifecycle: Lifecycle = .stopped
     private var nextGeneration: UInt64 = 0
     private var activeHAL: (any AUHALInputUnitProtocol)?
-    private var deliveryGate: HardwareCaptureDeliveryGate?
+    private var deliveryGate: AUHALCaptureDeliveryGate?
     private var workerTask: Task<Void, Never>?
     private var isObservingDevices = false
     private var stopWaiters: [CheckedContinuation<Void, Never>] = []
@@ -81,7 +81,7 @@ public actor HardwareInputCapture: AudioCapturing {
             isObservingDevices = true
             try ensureStarting(generation)
 
-            let gate = HardwareCaptureDeliveryGate(
+            let gate = AUHALCaptureDeliveryGate(
                 onFrame: onFrame,
                 onFailure: onFailure
             )
@@ -89,7 +89,7 @@ public actor HardwareInputCapture: AudioCapturing {
             try newHAL.start()
             try ensureStarting(generation)
 
-            workerTask = Self.makeWorker(
+            workerTask = makeAUHALCaptureWorker(
                 hal: newHAL,
                 converter: converter,
                 gate: gate
@@ -175,82 +175,4 @@ public actor HardwareInputCapture: AudioCapturing {
         await stop()
     }
 
-    private static func makeWorker(
-        hal: any AUHALInputUnitProtocol,
-        converter: PCM16MonoConverter,
-        gate: HardwareCaptureDeliveryGate
-    ) -> Task<Void, Never> {
-        Task.detached(priority: .high) {
-            let accumulator = PCMFrameAccumulator()
-            var activeConverter = converter
-            defer { accumulator.discardRemainder() }
-            do {
-                while !Task.isCancelled,
-                      let event = try await hal.nextEvent() {
-                    switch event {
-                    case let .audio(captured):
-                        let converted = try activeConverter.convert(captured.buffer)
-                        for bytes in accumulator.append(converted) {
-                            gate.deliver(CapturedAudioFrame(
-                                pcm16LE: bytes,
-                                callbackTimestamp: captured.callbackTimestamp
-                            ))
-                        }
-                    case .overflow:
-                        accumulator.discardRemainder()
-                        activeConverter = try PCM16MonoConverter(
-                            sourceFormat: activeConverter.sourceFormat
-                        )
-                        gate.reportOverflow()
-                    }
-                }
-            } catch is CancellationError {
-                return
-            } catch let failure as AudioCaptureFailure {
-                gate.reportFatal(failure)
-            } catch {
-                gate.reportFatal(.unsupportedFormat)
-            }
-        }
-    }
-}
-
-private final class HardwareCaptureDeliveryGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private let onFrame: @Sendable (CapturedAudioFrame) -> Void
-    private let onFailure: @Sendable (AudioCaptureFailure) -> Void
-    private var isActive = true
-    private var fatalFailureWasReported = false
-
-    init(
-        onFrame: @escaping @Sendable (CapturedAudioFrame) -> Void,
-        onFailure: @escaping @Sendable (AudioCaptureFailure) -> Void
-    ) {
-        self.onFrame = onFrame
-        self.onFailure = onFailure
-    }
-
-    func deliver(_ frame: CapturedAudioFrame) {
-        let callback = lock.withLock { isActive ? onFrame : nil }
-        callback?(frame)
-    }
-
-    func reportOverflow() {
-        let callback = lock.withLock { isActive ? onFailure : nil }
-        callback?(.pipelineOverloaded)
-    }
-
-    func reportFatal(_ failure: AudioCaptureFailure) {
-        let callback: (@Sendable (AudioCaptureFailure) -> Void)? = lock.withLock {
-            guard isActive, !fatalFailureWasReported else { return nil }
-            fatalFailureWasReported = true
-            isActive = false
-            return onFailure
-        }
-        callback?(failure)
-    }
-
-    func deactivate() {
-        lock.withLock { isActive = false }
-    }
 }
