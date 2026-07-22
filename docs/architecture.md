@@ -74,7 +74,7 @@ Stop is shared and idempotent. It stops capture, drains/cancels audio work, send
 
 `OperatorModel` is isolated to the main actor. It loads settings and environment overrides, observes audio/display catalogs, automatically persists raw hotword input, validates it before Start, constructs credentials only inside Start, maps session outputs, and sends subtitle snapshots through the coalescing pump.
 
-The overlay is a borderless nonactivating transparent `NSPanel` at `.screenSaver` level. It ignores mouse events and uses `.canJoinAllSpaces`, `.fullScreenAuxiliary`, `.stationary`, and `.ignoresCycle`. Persistent display selection uses a CG display UUID, so array order and transient display IDs are irrelevant.
+The overlay is a borderless nonactivating transparent `NSPanel` at `.screenSaver` level. It ignores mouse events and uses `.canJoinAllSpaces`, `.fullScreenAuxiliary`, `.stationary`, and `.ignoresCycle`. Bilingual text uses PingFang SC Semibold/Medium with natural font-metric line heights and separate outline-then-fill Core Text passes, keeping Chinese and Latin glyphs solid on complex video. Persistent display selection uses a CG display UUID, so array order and transient display IDs are irrelevant.
 
 ### Persistence and diagnostics
 

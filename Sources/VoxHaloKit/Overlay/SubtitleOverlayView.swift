@@ -135,26 +135,37 @@ public final class SubtitleOverlayView: NSView {
 
     private func applyTextStyle() {
         targetTextView.alignment = .left
-        targetTextView.textFont = .systemFont(
-            ofSize: layoutSettings.targetFontSize,
-            weight: .semibold
+        targetTextView.textFont = Self.font(
+            named: "PingFangSC-Semibold",
+            size: layoutSettings.targetFontSize,
+            fallbackWeight: .semibold
         )
         targetTextView.textColor = NSColor(
             voxHaloHex: layoutSettings.targetColor,
             fallback: .white
         )
-        targetTextView.outlineWidth = 1.8
+        targetTextView.outlineWidth = 1.0
 
         referenceTextView.alignment = .left
-        referenceTextView.textFont = .systemFont(
-            ofSize: layoutSettings.referenceFontSize,
-            weight: .semibold
+        referenceTextView.textFont = Self.font(
+            named: "PingFangSC-Medium",
+            size: layoutSettings.referenceFontSize,
+            fallbackWeight: .medium
         )
         referenceTextView.textColor = NSColor(
             voxHaloHex: layoutSettings.referenceColor,
             fallback: NSColor(white: 0.96, alpha: 1)
         )
-        referenceTextView.outlineWidth = 1.6
+        referenceTextView.outlineWidth = 0.85
+    }
+
+    private static func font(
+        named postScriptName: String,
+        size: CGFloat,
+        fallbackWeight: NSFont.Weight
+    ) -> NSFont {
+        NSFont(name: postScriptName, size: size)
+            ?? .systemFont(ofSize: size, weight: fallbackWeight)
     }
 
     private static func makeRegion(

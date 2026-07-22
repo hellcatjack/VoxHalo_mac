@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class OutlinedTextViewTests: XCTestCase {
-    func testViewIsFlippedNoninteractiveAndUsesVectorStrokeAttributes() throws {
+    func testViewIsFlippedNoninteractiveAndUsesLayeredVectorStroke() throws {
         let view = OutlinedTextView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 160)
         )
@@ -23,20 +23,35 @@ final class OutlinedTextViewTests: XCTestCase {
         XCTAssertFalse(view.wantsLayer)
         XCTAssertNil(view.layer)
 
-        let attributed = try XCTUnwrap(view.cachedAttributedText)
-        let attributes = attributed.attributes(at: 0, effectiveRange: nil)
-        XCTAssertEqual(attributes[.foregroundColor] as? NSColor, .white)
+        let fill = try XCTUnwrap(view.cachedAttributedText)
+        let fillAttributes = fill.attributes(at: 0, effectiveRange: nil)
+        XCTAssertEqual(fillAttributes[.foregroundColor] as? NSColor, .white)
+        XCTAssertNil(fillAttributes[.strokeColor])
+        XCTAssertNil(fillAttributes[.strokeWidth])
+
+        let outline = try XCTUnwrap(view.cachedOutlineAttributedText)
+        let outlineAttributes = outline.attributes(at: 0, effectiveRange: nil)
         XCTAssertEqual(
-            attributes[.strokeColor] as? NSColor,
+            outlineAttributes[.strokeColor] as? NSColor,
             view.outlineColor
         )
-        XCTAssertLessThan(try XCTUnwrap(attributes[.strokeWidth] as? CGFloat), 0)
-        XCTAssertNil(attributes[.backgroundColor])
+        XCTAssertGreaterThan(
+            try XCTUnwrap(outlineAttributes[.strokeWidth] as? CGFloat),
+            0
+        )
+        XCTAssertNil(fillAttributes[.backgroundColor])
         let paragraph = try XCTUnwrap(
-            attributes[.paragraphStyle] as? NSParagraphStyle
+            fillAttributes[.paragraphStyle] as? NSParagraphStyle
         )
         XCTAssertEqual(paragraph.alignment, .left)
         XCTAssertEqual(paragraph.lineBreakMode, .byWordWrapping)
+        let naturalHeight = view.textFont.ascender
+            - view.textFont.descender
+            + max(0, view.textFont.leading)
+        XCTAssertGreaterThanOrEqual(
+            paragraph.minimumLineHeight,
+            ceil(naturalHeight * 1.06)
+        )
     }
 
     func testUnchangedContentFontBoundsAndColorsReuseFramesetterAndPath() throws {

@@ -29,6 +29,7 @@ public final class OutlinedTextView: NSView {
     private var storedAlignment = NSTextAlignment.left
     private var cachedKey: FramesetterKey?
     private var cachedFramesetter: CTFramesetter?
+    private var cachedOutlineFramesetter: CTFramesetter?
     private var cachedPath: CGPath?
     private var cachedPathSize: CGSize?
     private var identitySequence: UInt64 = 0
@@ -38,6 +39,7 @@ public final class OutlinedTextView: NSView {
     public private(set) var cachedFramesetterIdentity: UInt64?
     public private(set) var cachedPathIdentity: UInt64?
     var cachedAttributedText: NSAttributedString?
+    var cachedOutlineAttributedText: NSAttributedString?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -163,7 +165,7 @@ public final class OutlinedTextView: NSView {
         prepareLayoutCache()
         guard let cachedFramesetter, let cachedPath else { return }
 
-        let frame = CTFramesetterCreateFrame(
+        let fillFrame = CTFramesetterCreateFrame(
             cachedFramesetter,
             CFRange(location: 0, length: 0),
             cachedPath,
@@ -173,7 +175,16 @@ public final class OutlinedTextView: NSView {
         context.textMatrix = .identity
         context.translateBy(x: 0, y: bounds.height)
         context.scaleBy(x: 1, y: -1)
-        CTFrameDraw(frame, context)
+        if let cachedOutlineFramesetter {
+            let outlineFrame = CTFramesetterCreateFrame(
+                cachedOutlineFramesetter,
+                CFRange(location: 0, length: 0),
+                cachedPath,
+                nil
+            )
+            CTFrameDraw(outlineFrame, context)
+        }
+        CTFrameDraw(fillFrame, context)
         context.restoreGState()
     }
 
@@ -193,24 +204,47 @@ public final class OutlinedTextView: NSView {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = storedAlignment
         paragraph.lineBreakMode = .byWordWrapping
-        let lineHeight = ceil(storedFont.pointSize * 1.22)
+        let naturalLineHeight = storedFont.ascender
+            - storedFont.descender
+            + max(0, storedFont.leading)
+        let lineHeight = ceil(max(
+            storedFont.pointSize * 1.22,
+            naturalLineHeight * 1.06
+        ))
         paragraph.minimumLineHeight = lineHeight
         paragraph.maximumLineHeight = lineHeight
         let strokePercentage = storedOutlineWidth > 0
-            ? -(storedOutlineWidth / max(1, storedFont.pointSize) * 100)
+            ? storedOutlineWidth / max(1, storedFont.pointSize) * 100
             : 0
+        let commonAttributes: [NSAttributedString.Key: Any] = [
+            .font: storedFont,
+            .paragraphStyle: paragraph
+        ]
+        var fillAttributes = commonAttributes
+        fillAttributes[.foregroundColor] = storedTextColor
         let attributed = NSAttributedString(
             string: storedText,
-            attributes: [
-                .font: storedFont,
-                .foregroundColor: storedTextColor,
-                .strokeColor: storedOutlineColor,
-                .strokeWidth: strokePercentage,
-                .paragraphStyle: paragraph
-            ]
+            attributes: fillAttributes
         )
         cachedAttributedText = attributed
         cachedFramesetter = CTFramesetterCreateWithAttributedString(attributed)
+        if storedOutlineWidth > 0 {
+            var outlineAttributes = commonAttributes
+            outlineAttributes[.foregroundColor] = storedTextColor
+            outlineAttributes[.strokeColor] = storedOutlineColor
+            outlineAttributes[.strokeWidth] = strokePercentage
+            let outline = NSAttributedString(
+                string: storedText,
+                attributes: outlineAttributes
+            )
+            cachedOutlineAttributedText = outline
+            cachedOutlineFramesetter = CTFramesetterCreateWithAttributedString(
+                outline
+            )
+        } else {
+            cachedOutlineAttributedText = nil
+            cachedOutlineFramesetter = nil
+        }
         cachedKey = key
         cachedPath = nil
         cachedPathSize = nil
@@ -223,9 +257,11 @@ public final class OutlinedTextView: NSView {
     private func invalidateTextLayout() {
         cachedKey = nil
         cachedFramesetter = nil
+        cachedOutlineFramesetter = nil
         cachedPath = nil
         cachedPathSize = nil
         cachedAttributedText = nil
+        cachedOutlineAttributedText = nil
         cachedFramesetterIdentity = nil
         cachedPathIdentity = nil
         invalidateIntrinsicContentSize()

@@ -26,6 +26,16 @@ final class SubtitleOverlayViewTests: XCTestCase {
             view.targetTextView.textFont.pointSize,
             view.referenceTextView.textFont.pointSize
         )
+        XCTAssertEqual(
+            view.targetTextView.textFont.fontName,
+            "PingFangSC-Semibold"
+        )
+        XCTAssertEqual(
+            view.referenceTextView.textFont.fontName,
+            "PingFangSC-Medium"
+        )
+        XCTAssertEqual(view.targetTextView.outlineWidth, 1.0)
+        XCTAssertEqual(view.referenceTextView.outlineWidth, 0.85)
     }
 
     func testLayoutClampsEveryDimensionBeforeComputingNonoverlappingFrames() {
@@ -181,6 +191,45 @@ final class SubtitleOverlayViewTests: XCTestCase {
             view.referenceRegion.contentView.bounds.origin.y,
             0
         )
+    }
+
+    func testBilingualOverlayRendersForVisualRegression() throws {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        view.apply(layout: SubtitleLayoutSettings(
+            targetAreaHeight: 269,
+            targetFontSize: 36,
+            targetTopOffset: 0,
+            targetColor: "#FFD966",
+            referenceAreaHeight: 63,
+            referenceFontSize: 24,
+            referenceBottomOffset: 0,
+            referenceColor: "#FFFFFF"
+        ), display: display())
+        view.apply(model: model(
+            target: "AI-assisted cardiovascular intervention improves long-term outcomes — 2026.",
+            reference: "人工智能辅助心血管介入治疗，可显著改善复杂病例的长期预后。"
+        ))
+        view.layoutSubtreeIfNeeded()
+        view.flushPendingScrolls()
+        view.layoutSubtreeIfNeeded()
+
+        let bitmap = try XCTUnwrap(
+            view.bitmapImageRepForCachingDisplay(in: view.bounds)
+        )
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(
+            using: .png,
+            properties: [:]
+        ))
+
+        XCTAssertGreaterThan(png.count, 10_000)
+        if let outputPath = ProcessInfo.processInfo.environment[
+            "VOXHALO_OVERLAY_SNAPSHOT"
+        ], !outputPath.isEmpty {
+            try png.write(to: URL(fileURLWithPath: outputPath))
+        }
     }
 
     private func makeView() -> SubtitleOverlayView {
