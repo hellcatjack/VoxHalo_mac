@@ -13,7 +13,7 @@ Never record the authentication password or real identifying hotwords here. If a
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `8fd804e2ef14e72a5937c7af49b9a0d4a81d03f8` (the committed source tree used by the recorded executable) |
+| App Git commit | `a4e36bef29cddb61722a8e94e9b01a25eeff32d9` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
