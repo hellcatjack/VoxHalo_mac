@@ -10,6 +10,7 @@ final class BundleConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["CFBundleExecutable"] as? String, "VoxHalo")
         XCTAssertEqual(plist["CFBundleIdentifier"] as? String, "com.hellcatjack.voxhalo")
         XCTAssertEqual(plist["CFBundlePackageType"] as? String, "APPL")
+        XCTAssertEqual(plist["CFBundleIconFile"] as? String, "VoxHalo")
         XCTAssertEqual(plist["CFBundleShortVersionString"] as? String, "1.0.0")
         XCTAssertEqual(plist["CFBundleVersion"] as? String, "1")
         XCTAssertEqual(plist["LSMinimumSystemVersion"] as? String, "26.0")

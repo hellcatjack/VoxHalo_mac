@@ -5,6 +5,8 @@ public final class SubtitleOverlayView: NSView {
     private static let edgeInset: CGFloat = 64
     private static let regionGap: CGFloat = 14
     private static let bottomFollowTolerance: CGFloat = 2
+    private static let activeTranslationLightening: CGFloat = 0.10
+    private static let stableTranslationDarkening: CGFloat = 0.24
 
     public let targetRegion: NSScrollView
     public let referenceRegion: NSScrollView
@@ -165,12 +167,12 @@ public final class SubtitleOverlayView: NSView {
         targetTextView.textColor = Self.blended(
             selectedTargetColor,
             toward: .white,
-            amount: 0.06
+            amount: Self.activeTranslationLightening
         )
         targetTextView.historyTextColor = Self.blended(
             selectedTargetColor,
             toward: .black,
-            amount: 0.12
+            amount: Self.stableTranslationDarkening
         )
         targetTextView.outlineColor = Self.contrastingOutline(
             for: selectedTargetColor

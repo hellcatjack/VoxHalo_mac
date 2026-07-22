@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import XCTest
 
 final class ProjectPackagingTests: XCTestCase {
@@ -11,6 +12,7 @@ final class ProjectPackagingTests: XCTestCase {
         XCTAssertTrue(package.contains(".macOS(\"26.0\")"))
         XCTAssertEqual(plist["CFBundleIdentifier"] as? String, "com.hellcatjack.voxhalo")
         XCTAssertEqual(plist["CFBundleExecutable"] as? String, "VoxHalo")
+        XCTAssertEqual(plist["CFBundleIconFile"] as? String, "VoxHalo")
     }
 
     func testReleaseScriptBuildsFixedArm64AppPathAndSignsWithEntitlements() throws {
@@ -23,6 +25,9 @@ final class ProjectPackagingTests: XCTestCase {
         XCTAssertTrue(script.contains("dist/VoxHalo.app/Contents/MacOS/VoxHalo"))
         XCTAssertTrue(script.contains("install -m 0755"))
         XCTAssertTrue(script.contains("Config/Info.plist"))
+        XCTAssertTrue(script.contains("Config/PCCSAppIconSource.png"))
+        XCTAssertTrue(script.contains("iconutil -c icns"))
+        XCTAssertTrue(script.contains("Contents/Resources/VoxHalo.icns"))
         XCTAssertTrue(script.contains("--options runtime"))
         XCTAssertTrue(script.contains("Config/VoxHalo.entitlements"))
         XCTAssertTrue(script.contains("--requirements"))
@@ -30,6 +35,26 @@ final class ProjectPackagingTests: XCTestCase {
             "designated => identifier \"com.hellcatjack.voxhalo\""
         ))
         XCTAssertTrue(script.contains("scripts/verify-app.sh"))
+    }
+
+    func testOfficialPCCSAppIconSourceIsSquareAndHighResolution() throws {
+        let url = packageRoot.appendingPathComponent(
+            "Config/PCCSAppIconSource.png"
+        )
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(
+            Array(data.prefix(8)),
+            [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        )
+        let source = try XCTUnwrap(
+            CGImageSourceCreateWithData(data as CFData, nil)
+        )
+        let properties = try XCTUnwrap(
+            CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any]
+        )
+        XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 512)
+        XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 512)
     }
 
     func testBuildScriptNeverCopiesPrivateRuntimeOrDevelopmentMaterial() throws {
@@ -73,6 +98,8 @@ final class ProjectPackagingTests: XCTestCase {
             "settings.json",
             "client.log",
             "AuthPassword",
+            "CFBundleIconFile",
+            "VoxHalo.icns",
             ".exe",
             ".dll",
             ".pdb",

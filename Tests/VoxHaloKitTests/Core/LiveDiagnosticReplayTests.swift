@@ -182,6 +182,11 @@ final class LiveDiagnosticReplayTests: XCTestCase {
                     historyColor.isEqual(activeColor),
                     "the newest translation lost its distinct fill color"
                 )
+                XCTAssertGreaterThan(
+                    activeColor.replayRelativeLuminance,
+                    historyColor.replayRelativeLuminance + 0.4,
+                    "the newest translation did not remain visibly brighter"
+                )
                 verifiedLatestHighlights += 1
             }
 
@@ -403,6 +408,20 @@ final class LiveDiagnosticReplayTests: XCTestCase {
 
     private func formatMilliseconds(_ value: Double) -> String {
         String(format: "%.0f", value)
+    }
+}
+
+private extension NSColor {
+    var replayRelativeLuminance: CGFloat {
+        guard let rgb = usingColorSpace(.deviceRGB) else { return 0 }
+        func linearized(_ component: CGFloat) -> CGFloat {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linearized(rgb.redComponent)
+            + 0.7152 * linearized(rgb.greenComponent)
+            + 0.0722 * linearized(rgb.blueComponent)
     }
 }
 

@@ -12,6 +12,7 @@ else
 fi
 INFO="$APP/Contents/Info.plist"
 EXECUTABLE="$APP/Contents/MacOS/VoxHalo"
+ICON="$APP/Contents/Resources/VoxHalo.icns"
 
 fail() {
     print -u2 "VoxHalo bundle verification failed: $1"
@@ -21,6 +22,7 @@ fail() {
 [[ -d "$APP" ]] || fail "bundle does not exist: $APP_INPUT"
 [[ -f "$INFO" ]] || fail "Info.plist is missing"
 [[ -x "$EXECUTABLE" ]] || fail "VoxHalo executable is missing or not executable"
+[[ -f "$ICON" ]] || fail "VoxHalo app icon is missing"
 
 plutil -lint "$INFO" >/dev/null
 
@@ -32,6 +34,8 @@ plist_value() {
     || fail "unexpected bundle identifier"
 [[ "$(plist_value CFBundleExecutable)" == "VoxHalo" ]] \
     || fail "unexpected executable name"
+[[ "$(plist_value CFBundleIconFile)" == "VoxHalo" ]] \
+    || fail "unexpected app icon name"
 [[ "$(plist_value LSMinimumSystemVersion)" == "26.0" ]] \
     || fail "LSMinimumSystemVersion must be 26.0"
 [[ "$(plist_value NSHighResolutionCapable)" == "true" ]] \
@@ -57,6 +61,11 @@ DESIGNATED_REQUIREMENT="$(codesign -dr - "$APP" 2>&1)"
 
 TEMPORARY_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/voxhalo-verify.XXXXXX")"
 trap 'rm -rf "$TEMPORARY_DIRECTORY"' EXIT
+ICONSET="$TEMPORARY_DIRECTORY/VoxHalo.iconset"
+iconutil -c iconset "$ICON" -o "$ICONSET" >/dev/null 2>&1 \
+    || fail "app icon is not a valid ICNS file"
+[[ -f "$ICONSET/icon_512x512@2x.png" ]] \
+    || fail "app icon is missing its 1024-pixel representation"
 SIGNED_ENTITLEMENTS="$TEMPORARY_DIRECTORY/entitlements.plist"
 codesign -d --entitlements :- "$APP" >"$SIGNED_ENTITLEMENTS" 2>/dev/null \
     || fail "signed entitlements could not be read"

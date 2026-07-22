@@ -76,8 +76,8 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertTrue(view.bounds.contains(view.referenceRegion.frame))
         XCTAssertEqual(view.targetTextView.textFont.pointSize, 56)
         XCTAssertEqual(view.referenceTextView.textFont.pointSize, 16)
-        XCTAssertEqual(view.targetTextView.textColor.hexRGB, "#FFDB6F")
-        XCTAssertEqual(view.targetTextView.historyTextColor?.hexRGB, "#E0BF5A")
+        XCTAssertEqual(view.targetTextView.textColor.hexRGB, "#FFDD75")
+        XCTAssertEqual(view.targetTextView.historyTextColor?.hexRGB, "#C2A54E")
         XCTAssertEqual(view.referenceTextView.textColor.hexRGB, "#8FE8FF")
     }
 
@@ -135,12 +135,43 @@ final class SubtitleOverlayViewTests: XCTestCase {
             ) as? NSColor
         )
 
-        XCTAssertLessThan(historyColor.relativeLuminance, 0.8)
+        XCTAssertEqual(historyColor.hexRGB, "#C2C2C2")
+        XCTAssertEqual(activeColor.hexRGB, "#FFFFFF")
+        XCTAssertLessThan(historyColor.relativeLuminance, 0.6)
         XCTAssertGreaterThan(activeColor.relativeLuminance, 0.99)
         XCTAssertGreaterThan(
             activeColor.relativeLuminance,
-            historyColor.relativeLuminance + 0.15
+            historyColor.relativeLuminance + 0.4
         )
+    }
+
+    func testEveryTargetPaletteColorKeepsAStrongLatestHistoryLuminanceGap() throws {
+        for choice in SubtitleColorChoice.all {
+            let view = SubtitleOverlayView(
+                frame: NSRect(x: 0, y: 0, width: 1_200, height: 800)
+            )
+            view.apply(layout: SubtitleLayoutSettings(
+                targetAreaHeight: 264,
+                targetFontSize: 36,
+                targetTopOffset: 0,
+                targetColor: choice.hex,
+                referenceAreaHeight: 96,
+                referenceFontSize: 24,
+                referenceBottomOffset: 0,
+                referenceColor: "#F4F4F4"
+            ), display: display(width: 1_200, height: 800))
+
+            let active = view.targetTextView.textColor
+            let history = try XCTUnwrap(
+                view.targetTextView.historyTextColor,
+                choice.name
+            )
+            XCTAssertGreaterThan(
+                active.relativeLuminance - history.relativeLuminance,
+                0.28,
+                choice.name
+            )
+        }
     }
 
     func testTargetIsOneContinuousBlockAndReferenceUsesBoundedSegments() {

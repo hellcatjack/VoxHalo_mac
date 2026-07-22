@@ -10,6 +10,8 @@
     <string>VoxHalo</string>
     <key>CFBundleIdentifier</key>
     <string>com.hellcatjack.voxhalo</string>
+    <key>CFBundleIconFile</key>
+    <string>VoxHalo</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
