@@ -56,8 +56,9 @@ VOXHALO_CONTRAST_SNAPSHOT=/tmp/voxhalo-contrast.png \
 swift test --filter SubtitleOverlayViewTests.testSameColorBackgroundsRetainDarkSubtitleEdges
 ```
 
-The test requires dark separating edge pixels in every panel and optionally
-writes the complete bilingual comparison board for visual inspection.
+The test requires dark separating edge pixels in every panel, renders a dimmer
+stable sentence beside a brighter active sentence, and optionally writes the
+complete bilingual comparison board for visual inspection.
 
 Build and verify the release application:
 
