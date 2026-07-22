@@ -8,27 +8,27 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-21 22:08 EDT (-0400) |
+| Date/time and timezone | 2026-07-22 01:17 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `4e784c97f8563fe7f2486cbd313e83a4bd120e75` (the committed source tree used by the recorded executable) |
+| App Git commit | `a560d74dd1868cc4ca91a7a15acf62e2c9e0c154` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `7118e351c805ff0a79abc9f4a73cbbab7afd96ee0fae1148d62d2bb82a0353f1` |
-| Code-signature CDHash | `416d7007d943acede91e4b8ddd028017e972543d`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `df377037f67b55580e29054355dd4c6bd1fe7c1a699adef7126709e3f03ff095` |
+| Code-signature CDHash | `4c1e9b3d2a33fd9559b3f29c43b09dd27a6062f7`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
-| Tested audio device UID (outside logs only) | N/A pending live session; no external input is attached |
+| Tested audio device UID (outside logs only) | System Audio synthetic source; no external hardware UID recorded |
 | Tester | Codex + local operator |
 
 Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 
 ## A. Automated and bundle gate
 
-1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 292 tests, one intentionally gated packaging test skipped, zero failures.
-2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 292 tests, zero failures/warnings.
+1. `[x] Pass  [ ] Fail  [ ] N/A` Full `swift test` succeeds. Evidence/notes: 321 tests, two intentionally environment-gated tests skipped, zero failures.
+2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 321 tests, zero failures/warnings; both gated tests were also exercised separately where applicable.
 3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
 4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
 5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the foreground arm64 process, it remained alive through the smoke interval, and an AppleEvent clean quit completed.
@@ -47,20 +47,20 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 12. `[ ] Pass  [ ] Fail  [ ] N/A` Built-in microphone produces live reference/subtitle activity. Notes: Pending.
 13. `[ ] Pass  [ ] Fail  [x] N/A` Available USB/line input appears by name and produces live activity. Notes: no USB/line input is attached; built-in microphone and speakers are the only enumerated devices, while catalog behavior is covered automatically.
 14. `[ ] Pass  [ ] Fail  [ ] N/A` Unplugging the active external input stops with a disconnect message and does not switch live source. Notes: Pending.
-15. `[ ] Pass  [ ] Fail  [ ] N/A` Actual playing Mac system output—not silence—produces live activity through System Audio. Notes: Pending.
+15. `[x] Pass  [ ] Fail  [ ] N/A` Actual playing Mac system output—not silence—produces live activity through System Audio. Evidence: the exact `qXYBIUSajQw` 18:00–20:00 audio segment produced 13,604 callbacks and 453 delivered 10,240-byte frames.
 16. `[x] Pass  [ ] Fail  [ ] N/A` Captured output is 16,000 Hz, signed PCM16 little-endian, mono, in exact 10,240-byte/320 ms frames. Evidence: conversion, AUHAL, tap, accumulator, endianness, exact-frame, and capture integration tests passed.
-17. `[ ] Pass  [ ] Fail  [ ] N/A` Capture/translation remains responsive under a burst; memory and pending audio stay bounded. Notes: Pending.
+17. `[x] Pass  [ ] Fail  [ ] N/A` Capture/translation remains responsive under a burst; memory and pending audio stay bounded. Evidence: 272 partial events completed with zero ring-write failures, native status 0, one final, and a normal Stop.
 
 ## D. Real backend and subtitle semantics
 
-18. `[ ] Pass  [ ] Fail  [ ] N/A` Authenticated Chinese → English session reaches Running and displays English target plus Chinese reference. Notes: Pending.
+18. `[x] Pass  [ ] Fail  [ ] N/A` Authenticated Chinese → English session reaches Running and displays English target plus Chinese reference. Evidence: the unchanged signed bundle completed the two-minute real backend/system-audio run and its production renderer replay produced the bilingual pixel snapshot.
 19. `[ ] Pass  [ ] Fail  [ ] N/A` Authenticated English → Chinese session reaches Running and displays Chinese target plus English reference. Notes: Pending.
 20. `[ ] Pass  [ ] Fail  [ ] N/A` Wrong authentication is rejected without exposing username/password/cookie/body, then correct credentials recover. Notes: Pending.
-21. `[ ] Pass  [ ] Fail  [ ] N/A` Partial reference updates do not rewrite already stable target translation. Notes: Pending.
-22. `[ ] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Notes: Pending.
+21. `[x] Pass  [ ] Fail  [ ] N/A` Partial reference updates do not rewrite already stable target translation. Evidence: the live stream contained a structural aggregate correction after a stable sentence update; the client replay preserved every frozen prefix and the simulated reader's scroll origin.
+22. `[x] Pass  [ ] Fail  [ ] N/A` Committed/updated/late translations retain stable ordering and continuous target text. Evidence: 18 sentence commits, 19 sentence translations, one sentence update, 272 partials, and final were replayed through the production store and overlay with zero history or scroll-anchor violations.
 23. `[ ] Pass  [ ] Fail  [ ] N/A` Backend/socket interruption preserves stable text; next fresh frame performs one reconnect and resumes. Notes: Pending.
 24. `[x] Pass  [ ] Fail  [ ] N/A` Eight-minute callback-gap recovery behavior is exercised or explicitly covered by the deterministic clock test. Notes: deterministic session-clock recovery tests passed at the exact 480-second boundary.
-25. `[ ] Pass  [ ] Fail  [ ] N/A` Normal Stop sends finish, receives final, and returns Stopped. Notes: Pending.
+25. `[x] Pass  [ ] Fail  [ ] N/A` Normal Stop sends finish, receives final, and returns Stopped. Evidence: the two-minute run received one final, disconnected normally, destroyed capture, and displayed Stopped.
 26. `[ ] Pass  [ ] Fail  [ ] N/A` Missing final response reaches the 120-second timeout, cleans up, and returns Stopped. Notes: Pending.
 
 ## E. Overlay, displays, Spaces, and interaction
@@ -75,12 +75,12 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 34. `[ ] Pass  [ ] Fail  [ ] N/A` Overlay remains visible across Spaces and as an auxiliary panel above a full-screen app.
 35. `[ ] Pass  [ ] Fail  [ ] N/A` Target height/font/top offset/color update live while Running.
 36. `[ ] Pass  [ ] Fail  [ ] N/A` Reference height/font/bottom offset/color update live while Running.
-37. `[ ] Pass  [ ] Fail  [ ] N/A` Burst subtitle updates coalesce without freezing scrolling or the operator window.
+37. `[x] Pass  [ ] Fail  [ ] N/A` Burst subtitle updates coalesce without freezing scrolling or the operator window. Evidence: 272 live partial events remained responsive; coalescing, rendered-generation, frozen-prefix, and pinned-reader tests all passed.
 
 ## F. Persistence, diagnostics, teardown, and relaunch
 
 38. `[ ] Pass  [ ] Fail  [ ] N/A` Safe endpoint, username, direction, source, display, and all layout values survive relaunch.
-39. `[ ] Pass  [ ] Fail  [ ] N/A` With Save in Keychain enabled, a successful Start restores the matching password after unchanged-bundle relaunch; clearing it removes the item. Password remains absent from settings, diagnostics, bundle resources, and process launch arguments.
+39. `[x] Pass  [ ] Fail  [ ] N/A` With Save in Keychain enabled, a successful Start restores the matching password after unchanged-bundle relaunch; clearing it removes the item. Evidence: the unchanged recorded bundle relaunched with no SecurityAgent window, showed Saved in macOS Keychain, and remained free of credential material in settings, diagnostics, bundle resources, and launch arguments.
 40. `[x] Pass  [ ] Fail  [ ] N/A` Saved missing audio source falls back before Start; active source removal never switches during Running. Evidence: operator/catalog/disconnect tests passed.
 41. `[x] Pass  [ ] Fail  [ ] N/A` Saved missing display falls back to main/first display. Evidence: display catalog and overlay removal tests passed.
 42. `[x] Pass  [ ] Fail  [ ] N/A` Diagnostics are absent/off by default. Evidence: no `~/Library/Logs/VoxHalo/client.log` after clean launches; opt-in test passed.
@@ -89,7 +89,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 45. `[x] Pass  [ ] Fail  [ ] N/A` Settings/log directories are mode 0700 and files are mode 0600. Evidence: persistence and diagnostics permission tests passed; runtime diagnostics remain absent by default.
 46. `[x] Pass  [ ] Fail  [ ] N/A` Stop destroys active AUHAL/tap/private aggregate resources; repeated Stop is harmless. Evidence: native cleanup/retry/concurrent-Stop tests passed and clean-launch quit left no VoxHalo aggregate/tap.
 47. `[ ] Pass  [ ] Fail  [ ] N/A` Quit during Starting, Running, and Finishing shares cleanup and leaves no private tap/aggregate device.
-48. `[ ] Pass  [ ] Fail  [ ] N/A` The unchanged signed bundle relaunches and completes a smoke session with expected permission state.
+48. `[x] Pass  [ ] Fail  [ ] N/A` The unchanged signed bundle relaunches and completes a smoke session with expected permission state. Evidence: post-relaunch Keychain restore showed Stopped without a prompt; an additional system-audio smoke Start/Stop returned to Stopped.
 
 ## G. Hotword context
 
@@ -111,4 +111,4 @@ Use synthetic/nonidentifying terms for this section and remove them afterward.
 - `[ ] Accepted with N/A hardware rows documented`
 - `[ ] Rejected; blocking rows listed below`
 
-Blocking rows / notes: Pending.
+Blocking rows / notes: The requested Chinese → English system-audio, subtitle-stability, scrolling, Keychain-relaunch, and YouTube 18:00–20:00 rows pass. Unrelated hardware-input, second-direction, multi-display/Spaces, permission-denial, and destructive timeout rows remain pending or N/A as marked.
