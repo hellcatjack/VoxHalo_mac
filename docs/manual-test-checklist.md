@@ -8,17 +8,17 @@ Never record the authentication password or real identifying hotwords here. If a
 
 | Field | Recorded value |
 |---|---|
-| Date/time and timezone | 2026-07-21 21:06 EDT (-0400) |
+| Date/time and timezone | 2026-07-21 22:04 EDT (-0400) |
 | macOS version/build | 26.5.2 (25F84) |
 | Hardware/model | MacBook Air Mac16,12; Apple M4; 24 GB |
 | Xcode version/build | Xcode 26.6 (17F113) |
 | Swift version | Apple Swift 6.3.3; target arm64-apple-macosx26.0 |
-| App Git commit | `4e28179` (the committed source tree used by the recorded executable) |
+| App Git commit | `8859ef0ae1907acc65b9a6a1ae9dec883e5f0b7b` (the committed source tree used by the recorded executable) |
 | Windows reference commit | `0867afe48e2196e84512c842aacb6117a1f8799e` |
 | Bundle path | `dist/VoxHalo.app` |
 | Bundle identifier | `com.hellcatjack.voxhalo` |
-| Executable architecture | arm64 only; executable SHA-256 `1b515769d16f005d1ce2627b1bc14e6580d4323eb136bce355a1296a92d49ed2` |
-| Code-signature CDHash | `6a12c38e29f2b31c88abf0b137a58cf17ebcece1`; ad hoc + runtime |
+| Executable architecture | arm64 only; executable SHA-256 `65d4f0f695b58e0600b34f1b7fd9aa24c9823219f469ba572e3e4c4cdbf5a32f` |
+| Code-signature CDHash | `930ff8f29090c0280ba06c36bedd5dcab2bf11d4`; ad hoc + runtime |
 | Endpoint (no userinfo/token) | `wss://ushome.amycat.com:18024/ws` |
 | Tested audio device UID (outside logs only) | N/A pending live session; no external input is attached |
 | Tester | Codex + local operator |
@@ -31,7 +31,7 @@ Result notation in each row: `[ ] Pass  [ ] Fail  [ ] N/A`.
 2. `[x] Pass  [ ] Fail  [ ] N/A` Complete strict-concurrency build with warnings as errors succeeds. Evidence/notes: 292 tests, zero failures/warnings.
 3. `[x] Pass  [ ] Fail  [ ] N/A` Opt-in packaging test builds and verifies the release bundle. Evidence/notes: 10/10 ProjectPackagingTests passed with `VOXHALO_RUN_PACKAGING_TESTS=1`.
 4. `[x] Pass  [ ] Fail  [ ] N/A` `scripts/verify-app.sh dist/VoxHalo.app` confirms plist, arm64, signature, Hardened Runtime, audio-input entitlement, absent sandbox, and clean payload. Evidence/notes: verifier passed on recorded CDHash.
-5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered foreground arm64 process and both operator/overlay windows; clean quit/relaunch completed.
+5. `[x] Pass  [ ] Fail  [ ] N/A` Bundle launches cleanly and reports no immediate crash. Evidence/notes: LaunchServices registered the foreground arm64 process, it remained alive through the smoke interval, and an AppleEvent clean quit completed.
 
 ## B. Permission grant, denial, and recovery
 
