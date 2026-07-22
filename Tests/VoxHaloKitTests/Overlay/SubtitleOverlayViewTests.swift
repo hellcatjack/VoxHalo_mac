@@ -76,7 +76,8 @@ final class SubtitleOverlayViewTests: XCTestCase {
         XCTAssertTrue(view.bounds.contains(view.referenceRegion.frame))
         XCTAssertEqual(view.targetTextView.textFont.pointSize, 56)
         XCTAssertEqual(view.referenceTextView.textFont.pointSize, 16)
-        XCTAssertEqual(view.targetTextView.textColor.hexRGB, "#FFD966")
+        XCTAssertEqual(view.targetTextView.textColor.hexRGB, "#FFDB6F")
+        XCTAssertEqual(view.targetTextView.historyTextColor?.hexRGB, "#E0BF5A")
         XCTAssertEqual(view.referenceTextView.textColor.hexRGB, "#8FE8FF")
     }
 
@@ -97,6 +98,49 @@ final class SubtitleOverlayViewTests: XCTestCase {
 
         XCTAssertEqual(view.targetTextView.outlineColor.hexRGB, "#FFFFFF")
         XCTAssertEqual(view.referenceTextView.outlineColor.hexRGB, "#FFFFFF")
+    }
+
+    func testActiveTranslationIsBrighterThanStableHistory() throws {
+        let view = SubtitleOverlayView(
+            frame: NSRect(x: 0, y: 0, width: 1_200, height: 800)
+        )
+        view.apply(layout: .defaults, display: display(width: 1_200, height: 800))
+        view.apply(model: SubtitleDisplayModel(
+            stablePrimaryLines: ["Previously translated sentence."],
+            activePrimaryText: "Newest translated sentence.",
+            referenceText: "最新识别原文",
+            targetLanguage: "English",
+            sourceLanguage: "Chinese",
+            isProcessing: true
+        ))
+        prepareTextCaches(view)
+
+        let rendered = try XCTUnwrap(view.targetTextView.cachedAttributedText)
+        let activeRange = (rendered.string as NSString).range(
+            of: "Newest translated sentence."
+        )
+        XCTAssertNotEqual(activeRange.location, NSNotFound)
+        let historyColor = try XCTUnwrap(
+            rendered.attribute(
+                .foregroundColor,
+                at: 0,
+                effectiveRange: nil
+            ) as? NSColor
+        )
+        let activeColor = try XCTUnwrap(
+            rendered.attribute(
+                .foregroundColor,
+                at: activeRange.location,
+                effectiveRange: nil
+            ) as? NSColor
+        )
+
+        XCTAssertLessThan(historyColor.relativeLuminance, 0.8)
+        XCTAssertGreaterThan(activeColor.relativeLuminance, 0.99)
+        XCTAssertGreaterThan(
+            activeColor.relativeLuminance,
+            historyColor.relativeLuminance + 0.15
+        )
     }
 
     func testTargetIsOneContinuousBlockAndReferenceUsesBoundedSegments() {
@@ -490,9 +534,13 @@ final class SubtitleOverlayViewTests: XCTestCase {
                 referenceBottomOffset: 0,
                 referenceColor: color
             ), display: display(width: panelSize.width, height: panelSize.height))
-            overlay.apply(model: model(
-                target: "Same-color video remains readable",
-                reference: "同色画面上的字幕仍然清晰可读"
+            overlay.apply(model: SubtitleDisplayModel(
+                stablePrimaryLines: ["Earlier translation."],
+                activePrimaryText: "Newest is brighter.",
+                referenceText: "同色画面上的字幕仍然清晰可读",
+                targetLanguage: "English",
+                sourceLanguage: "Chinese",
+                isProcessing: true
             ))
             canvas.addSubview(overlay)
             overlay.layoutSubtreeIfNeeded()
@@ -610,6 +658,18 @@ private final class ContrastSnapshotCanvas: NSView {
 }
 
 private extension NSColor {
+    var relativeLuminance: CGFloat {
+        guard let rgb = usingColorSpace(.deviceRGB) else { return 0 }
+        func linearized(_ component: CGFloat) -> CGFloat {
+            component <= 0.04045
+                ? component / 12.92
+                : pow((component + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linearized(rgb.redComponent)
+            + 0.7152 * linearized(rgb.greenComponent)
+            + 0.0722 * linearized(rgb.blueComponent)
+    }
+
     var hexRGB: String? {
         guard let rgb = usingColorSpace(.sRGB) else { return nil }
         return String(

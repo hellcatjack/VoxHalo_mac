@@ -129,4 +129,75 @@ final class OutlinedTextViewTests: XCTestCase {
         XCTAssertEqual(view.cachedFramesetterIdentity, framesetter)
         XCTAssertEqual(view.cacheBuildCount, buildCount)
     }
+
+    func testLatestSuffixUsesDistinctFillWithoutSplittingUnicode() throws {
+        let view = OutlinedTextView(
+            frame: NSRect(x: 0, y: 0, width: 620, height: 140)
+        )
+        let historyColor = NSColor(white: 0.72, alpha: 1)
+        view.textColor = .white
+        view.historyTextColor = historyColor
+        view.setText(
+            "Earlier translation. 最新🚀翻译。",
+            latestText: "最新🚀翻译。"
+        )
+        view.prepareLayoutCache()
+
+        let fill = try XCTUnwrap(view.cachedAttributedText)
+        let latestRange = (fill.string as NSString).range(of: "最新🚀翻译。")
+        XCTAssertNotEqual(latestRange.location, NSNotFound)
+        XCTAssertEqual(
+            fill.attribute(
+                .foregroundColor,
+                at: 0,
+                effectiveRange: nil
+            ) as? NSColor,
+            historyColor
+        )
+        XCTAssertEqual(
+            fill.attribute(
+                .foregroundColor,
+                at: latestRange.location,
+                effectiveRange: nil
+            ) as? NSColor,
+            .white
+        )
+
+        let outline = try XCTUnwrap(view.cachedOutlineAttributedText)
+        XCTAssertEqual(
+            outline.attribute(
+                .foregroundColor,
+                at: latestRange.location,
+                effectiveRange: nil
+            ) as? NSColor,
+            .white
+        )
+        XCTAssertEqual(view.contentGeneration, 1)
+    }
+
+    func testChangingOnlyLatestBoundaryRebuildsStyleNotContentGeneration() throws {
+        let view = OutlinedTextView(
+            frame: NSRect(x: 0, y: 0, width: 620, height: 140)
+        )
+        view.historyTextColor = NSColor(white: 0.75, alpha: 1)
+        view.setText("first sentence second sentence", latestText: "second sentence")
+        view.prepareLayoutCache()
+        let firstIdentity = try XCTUnwrap(view.cachedFramesetterIdentity)
+        let contentGeneration = view.contentGeneration
+
+        view.latestText = ""
+        view.prepareLayoutCache()
+
+        XCTAssertEqual(view.contentGeneration, contentGeneration)
+        XCTAssertNotEqual(view.cachedFramesetterIdentity, firstIdentity)
+        let fill = try XCTUnwrap(view.cachedAttributedText)
+        XCTAssertEqual(
+            fill.attribute(
+                .foregroundColor,
+                at: (fill.string as NSString).length - 1,
+                effectiveRange: nil
+            ) as? NSColor,
+            view.historyTextColor
+        )
+    }
 }

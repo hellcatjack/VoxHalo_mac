@@ -68,17 +68,22 @@ public final class SubtitleOverlayView: NSView {
 
     public func apply(model: SubtitleDisplayModel) {
         let target = model.primaryText
+        let latestTarget = model.activePrimaryText
         let reference = SubtitleText.joined(model.referenceSegments)
-        if targetTextView.text != target {
+        let targetChanged = targetTextView.text != target
+        let latestTargetChanged = targetTextView.latestText != latestTarget
+        if targetChanged || latestTargetChanged {
             // Capture the reader's intent before changing the text or its
             // document height. A structural correction must keep following
             // the newest edge when the reader was already there; otherwise a
             // single extra wrapped line permanently strands the viewport above
             // every later translation. A reader who actually scrolled up still
             // keeps the same position across both corrections and appends.
-            let followsBottom = shouldFollowTargetBottom()
-            targetTextView.text = target
-            queueTargetScroll(followsBottom: followsBottom)
+            let followsBottom = targetChanged && shouldFollowTargetBottom()
+            targetTextView.setText(target, latestText: latestTarget)
+            if targetChanged {
+                queueTargetScroll(followsBottom: followsBottom)
+            }
         }
         if referenceTextView.text != reference {
             referenceTextView.text = reference
@@ -153,12 +158,23 @@ public final class SubtitleOverlayView: NSView {
             size: layoutSettings.targetFontSize,
             fallbackWeight: .semibold
         )
-        let targetColor = NSColor(
+        let selectedTargetColor = NSColor(
             voxHaloHex: layoutSettings.targetColor,
             fallback: .white
         )
-        targetTextView.textColor = targetColor
-        targetTextView.outlineColor = Self.contrastingOutline(for: targetColor)
+        targetTextView.textColor = Self.blended(
+            selectedTargetColor,
+            toward: .white,
+            amount: 0.06
+        )
+        targetTextView.historyTextColor = Self.blended(
+            selectedTargetColor,
+            toward: .black,
+            amount: 0.12
+        )
+        targetTextView.outlineColor = Self.contrastingOutline(
+            for: selectedTargetColor
+        )
         targetTextView.outlineWidth = Self.outlineWidth(
             for: layoutSettings.targetFontSize
         )
@@ -178,6 +194,8 @@ public final class SubtitleOverlayView: NSView {
             fallback: NSColor(white: 0.96, alpha: 1)
         )
         referenceTextView.textColor = referenceColor
+        referenceTextView.historyTextColor = nil
+        referenceTextView.latestText = ""
         referenceTextView.outlineColor = Self.contrastingOutline(
             for: referenceColor
         )
@@ -198,6 +216,27 @@ public final class SubtitleOverlayView: NSView {
 
     private static func shadowBlur(for outlineWidth: CGFloat) -> CGFloat {
         max(2.5, outlineWidth * 1.15)
+    }
+
+    private static func blended(
+        _ color: NSColor,
+        toward target: NSColor,
+        amount: CGFloat
+    ) -> NSColor {
+        guard let sourceRGB = color.usingColorSpace(.deviceRGB),
+              let targetRGB = target.usingColorSpace(.deviceRGB) else {
+            return color
+        }
+        let fraction = min(1, max(0, amount))
+        return NSColor(
+            deviceRed: sourceRGB.redComponent
+                + (targetRGB.redComponent - sourceRGB.redComponent) * fraction,
+            green: sourceRGB.greenComponent
+                + (targetRGB.greenComponent - sourceRGB.greenComponent) * fraction,
+            blue: sourceRGB.blueComponent
+                + (targetRGB.blueComponent - sourceRGB.blueComponent) * fraction,
+            alpha: sourceRGB.alphaComponent
+        )
     }
 
     private static func contrastingOutline(for textColor: NSColor) -> NSColor {

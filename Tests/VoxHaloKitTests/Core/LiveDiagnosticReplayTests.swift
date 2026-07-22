@@ -56,6 +56,7 @@ final class LiveDiagnosticReplayTests: XCTestCase {
         var readerPinned = false
         var verifiedFrozenPrefixes = 0
         var verifiedFollowingPositions = 0
+        var verifiedLatestHighlights = 0
         var pendingExplicitRevisions: [Int: LivePendingRevision] = [:]
         var pendingUnsequencedRevisions: [LivePendingRevision] = []
         var explicitSourceRevisions = 0
@@ -155,6 +156,35 @@ final class LiveDiagnosticReplayTests: XCTestCase {
             )
             verifiedFollowingPositions += 1
 
+            if !model.stablePrimaryText.isEmpty,
+               !model.activePrimaryText.isEmpty {
+                let rendered = try XCTUnwrap(
+                    followingView.targetTextView.cachedAttributedText
+                )
+                let renderedLength = (rendered.string as NSString).length
+                let activeLength = (model.activePrimaryText as NSString).length
+                XCTAssertGreaterThan(renderedLength, activeLength)
+                let historyColor = try XCTUnwrap(
+                    rendered.attribute(
+                        .foregroundColor,
+                        at: 0,
+                        effectiveRange: nil
+                    ) as? NSColor
+                )
+                let activeColor = try XCTUnwrap(
+                    rendered.attribute(
+                        .foregroundColor,
+                        at: renderedLength - activeLength,
+                        effectiveRange: nil
+                    ) as? NSColor
+                )
+                XCTAssertFalse(
+                    historyColor.isEqual(activeColor),
+                    "the newest translation lost its distinct fill color"
+                )
+                verifiedLatestHighlights += 1
+            }
+
             if readerPinned {
                 XCTAssertEqual(
                     view.targetRegion.contentView.bounds.origin.y,
@@ -181,6 +211,7 @@ final class LiveDiagnosticReplayTests: XCTestCase {
         XCTAssertTrue(readerPinned)
         XCTAssertGreaterThan(verifiedFrozenPrefixes, 50)
         XCTAssertGreaterThan(verifiedFollowingPositions, 100)
+        XCTAssertGreaterThan(verifiedLatestHighlights, 50)
         XCTAssertGreaterThan(store.current.primarySegments.count, 10)
         XCTAssertGreaterThan(store.current.primaryText.utf16.count, 480)
         XCTAssertEqual(view.targetTextView.text, store.current.primaryText)

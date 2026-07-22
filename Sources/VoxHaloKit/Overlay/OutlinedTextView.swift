@@ -15,6 +15,8 @@ public final class OutlinedTextView: NSView {
         let fontName: String
         let fontSize: CGFloat
         let textColor: ColorComponents
+        let historyTextColor: ColorComponents?
+        let latestText: String
         let outlineColor: ColorComponents
         let outlineWidth: CGFloat
         let alignment: NSTextAlignment
@@ -24,6 +26,8 @@ public final class OutlinedTextView: NSView {
     private var storedText = ""
     private var storedFont = NSFont.systemFont(ofSize: 36, weight: .semibold)
     private var storedTextColor = NSColor.white
+    private var storedHistoryTextColor: NSColor?
+    private var storedLatestText = ""
     private var storedOutlineColor = NSColor.black.withAlphaComponent(0.9)
     private var storedOutlineWidth: CGFloat = 1.8
     private var storedOutlineShadowColor = NSColor.black.withAlphaComponent(0.9)
@@ -63,13 +67,30 @@ public final class OutlinedTextView: NSView {
     public var text: String {
         get { storedText }
         set {
-            let normalized = SubtitleText.normalized(newValue)
-            guard normalized != storedText else { return }
-            storedText = normalized
-            setAccessibilityValue(normalized)
-            contentGeneration &+= 1
-            invalidateTextLayout()
+            setText(newValue, latestText: storedLatestText)
         }
+    }
+
+    public var latestText: String {
+        get { storedLatestText }
+        set {
+            setText(storedText, latestText: newValue)
+        }
+    }
+
+    public func setText(_ value: String, latestText: String) {
+        let normalizedText = SubtitleText.normalized(value)
+        let normalizedLatest = SubtitleText.normalized(latestText)
+        let textChanged = normalizedText != storedText
+        let latestChanged = normalizedLatest != storedLatestText
+        guard textChanged || latestChanged else { return }
+        storedText = normalizedText
+        storedLatestText = normalizedLatest
+        if textChanged {
+            setAccessibilityValue(normalizedText)
+            contentGeneration &+= 1
+        }
+        invalidateTextLayout()
     }
 
     public var textFont: NSFont {
@@ -87,6 +108,21 @@ public final class OutlinedTextView: NSView {
             guard !storedTextColor.isEqual(newValue) else { return }
             storedTextColor = newValue
             invalidateTextLayout()
+        }
+    }
+
+    public var historyTextColor: NSColor? {
+        get { storedHistoryTextColor }
+        set {
+            switch (storedHistoryTextColor, newValue) {
+            case (nil, nil):
+                return
+            case let (old?, new?) where old.isEqual(new):
+                return
+            default:
+                storedHistoryTextColor = newValue
+                invalidateTextLayout()
+            }
         }
     }
 
@@ -235,6 +271,8 @@ public final class OutlinedTextView: NSView {
             fontName: storedFont.fontName,
             fontSize: storedFont.pointSize,
             textColor: Self.components(storedTextColor),
+            historyTextColor: storedHistoryTextColor.map(Self.components),
+            latestText: storedLatestText,
             outlineColor: Self.components(storedOutlineColor),
             outlineWidth: storedOutlineWidth,
             alignment: storedAlignment,
@@ -255,23 +293,39 @@ public final class OutlinedTextView: NSView {
             .font: storedFont,
             .paragraphStyle: paragraph
         ]
+        let latestRange = latestTextRange()
+        let baseTextColor = storedHistoryTextColor ?? storedTextColor
         var fillAttributes = commonAttributes
-        fillAttributes[.foregroundColor] = storedTextColor
-        let attributed = NSAttributedString(
+        fillAttributes[.foregroundColor] = baseTextColor
+        let attributed = NSMutableAttributedString(
             string: storedText,
             attributes: fillAttributes
         )
+        if let latestRange {
+            attributed.addAttribute(
+                .foregroundColor,
+                value: storedTextColor,
+                range: latestRange
+            )
+        }
         cachedAttributedText = attributed
         cachedFramesetter = CTFramesetterCreateWithAttributedString(attributed)
         if storedOutlineWidth > 0 {
             var outlineAttributes = commonAttributes
-            outlineAttributes[.foregroundColor] = storedTextColor
+            outlineAttributes[.foregroundColor] = baseTextColor
             outlineAttributes[.strokeColor] = storedOutlineColor
             outlineAttributes[.strokeWidth] = strokePercentage
-            let outline = NSAttributedString(
+            let outline = NSMutableAttributedString(
                 string: storedText,
                 attributes: outlineAttributes
             )
+            if let latestRange {
+                outline.addAttribute(
+                    .foregroundColor,
+                    value: storedTextColor,
+                    range: latestRange
+                )
+            }
             cachedOutlineAttributedText = outline
             cachedOutlineFramesetter = CTFramesetterCreateWithAttributedString(
                 outline
@@ -287,6 +341,20 @@ public final class OutlinedTextView: NSView {
         cacheBuildCount += 1
         identitySequence &+= 1
         cachedFramesetterIdentity = identitySequence
+    }
+
+    private func latestTextRange() -> NSRange? {
+        guard !storedLatestText.isEmpty,
+              storedText.hasSuffix(storedLatestText) else {
+            return nil
+        }
+        let textLength = (storedText as NSString).length
+        let latestLength = (storedLatestText as NSString).length
+        guard latestLength <= textLength else { return nil }
+        return NSRange(
+            location: textLength - latestLength,
+            length: latestLength
+        )
     }
 
     private func invalidateTextLayout() {
