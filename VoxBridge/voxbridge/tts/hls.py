@@ -26,8 +26,10 @@ logger = logging.getLogger(__name__)
 
 ACTIVE_PCM_BURST_RATE = 2.0
 ACTIVE_PCM_BURST_MEDIA_SEC = 2.0
-DEFAULT_ENGLISH_AUDIO_MS_PER_CHAR = 65.0
-DEFAULT_CHINESE_AUDIO_MS_PER_CHAR = 180.0
+from .policy import speech_policy
+
+DEFAULT_ENGLISH_AUDIO_MS_PER_CHAR = speech_policy("English").default_audio_ms_per_char
+DEFAULT_CHINESE_AUDIO_MS_PER_CHAR = speech_policy("Chinese").default_audio_ms_per_char
 MIN_ESTIMATED_SENTENCE_AUDIO_MS = 500
 DURATION_ESTIMATE_ALPHA = 0.25
 ItemKey = tuple[str, int, str, str]
@@ -1070,10 +1072,8 @@ class SharedHLSTTSPublisher:
 
     @staticmethod
     def _language_key(language: str) -> str:
-        normalized = str(language or "").strip().lower()
-        if "chinese" in normalized or "中文" in normalized:
-            return "chinese"
-        return "english"
+        from .policy import speech_policy
+        return speech_policy(language).language.lower()
 
     def _estimate_item_audio_ms(self, item: TTSReadyItem) -> int:
         language = self._language_key(item.target_language)

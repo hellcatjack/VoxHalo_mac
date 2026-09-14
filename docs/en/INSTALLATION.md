@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/INSTALLATION.md) · [README](../../README.md) · [Models](MODELS.md)
 
-These instructions match the repository's `setup.sh` and App 1.5.1/build 16. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
+These instructions match the repository's `setup.sh` and App 1.5.2/build 17. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
 
 ## 1. Check your Mac
 
@@ -54,7 +54,7 @@ git clone https://github.com/hellcatjack/VoxHalo_mac.git
 cd VoxHalo_mac
 ```
 
-The public HTTPS clone does not require a GitHub login. If you already have this checkout, use the update instructions instead of nesting another clone inside it. The `v1.5.1` tag preserves the original source release; `main` also carries later documentation updates.
+The public HTTPS clone does not require a GitHub login. If you already have this checkout, use the update instructions instead of nesting another clone inside it. The `v1.5.1` tag preserves the original source release; `main` carries the latest code and documentation.
 
 ## 4. Install the runtime, models, and App
 

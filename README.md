@@ -4,13 +4,15 @@
 
 Local Chinese ↔ English speech interpretation for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
 
-**App:** 1.5.1, build 16 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App:** 1.5.2, build 17 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
 The App is named **同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 
 ## Documentation
 
 - [Detailed installation, updates, and troubleshooting](docs/en/INSTALLATION.md)
+- [Phase 1 refactor validation](docs/en/PHASE1-VALIDATION.md)
+- [Architecture and reusable module boundaries](docs/en/ARCHITECTURE.md)
 - [Models, quantization, prompts, and licenses](docs/en/MODELS.md)
 - [中文说明](README.zh-CN.md)
 - [Change history](CHANGELOG.en.md) · [Release validation](docs/PUBLICATION.md)

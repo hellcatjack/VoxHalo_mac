@@ -6,6 +6,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from voxbridge.languages import LANGUAGES
+
 ZIPFORMER_DISABLED = "Zipformer XL is disabled; refresh the page and use Qwen3-ASR"
 # Public data used by the retained standalone adapter, not a production loader.
 XL_FILES = ("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
@@ -36,7 +38,7 @@ class ASREngineRegistry:
 
     def describe(self) -> list[dict]:
         return [
-            {"id": "qwen3-asr", "name": "Qwen3-ASR", "languages": ["Chinese", "English"],
+            {"id": "qwen3-asr", "name": "Qwen3-ASR", "languages": [language.asr_label for language in LANGUAGES],
              "available": True, "load_state": "ready", "supports_context": True},
         ]
 

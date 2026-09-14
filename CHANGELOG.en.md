@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.5.2 · build 17 · 2026-09-14
+
+- Phase 1 modularization: language catalog, request contracts, translation service and queue, text rules, and speech policy/output interfaces.
+- Retains Chinese/English models, prompts, complete Chinese sentences, PCM/HLS publication, catch-up speed and playback-synchronized subtitles.
+- Moves the browser template out of the business entry point; adds bilingual architecture documentation and a native long-audio replay harness.
+- New service validation rejects unavailable languages and inconsistent directions while preserving configured legacy Chinese/English labels.
+
 ## Chinese name update · 2026-09-14
 
 - Standardized the Chinese project name to “同声传译” across App titles, menu-bar and permission messages, bundle filenames, and bilingual documentation.

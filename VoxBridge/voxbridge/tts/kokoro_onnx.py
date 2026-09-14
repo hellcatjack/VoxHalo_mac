@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+from .policy import speech_policy
 
 
 class TTSConfigurationError(RuntimeError):
@@ -147,12 +148,11 @@ class KokoroOnnxSynthesizer:
 
     @staticmethod
     def _normalize_language(target_language: str) -> str:
-        normalized = target_language.strip().lower()
-        if normalized in {"english", "en"}:
-            return "English"
-        if normalized in {"chinese", "zh"}:
-            return "Chinese"
-        raise TTSSynthesisError(f"unsupported target language: {target_language}")
+        from .policy import speech_policy
+        try:
+            return speech_policy(target_language).language
+        except ValueError as exc:
+            raise TTSSynthesisError(f"unsupported target language: {target_language}") from exc
 
     @staticmethod
     def split_chunks(text: str, target_language: str) -> tuple[str, ...]:
@@ -187,7 +187,7 @@ class KokoroOnnxSynthesizer:
                 if language == "English":
                     model_input = text
                     voice = self.config.english_voice
-                    lang = "en-us"
+                    lang = speech_policy(language).phonemizer_language
                     is_phonemes = False
                 else:
                     if self._zh_g2p is None:
@@ -201,7 +201,7 @@ class KokoroOnnxSynthesizer:
                     if not isinstance(model_input, str) or not model_input:
                         raise TTSSynthesisError("Chinese G2P returned invalid phonemes")
                     voice = self.config.chinese_voice
-                    lang = "cmn"
+                    lang = speech_policy(language).phonemizer_language
                     is_phonemes = True
                 samples, sample_rate = model.create(
                     model_input,

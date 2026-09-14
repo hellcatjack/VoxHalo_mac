@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/MODELS.md) · [Project README](../../README.md) · [Installation](INSTALLATION.md)
 
-This document describes App 1.5.1/build 16. The authoritative settings are in [macos_service.py](../../VoxBridge/tools/macos_service.py), the [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py), and the [asset manifest](../../scripts/runtime-assets.json). It describes this implementation, not every capability advertised by the upstream model families.
+This document describes App 1.5.2/build 17. The authoritative settings are in [macos_service.py](../../VoxBridge/tools/macos_service.py), the [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py), and the [asset manifest](../../scripts/runtime-assets.json). It describes this implementation, not every capability advertised by the upstream model families.
 
 ## 1. Qwen3-ASR 0.6B: speech recognition
 
@@ -41,7 +41,7 @@ The `mac-verified` profile deliberately uses temperature **0**, while the upstre
 - When a bounded glossary matches actual source terms, provide terms in source order with the short translation template. The normal church policy is used when there is no glossary match.
 - Detect policy-like output, abnormal expansion, and unfinished output. A bounded retry uses the short template without glossary hints; failed output is not sent to speech synthesis.
 
-Prompt construction is in [demo_streaming_ws.py](../../VoxBridge/voxbridge/cli/demo_streaming_ws.py); terminology and recovery logic are in [church_terms.py](../../VoxBridge/voxbridge/streaming/church_terms.py) and [translation_quality.py](../../VoxBridge/voxbridge/streaming/translation_quality.py). The upstream [prompt examples](https://huggingface.co/tencent/HY-MT1.5-1.8B#prompts) are references, not a claim that this App uses every upstream default. HY-MT remains capable of ordinary translation errors.
+Prompt construction is in [prompts.py](../../VoxBridge/voxbridge/translation/prompts.py); terminology and recovery logic are in [church_terms.py](../../VoxBridge/voxbridge/streaming/church_terms.py) and [translation_quality.py](../../VoxBridge/voxbridge/streaming/translation_quality.py). The upstream [prompt examples](https://huggingface.co/tencent/HY-MT1.5-1.8B#prompts) are references, not a claim that this App uses every upstream default. HY-MT remains capable of ordinary translation errors.
 
 ## 3. Kokoro: translated speech
 

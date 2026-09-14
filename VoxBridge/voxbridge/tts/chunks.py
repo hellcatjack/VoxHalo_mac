@@ -41,17 +41,21 @@ def _bounded_chinese_sentence(text: str) -> list[str]:
     return result
 
 
-def split_speech_chunks(text: str, target_language: str) -> tuple[str, ...]:
+def _split_chinese_chunks(text: str) -> tuple[str, ...]:
     if not text or not text.strip():
         return ()
-    if target_language.lower() in {'chinese', 'zh', '中文'}:
-        result = []
-        start = 0
-        for match in _CHINESE_SENTENCE_END.finditer(text):
-            result.extend(_bounded_chinese_sentence(text[start:match.end()]))
-            start = match.end()
-        result.extend(_bounded_chinese_sentence(text[start:]))
-        return tuple(result)
+    result = []
+    start = 0
+    for match in _CHINESE_SENTENCE_END.finditer(text):
+        result.extend(_bounded_chinese_sentence(text[start:match.end()]))
+        start = match.end()
+    result.extend(_bounded_chinese_sentence(text[start:]))
+    return tuple(result)
+
+
+def _split_english_chunks(text: str) -> tuple[str, ...]:
+    if not text or not text.strip():
+        return ()
     words = list(re.finditer(r'\S+\s*', text))
     result = []
     start = 0
@@ -71,3 +75,10 @@ def split_speech_chunks(text: str, target_language: str) -> tuple[str, ...]:
         start = end
         word_start = end_word
     return tuple(result)
+
+
+def split_speech_chunks(text: str, target_language: str) -> tuple[str, ...]:
+    if not text or not text.strip():
+        return ()
+    from .policy import speech_policy
+    return speech_policy(target_language).split(text)

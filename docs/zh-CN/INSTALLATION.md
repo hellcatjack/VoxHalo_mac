@@ -2,7 +2,7 @@
 
 [English](../en/INSTALLATION.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [模型说明](MODELS.md)
 
-本文与仓库的 `setup.sh` 及 App 1.5.1/build 16 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
+本文与仓库的 `setup.sh` 及 App 1.5.2/build 17 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
 
 ## 1. 检查 Mac 配置
 
@@ -54,7 +54,7 @@ git clone https://github.com/hellcatjack/VoxHalo_mac.git
 cd VoxHalo_mac
 ```
 
-公开仓库的 HTTPS 克隆无需 GitHub 登录。如果已有该仓库，按更新步骤处理，不要在里面重复嵌套克隆。`v1.5.1` 标签保留原始源码发布版本，`main` 还包含后续文档更新。
+公开仓库的 HTTPS 克隆无需 GitHub 登录。如果已有该仓库，按更新步骤处理，不要在里面重复嵌套克隆。`v1.5.1` 标签保留原始源码发布版本，`main` 包含最新代码和文档。
 
 ## 4. 安装环境、模型和 App
 

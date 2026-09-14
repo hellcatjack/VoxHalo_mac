@@ -2,7 +2,7 @@
 
 [English](../en/MODELS.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [安装指南](INSTALLATION.md)
 
-本文对应 App 1.5.1/build 16。实际配置以 [macos_service.py](../../VoxBridge/tools/macos_service.py)、[MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py)和[资源清单](../../scripts/runtime-assets.json)为准。这里介绍本项目的实现，不代表上游模型系列的所有功能。
+本文对应 App 1.5.2/build 17。实际配置以 [macos_service.py](../../VoxBridge/tools/macos_service.py)、[MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py)和[资源清单](../../scripts/runtime-assets.json)为准。这里介绍本项目的实现，不代表上游模型系列的所有功能。
 
 ## 1. Qwen3-ASR 0.6B：语音识别
 
@@ -41,7 +41,7 @@
 - 有界术语表命中实际原文时，按原文出现顺序给出术语，配合简短翻译模板；无命中时使用普通教会提示词。
 - 检测规则说明式输出、异常扩张和未完成输出，进行有界重试；恢复时使用不带术语提示的简短模板，失败结果不进入语音合成。
 
-提示词构造见 [demo_streaming_ws.py](../../VoxBridge/voxbridge/cli/demo_streaming_ws.py)，术语与恢复逻辑见 [church_terms.py](../../VoxBridge/voxbridge/streaming/church_terms.py) 和 [translation_quality.py](../../VoxBridge/voxbridge/streaming/translation_quality.py)。[上游提示词示例](https://huggingface.co/tencent/HY-MT1.5-1.8B#prompts)是参考，不表示本项目采用上游所有默认值。普通语义误译仍可能发生。
+提示词构造见 [prompts.py](../../VoxBridge/voxbridge/translation/prompts.py)，术语与恢复逻辑见 [church_terms.py](../../VoxBridge/voxbridge/streaming/church_terms.py) 和 [translation_quality.py](../../VoxBridge/voxbridge/streaming/translation_quality.py)。[上游提示词示例](https://huggingface.co/tencent/HY-MT1.5-1.8B#prompts)是参考，不表示本项目采用上游所有默认值。普通语义误译仍可能发生。
 
 ## 3. Kokoro：译文朗读
 
