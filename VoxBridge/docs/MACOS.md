@@ -4,7 +4,7 @@
 
 ## 首次安装
 
-在仓库根目录运行 `./setup.sh`。完整环境要求、下载说明和卸载方式见[仓库首页](../../README.md)。脚本准备项目内 Python、固定版本模型和 llama.cpp，并将 App 安装到 `~/Applications/教会同声传译.app`。
+在仓库根目录运行 `./setup.sh`。完整环境要求、逐步安装和卸载方式见[中文安装指南](../../docs/zh-CN/INSTALLATION.md)；另有 [English guide](../../docs/en/INSTALLATION.md)。脚本准备项目内 Python、固定版本模型和 llama.cpp，并将 App 安装到 `~/Applications/教会同声传译.app`。
 
 ## 启动与使用
 

@@ -1,5 +1,7 @@
 # 第三方来源与许可
 
+[English](en/MODELS.md#licenses-and-attribution) | [中文模型与许可指南](zh-CN/MODELS.md#许可证与署名)
+
 发布维护：hellcatjack <hellcatjack@gmail.com>。本仓库的 VoxBridge 与 Mac 集成源码以根目录 [Apache-2.0](../LICENSE) 发布；保留源码中的现有署名和第三方许可文件。
 
 模型与依赖的许可独立于本仓库代码。安装脚本从固定来源下载资源，不将全部模型重新声明为本项目许可。

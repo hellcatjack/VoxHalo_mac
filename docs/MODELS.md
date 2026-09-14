@@ -1,5 +1,9 @@
 # 模型与依赖
 
+[English guide](en/MODELS.md) | [完整中文指南](zh-CN/MODELS.md)
+
+本页保留资源来源与校验记录。模型原理、配置、提示词及许可说明请使用上方对应语言的完整指南。
+
 所有必需资源列在 [`scripts/runtime-assets.json`](../scripts/runtime-assets.json)，记录下载地址、大小和 SHA-256。下载文件约 4.6 GB；解压、Python 依赖、模型修复和安装缓存需要额外空间。权重不提交到 Git。
 
 | 资源 | 固定来源 |

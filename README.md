@@ -1,108 +1,168 @@
-# VoxHalo for macOS · 教会同声传译
+# VoxHalo for macOS
 
-在 Apple Silicon Mac 上独立运行的中文 ↔ 英文同声传译系统。原生 App 完成声音采集、模型服务管理、翻译朗读和字幕显示，关闭浏览器不会中断业务。
+**English** | [简体中文](README.zh-CN.md)
 
-当前 App 版本：**1.5.1（build 16）**。发布维护：**hellcatjack · hellcatjack@gmail.com**。
+Local Chinese ↔ English speech interpretation for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
 
-## 能做什么
+**App:** 1.5.1, build 16 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
-- 中英、英中两个方向切换，使用同一套采集、翻译、朗读与字幕流程。
-- 输入可选系统播放声音、只听译音的系统声音模式、默认输入或具体麦克风／声卡。
-- 输出可选系统默认设备、具体耳机／扬声器，或本机不播放而保留局域网听众。
-- 原生 PCM 连续播放，依据实际待播量调整朗读速度；中文优先整句合成，避免逗号处频繁重新起调。
-- 字幕跟随本机实际朗读，可调整颜色、字体、字号、阴影、显示器、位置和宽度，支持覆盖 Dock。
-- 网页显示原文、译文和 TTS 状态；手机扫描自动使用局域网 IP 的二维码即可收听共享 HLS。
-- 推理在本机完成；首次安装下载依赖及模型，日常不依赖云端识别或翻译服务。
+The App is named **教会同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 
-## 已验证的配置
+## Documentation
 
-| 环节 | 默认设置 |
-|---|---|
-| 识别 | Qwen3-ASR 0.6B，MLX INT8，Apple Metal GPU |
-| 翻译 | HY-MT1.5-1.8B Q8_0，llama.cpp b10809，Metal GPU |
-| 英文朗读 | Kokoro v1.0，`am_michael` |
-| 中文朗读 | Kokoro v1.1-zh，`zm_029` 男声，已修复浮点语速 |
-| TTS 计算 | ONNX Runtime CPU，2 线程；基础语速 1.05 + Auto 追赶 |
-| 原生 App | Swift / AppKit / Core Audio / ScreenCaptureKit |
-| 服务 | 应用端口 `8024`；内部翻译端口 `8876` |
+- [Detailed installation, updates, and troubleshooting](docs/en/INSTALLATION.md)
+- [Models, quantization, prompts, and licenses](docs/en/MODELS.md)
+- [中文说明](README.zh-CN.md)
+- [Change history](CHANGELOG.en.md) · [Release validation](docs/PUBLICATION.md)
 
-Qwen 在本实现中使用约 2 秒触发的有界窗口重复解码，配合原文修订和最终复核，并非原生 KV 缓存增量流式。识别和翻译仍可能出现同音词、代词指向及长句关系错误。验证详情见[双向长测与优化记录](VoxBridge/docs/MACOS-TRANSLATION-INTEGRITY.md)。
+## Features
 
-## 安装
+- Chinese → English and English → Chinese, selected before starting a session.
+- Native system-audio capture, translation-only system playback, default input, or a specific microphone/audio interface.
+- Default output, a specific headset/speaker, or LAN listening without local playback.
+- Continuous PCM playback with automatic catch-up speed; Chinese synthesis favors complete sentences to reduce mid-sentence prosody resets.
+- Completed-translation subtitles synchronized with local speech. Adjust font, size, colors, shadow, display, position, and width, including the Dock area.
+- The App owns capture and playback. Closing or refreshing the monitoring browser does not stop interpretation.
+- Automatically detected LAN addresses and QR codes let phones/tablets listen to shared HLS audio.
 
-需要 Apple Silicon Mac、可用的 Xcode 命令行工具及首次下载所需网络。已验证机器为 **MacBook Air M4 / 24 GB / macOS 26 / Python 3.12.14**；建议使用这一等级或更高的内存配置并预留 **20 GB** 磁盘空间。原生 App 编译目标为 macOS 14；“只听译音”模式需要 14.2+，整套固定依赖在旧 macOS 上尚未验收。
+```text
+System audio / microphone
+  → Native capture → Qwen3-ASR → stable source text → HY-MT → translated text
+  → Kokoro → native PCM playback + subtitle overlay
+           → shared HLS stream for LAN listeners
 
-先安装命令行工具（已安装可跳过）：
+Browser monitor ← source text, translations, and TTS status
+```
+
+## Models and acceleration
+
+| Component | Model and size | Configuration in this release |
+|---|---|---|
+| Speech recognition | [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B), 0.6B model variant | MLX 0.32.2 / mlx-qwen3-asr 0.4.0; INT8 weights, group size 64; Metal GPU |
+| Translation | [HY-MT1.5-1.8B](https://huggingface.co/tencent/HY-MT1.5-1.8B), 1.8B parameters | Official Q8_0 GGUF; llama.cpp b10809; Metal GPU; 4,096-token context |
+| English speech | [Kokoro-82M v1.0](https://huggingface.co/hexgrad/Kokoro-82M), approximately 82M parameters | ONNX Runtime CPU, voice `am_michael` |
+| Chinese speech | [Kokoro-82M v1.1-zh](https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh), approximately 82M parameters | ONNX Runtime CPU, male voice `zm_029`; repaired floating-point speed input |
+| Speech activity | Silero VAD ONNX | CPU; assists silence handling and speech-boundary protection |
+
+ASR and translation share a GPU execution lock; TTS uses two CPU threads. This release uses Metal and does not deploy models to the Apple Neural Engine. The internal OpenAI-compatible translation endpoint is a **local llama.cpp service**, not a request to OpenAI.
+
+The [model guide](docs/en/MODELS.md) documents exact settings, fixed revisions, checksums, and separate model licenses. Installation downloads about **4.55 GB** of model/runtime assets, plus Python packages, and creates an additional **344 MB** Chinese speed-repair model.
+
+## Minimum Mac configuration
+
+**Minimum recommended trial configuration: Apple M1, 16 GB unified memory, macOS 14.2+, and 20 GB free storage.** This is an engineering starting point, **not a machine configuration validated by this project**. The lowest configuration on which this complete system has actually been validated is **MacBook Air M4 / 24 GB / macOS 26**. Compatibility or successful model loading does not guarantee sustained real-time performance.
+
+| Item | Minimum requirement / trial recommendation | Validated or recommended for regular use |
+|---|---|---|
+| Processor | Apple Silicon, M1 or later, native `arm64` | M4 was tested; other models need their own performance checks |
+| Unified memory | 16 GB recommended for evaluation; 8 GB is unvalidated and not recommended | 24 GB or more; tested with 24 GB |
+| macOS | 14.2+ for the complete feature set, based on API/package compatibility | macOS 26; documentation checked on 26.6.2 |
+| Free storage | Reserve 20 GB for models, environments, downloads, and temporary files | Additional space for updates or local test recordings |
+| Build tools | Compatible Xcode Command Line Tools, with an SDK exposing macOS 14.2 audio-tap APIs | Tested with Swift 6.3.3 and SDK 26.5 |
+| Python | Installed automatically: native Python 3.12.14 | Use the repository's `.venv` |
+| Network | Internet for installation; LAN for listening devices | Inference is local after installation |
+
+Intel Macs and Rosetta/x86 Python are unsupported by this installer. macOS 14.0–14.1 cannot provide translation-only audio capture. Earlier M-series Macs, 16 GB configurations, and macOS 14/15 have **not** undergone the project's complete installation and long-duration validation. Test your actual workload before relying on an unvalidated configuration for a live event.
+
+The App's deployment target alone is not the full system requirement. MLX and ONNX packages have their own platform requirements; the pinned MLX version publishes macOS 14, 15, and 26 wheels. See [compatibility evidence](docs/en/INSTALLATION.md#compatibility-evidence).
+
+## Installation
+
+See the [step-by-step guide](docs/en/INSTALLATION.md) for prerequisites, permissions, verification, updates, relocation, and recovery.
+
+First install Apple's command-line tools and wait for installation to finish:
 
 ```sh
 xcode-select --install
 ```
 
-将仓库放在长期保留的位置，然后安装：
+Clone into a permanent location, install, and open the App:
 
 ```sh
+mkdir -p "$HOME/Projects"
+cd "$HOME/Projects"
 git clone https://github.com/hellcatjack/VoxHalo_mac.git
 cd VoxHalo_mac
 ./setup.sh
 open "$HOME/Applications/教会同声传译.app"
 ```
 
-脚本自动准备项目内 Python 3.12.14、固定依赖、约 4.6 GB 模型及运行时下载，校验 SHA-256，生成中文语速修复模型，最后在本机编译 App。不会使用系统全局 Python，也不会自动开始录音。安装失败后可重试；已有文件校验失败时会报出路径并保留原文件，移走该文件后再重试。
+No Homebrew, Docker, separately installed Python, virtual sound card, paid API, or remote inference server is required. The installer creates local environments, installs pinned dependencies, verifies model SHA-256 values, repairs Chinese speed handling, and builds the App. It does not start recording.
 
-默认安装到 `~/Applications/教会同声传译.app`。要指定位置：
+**Keep the entire checkout at its installation path.** The App records that path and uses its `.venv`, `runtime`, and `models` directories. Copying only the `.app` to another Mac is insufficient. Builds use an ad-hoc local signature and are not Developer ID notarized. Distribution is source plus an installer, not a universal standalone DMG.
+
+## Usage
+
+1. Choose **输入来源** (input), **朗读输出** (output), and translation direction in the App.
+2. Optionally enter a few ASR context terms, then select **开始传译** (start interpretation). Allow the requested macOS audio permissions.
+3. Once capture is active, speak or play the source audio. **打开监控页** (open monitor) is optional.
+4. **结束传译** (end interpretation) stops capture and finishes the remaining speech. **停止服务** (stop services) unloads models. **停止服务并退出** (stop services and quit) fully exits.
+
+To hear only translated YouTube audio, choose **系统播放声音 · 只听译音**, select output, start interpretation, then play the video with the video's sound enabled. The App suppresses source playback during capture. Pause the video before ending interpretation. Capture covers other applications' system audio, not one Chrome tab; pause unrelated audio sources.
+
+Use headphones with microphone input to reduce acoustic feedback. System-audio modes exclude this App's own speech. End the session before changing input, output, or direction. Closing the control window keeps interpretation running; the menu-bar icon reopens it.
+
+Use **字幕设置…** (subtitle settings) to adjust the overlay. Local subtitles follow actual playback; newer translations do not replace a sentence still being spoken. With local playback disabled, the overlay displays completed translations without a local speech clock.
+
+The monitor is at `http://127.0.0.1:8024`. LAN listeners use the App's address or QR code and press **Start Listening**. HLS phone playback can have additional buffering compared with native Mac playback.
+
+## Maintenance and troubleshooting
+
+From the repository root:
 
 ```sh
-VOXHALO_APP_PATH="/Applications/教会同声传译.app" ./setup.sh
+./macos.sh check
+./macos.sh status
+.venv/bin/python scripts/setup_assets.py --verify-only
 ```
 
-App 使用本机构建的临时签名，未做 Developer ID 公证。**App 会记录仓库的安装路径；请保留整个仓库、`.venv`、`runtime` 和 `models`。单独复制 `.app` 到另一台 Mac 不构成完整安装。** 移动目录后需重建环境并重新构建 App。
+Logs are in `VoxBridge/logs/`. The [installation guide](docs/en/INSTALLATION.md#troubleshooting) covers permissions, missing devices, failed downloads, occupied ports, moved installations, App launch issues, updates, and uninstallation.
 
-模型来源、固定版本及中文模型历史副本说明见[模型与依赖](docs/MODELS.md)。
+## Limitations and validation
 
-## 使用
+- Qwen uses bounded-window redecoding, approximately every two seconds, with source revisions and final checks. This is not upstream vLLM streaming or a native incremental KV-cache decoder.
+- One active audio producer is supported. Stable short phrases balance speed and accuracy; recognition, translation, synthesis, and queueing all add delay.
+- Homophones, mixed-language proper names, pronouns, and clause relationships can still be wrong. Church terminology prompts do not eliminate these errors.
+- Append-only additions to already spoken text can be spoken separately; arbitrary corrections to a sentence already heard are not automatically replayed.
+- LAN audio shares source order, but phones and the Mac are not sample-synchronized. iPhone background/lock-screen playback requires device-specific validation.
 
-1. 打开 App，选择输入、输出和翻译方向。
-2. 点击 **开始传译**，等待模型就绪并按 macOS 提示授权麦克风或系统音频。
-3. 播放源音频或对着所选麦克风讲话。监控网页可按需打开。
-4. 点击 **结束传译**，停止采集并收尾；**停止服务**卸载模型；菜单 **停止服务并退出** 完全退出。
+M4/24 GB validation includes a 600-second Chinese sermon segment and a 609.479-second English segment. Translation-to-first-PCM timing is **not** headset end-to-end latency. See the [historical validation](VoxBridge/docs/MACOS-TRANSLATION-INTEGRITY.md) and [source release checks](docs/PUBLICATION.md); those detailed records are in Chinese.
 
-听油管译音时，选择 **系统播放声音 · 只听译音 → 系统默认输出（或耳机）**。先开始传译，再播放视频，视频本身保持有声；App 在采集中抑制原声。结束时先暂停视频再结束传译。该模式采集其他应用的系统声音，并非只绑定一个 Chrome 标签页；请暂停无关声音源。
+## Privacy and network access
 
-系统声音权限位于“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”；使用麦克风时另需麦克风权限。控制面板关闭后业务继续，通过菜单栏图标重新打开。更改输入、输出或方向前先结束传译。
+Inference runs locally. Debug-file recording is disabled in the default profile; normal use does not intentionally save source recordings. Runtime logs and explicitly generated diagnostics can contain text or operational details. Device choices and subtitle appearance are stored in local macOS preferences.
 
-本机监控入口：`http://127.0.0.1:8024`。局域网听众使用 App 显示的地址或二维码；手机与 Mac 应在同一网络，允许 macOS 防火墙接收入站连接。默认未开启网页登录，监控文本和听众音频对可访问 `8024` 的网络设备开放，请在可信局域网使用；原生业务控制使用独立的本机凭据。
+The application listens on `0.0.0.0:8024`, with no web login enabled in the Mac profile. Devices that can reach it may view monitoring text and hear the LAN stream. Use a trusted network; do not expose this port through a public router. HY-MT binds to `127.0.0.1:8876`; native capture/control uses a separate local credential. Do not publish `VoxBridge/artifacts/macos-service/` or its token.
 
-完整操作说明见 [Mac 使用指南](VoxBridge/docs/MACOS.md)。
+## Development and contributions
 
-## 维护与验证
+Open issues and pull requests at [hellcatjack/VoxHalo_mac](https://github.com/hellcatjack/VoxHalo_mac). Include App/macOS versions, chip/memory, input/output modes, direction, reproduction steps, and sanitized logs. For security issues or sensitive reports, email [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com) instead of publicly posting credentials or private recordings.
 
 ```sh
-./macos.sh check                 # 检查本地资源
-./macos.sh status                # 查询服务状态
-./macos.sh start                 # 仅启动模型服务
-./macos.sh stop                  # 停止本安装拥有的服务
-./build-app.sh                   # 退出 App 后重新构建
-.venv/bin/python scripts/setup_assets.py --verify-only
+# After installation, from the repository root:
 cd VoxBridge
 ../.venv/bin/python -m pytest -q
+cd ..
+./build-app.sh --destination "$PWD/dist/教会同声传译.app"
 ```
 
-更新前先停止服务并退出 App，再在仓库根目录运行 `git pull --ff-only` 和 `./setup.sh`。已有模型通过校验后直接复用。首次安装也可用 `VOXHALO_ASSET_CACHE=/path/to/existing/workspace ./setup.sh` 从另一份本地工作区复制匹配校验值的资源；原工作区不会被修改。
-
-运行日志位于 `VoxBridge/logs/`，状态、锁与原生控制凭据位于 `VoxBridge/artifacts/macos-service/`，均不提交到 Git。排错时可在 App 点击 **查看日志**。卸载时先在 App 选择 **停止服务并退出**，再移除该 App 及不再需要的整个安装目录。
-
-## 项目结构
+Optional browser and ffprobe-dependent checks may skip when their tools are absent. Read [AGENTS.md](AGENTS.md), keep models/media/environments/runtime state out of Git, and maintain English and Chinese user documentation together.
 
 ```text
-setup.sh / build-app.sh / macos.sh    安装、构建及命令行管理入口
-scripts/                            固定资源清单与下载校验
-VoxBridge/deploy/macos/app/          原生 App 源码
-VoxBridge/voxbridge/                 ASR、翻译、TTS、监控与听众服务
-VoxBridge/tests/                    Python 与 Swift 回归测试
-VoxBridge/docs/                     协议、操作及历史验证记录
-models/ runtime/ .venv/              首次安装生成，不进入 Git
+README.md / README.zh-CN.md      English / Chinese entry points
+docs/en/ / docs/zh-CN/          Installation and model guides
+setup.sh / build-app.sh         Local installation and App build
+scripts/runtime-assets.json    Pinned download and checksum manifest
+VoxBridge/deploy/macos/app/    Native App source
+VoxBridge/voxbridge/           ASR, translation, TTS, and web services
+VoxBridge/tests/               Python and Swift regression tests
+models/ runtime/ .venv/        Generated resources, ignored by Git
 ```
 
-本次发布完整替换了旧的远端字幕客户端；旧版本保留在 Git 历史、`v1.0.0` 标签和 `backup/pre-local-system-2026-09-14` 分支。当前版本无需连接原 Linux 主机。上游 Linux 服务端代码和参考文档保留于 `VoxBridge/`，Mac 用户按本页安装。
+## License and acknowledgments
 
-项目源码采用 [Apache-2.0](LICENSE)。模型及第三方组件各自保留其许可，见[第三方来源](docs/THIRD_PARTY.md)。测试视频、录音、模型权重、运行凭据和本机配置不随源码发布。
+Source code is licensed under [Apache-2.0](LICENSE). Model weights and third-party packages retain their own licenses. **HY-MT uses the Tencent HY Community License, not Apache-2.0**; its territory excludes the EU, UK, and South Korea and it includes further use/distribution conditions. Review the [pinned license](https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt) before installing or deploying that model.
+
+This independent project is maintained by hellcatjack and is not affiliated with, sponsored by, or endorsed by Tencent. Thanks to Qwen, Tencent Hunyuan, MLX, llama.cpp, Kokoro, sherpa-onnx, Silero VAD, and the dependencies in the [model/license guide](docs/en/MODELS.md#licenses-and-attribution).
+
+The former remote subtitle client remains in Git history, tag `v1.0.0`, and branch `backup/pre-local-system-2026-09-14`. Current changes are summarized in [CHANGELOG.md](CHANGELOG.en.md).
