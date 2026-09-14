@@ -1,0 +1,2630 @@
+from __future__ import annotations
+
+import asyncio
+import io
+import math
+import shutil
+import struct
+import subprocess
+import threading
+import wave
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+import voxbridge.tts.hls as hls_module
+from voxbridge.tts.hls import (
+    FFmpegHLSEncoder,
+    HLSAppendReceipt,
+    HLSListenerCapacityExceeded,
+    HLSListenerNotFound,
+    HLSQueueFull,
+    HLSUnavailable,
+    SharedHLSTTSPublisher,
+    decode_mono_pcm16_wav,
+    parse_hls_live_edge_at_ms,
+)
+from voxbridge.tts.jobs import TTSReadyItem
+
+
+class FakeClock:
+    def __init__(self, value: float = 100.0) -> None:
+        self.value = value
+
+    def __call__(self) -> float:
+        return self.value
+
+
+class FakeSynthesizer:
+    def __init__(self, wav_bytes: bytes, *, duration_ms: int = 100) -> None:
+        self.wav_bytes = wav_bytes
+        self.duration_ms = int(duration_ms)
+        self.calls: list[tuple[str, str]] = []
+        self.speed_calls: list[tuple[str, str, float | None]] = []
+
+    def synthesize(
+        self,
+        text: str,
+        target_language: str,
+        *,
+        speed: float | None = None,
+    ):
+        self.calls.append((text, target_language))
+        self.speed_calls.append((text, target_language, speed))
+        return SimpleNamespace(
+            wav_bytes=self.wav_bytes,
+            sample_rate=24000,
+            duration_ms=self.duration_ms,
+        )
+
+
+class FakeEncoder:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.start_count = 0
+        self.close_count = 0
+        self.appended: list[bytes] = []
+        self.receipts: list[HLSAppendReceipt] = []
+        self.pending_audio_ms = 0
+        self.next_start_at_ms = 100_000
+        self.next_discardable_gap_before_ms = 0
+
+    async def start(self) -> None:
+        self.start_count += 1
+        self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "segment_000000001.ts").write_bytes(b"shared-segment")
+        (self.root / "index.m3u8").write_text(
+            "#EXTM3U\n#EXTINF:1.0,\nsegment_000000001.ts\n",
+            encoding="utf-8",
+        )
+
+    async def append_pcm(self, pcm: bytes) -> HLSAppendReceipt:
+        self.appended.append(pcm)
+        duration_ms = round(len(pcm) * 1000 / (24000 * 2))
+        discardable_gap_before_ms = self.next_discardable_gap_before_ms
+        self.next_discardable_gap_before_ms = 0
+        self.next_start_at_ms += discardable_gap_before_ms
+        receipt = HLSAppendReceipt(
+            start_at_ms=self.next_start_at_ms,
+            end_at_ms=self.next_start_at_ms + duration_ms,
+            discardable_gap_before_ms=discardable_gap_before_ms,
+        )
+        self.receipts.append(receipt)
+        self.next_start_at_ms = receipt.end_at_ms
+        return receipt
+
+    async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+        if not is_current():
+            return None
+        receipt = await self.append_pcm(pcm)
+        on_commit()
+        return receipt
+
+    async def wait_ready(self, timeout: float = 5.0) -> None:
+        del timeout
+
+    def playlist_text(self) -> str:
+        return (self.root / "index.m3u8").read_text(encoding="utf-8")
+
+    def live_edge_at_ms(self) -> int:
+        return self.next_start_at_ms
+
+    def segment_path(self, name: str) -> Path:
+        return self.root / name
+
+    async def close(self) -> None:
+        self.close_count += 1
+
+
+def make_wav(*, duration_ms: int = 100, sample_rate: int = 24000) -> bytes:
+    sample_count = round(sample_rate * duration_ms / 1000)
+    samples = [
+        round(1200 * math.sin(2 * math.pi * 440 * index / sample_rate))
+        for index in range(sample_count)
+    ]
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+    return output.getvalue()
+
+
+def ready_item(
+    order: int = 0,
+    *,
+    revision: int = 1,
+    text: str | None = None,
+) -> TTSReadyItem:
+    return TTSReadyItem(
+        sentence_id=f"sentence-{order}",
+        revision=revision,
+        source_order=order,
+        target_language="English",
+        text=text or f"Stable translation {order}.",
+    )
+
+
+FFMPEG_LIVE_PLAYLIST = """#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:1
+#EXT-X-MEDIA-SEQUENCE:10
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:39.000+00:00
+segment_000000010.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:40.000+00:00
+segment_000000011.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:41.000+00:00
+segment_000000012.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:42.000+00:00
+segment_000000013.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:43.000+00:00
+segment_000000014.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:44.000+00:00
+segment_000000015.ts
+"""
+
+FFMPEG_GAP_PLAYLIST = """#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-TARGETDURATION:1
+#EXT-X-MEDIA-SEQUENCE:10
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:39.000+00:00
+segment_000000010.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:40.000+00:00
+segment_000000011.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:41.000+00:00
+segment_000000012.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:42.000+00:00
+segment_000000013.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:43.000+00:00
+segment_000000014.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:44.000+00:00
+segment_000000015.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:45.000+00:00
+segment_000000016.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:46.000+00:00
+segment_000000017.ts
+#EXTINF:1.000000,
+#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:47.000+00:00
+segment_000000018.ts
+"""
+
+
+def test_media_playlist_parser_maps_sequence_and_program_time():
+    parsed = hls_module._parse_hls_media_playlist(FFMPEG_LIVE_PLAYLIST)
+
+    assert parsed is not None
+    assert parsed.target_duration_ms == 1_000
+    assert [segment.sequence for segment in parsed.segments] == [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+    ]
+    assert parsed.segments[0].name == "segment_000000010.ts"
+    assert parsed.segments[0].start_at_ms == 99_000
+    assert parsed.segments[0].end_at_ms == 100_000
+    assert parsed.segments[-1].start_at_ms == 104_000
+    assert parsed.segments[-1].end_at_ms == 105_000
+
+
+def test_trim_hls_playlist_removes_only_prefix_and_updates_media_sequence():
+    parsed = hls_module._parse_hls_media_playlist(FFMPEG_LIVE_PLAYLIST)
+
+    trimmed = hls_module._trim_hls_playlist(parsed, floor_sequence=13)
+
+    assert "#EXT-X-MEDIA-SEQUENCE:13\n" in trimmed
+    assert "#EXT-X-TARGETDURATION:1\n" in trimmed
+    assert "segment_000000010.ts" not in trimmed
+    assert "segment_000000011.ts" not in trimmed
+    assert "segment_000000012.ts" not in trimmed
+    assert "segment_000000013.ts" in trimmed
+    assert "segment_000000014.ts" in trimmed
+    assert "segment_000000015.ts" in trimmed
+    reparsed = hls_module._parse_hls_media_playlist(trimmed)
+    assert reparsed is not None
+    assert sum(segment.duration_ms for segment in reparsed.segments) == 3_000
+
+
+@pytest.mark.parametrize(
+    "playlist",
+    [
+        FFMPEG_LIVE_PLAYLIST.replace("#EXT-X-MEDIA-SEQUENCE:10\n", ""),
+        FFMPEG_LIVE_PLAYLIST.replace("#EXT-X-TARGETDURATION:1\n", ""),
+        FFMPEG_LIVE_PLAYLIST.replace(
+            "#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:39.000+00:00\n",
+            "",
+        ),
+        FFMPEG_LIVE_PLAYLIST.replace(
+            "#EXT-X-VERSION:6\n",
+            "#EXT-X-VERSION:6\n#EXT-X-PLAYLIST-TYPE:EVENT\n",
+        ),
+        FFMPEG_LIVE_PLAYLIST.replace(
+            "#EXTINF:1.000000,\n",
+            "#EXT-X-DISCONTINUITY\n#EXTINF:1.000000,\n",
+            1,
+        ),
+        FFMPEG_LIVE_PLAYLIST.replace(
+            "#EXTINF:1.000000,\n",
+            "#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\"\n#EXTINF:1.000000,\n",
+            1,
+        ),
+        FFMPEG_LIVE_PLAYLIST.replace(
+            "#EXTINF:1.000000,\n",
+            "#EXT-X-BYTERANGE:1000@0\n#EXTINF:1.000000,\n",
+            1,
+        ),
+    ],
+)
+def test_media_playlist_parser_rejects_metadata_needed_for_safe_trim(playlist):
+    assert hls_module._parse_hls_media_playlist(playlist) is None
+
+
+async def wait_until(predicate, *, timeout: float = 1.0) -> None:
+    async def _wait() -> None:
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(_wait(), timeout=timeout)
+
+
+async def publisher_with_confirmed_gap(
+    tmp_path,
+    *listener_ids: str,
+    clock: FakeClock | None = None,
+):
+    encoders: list[FakeEncoder] = []
+
+    def encoder_factory(root):
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav(duration_ms=100)),
+        root_dir=tmp_path,
+        encoder_factory=encoder_factory,
+        listener_ttl_sec=60,
+        sentence_pause_ms=0,
+        clock=clock or FakeClock(),
+    )
+    for listener_id in listener_ids:
+        await publisher.touch_listener(listener_id, f"owner-{listener_id}")
+    encoder = encoders[0]
+    await publisher.publish(ready_item(1))
+    await wait_until(
+        lambda: len(
+            publisher.caption_snapshot(
+                listener_ids[0],
+                f"owner-{listener_ids[0]}",
+            ).cues
+        )
+        == 1
+    )
+    encoder.next_discardable_gap_before_ms = 4_000
+    await publisher.publish(ready_item(2))
+    await wait_until(
+        lambda: len(
+            publisher.caption_snapshot(
+                listener_ids[0],
+                f"owner-{listener_ids[0]}",
+            ).cues
+        )
+        == 2
+    )
+    (encoder.root / "index.m3u8").write_text(
+        FFMPEG_GAP_PLAYLIST,
+        encoding="utf-8",
+    )
+    return publisher, encoder
+
+
+@pytest.mark.asyncio
+async def test_continuous_player_keeps_timeline_when_other_reads_compact_gap(tmp_path):
+    publisher, _ = await publisher_with_confirmed_gap(tmp_path, "native-player")
+    try:
+        publisher.segment_path("native-player", "owner-native-player", "segment_000000012.ts")
+        continuous = publisher.playlist_text("native-player", "owner-native-player", compact_gaps=False)
+        assert "#EXT-X-MEDIA-SEQUENCE:10\n" in continuous
+        assert "segment_000000010.ts" in continuous
+        compacted = publisher.playlist_text("native-player", "owner-native-player")
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in compacted
+        assert publisher.playlist_text("native-player", "owner-native-player", compact_gaps=False) == continuous
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playlist_compacts_confirmed_gap_with_hls_window(tmp_path):
+    publisher, _ = await publisher_with_confirmed_gap(tmp_path, "iphone-a")
+    try:
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000012.ts",
+        )
+
+        playlist = publisher.playlist_text("iphone-a", "owner-iphone-a")
+
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in playlist
+        assert "segment_000000014.ts" not in playlist
+        assert "segment_000000015.ts" in playlist
+        parsed = hls_module._parse_hls_media_playlist(playlist)
+        assert parsed is not None
+        assert sum(segment.duration_ms for segment in parsed.segments) == 4_000
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playlist_keeps_three_target_durations_at_live_tail(tmp_path):
+    publisher, encoder = await publisher_with_confirmed_gap(tmp_path, "iphone-a")
+    try:
+        shortened = FFMPEG_GAP_PLAYLIST.split(
+            "#EXTINF:1.000000,\n"
+            "#EXT-X-PROGRAM-DATE-TIME:1970-01-01T00:01:46.000+00:00\n",
+            1,
+        )[0]
+        (encoder.root / "index.m3u8").write_text(shortened, encoding="utf-8")
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000012.ts",
+        )
+
+        playlist = publisher.playlist_text("iphone-a", "owner-iphone-a")
+
+        assert "#EXT-X-MEDIA-SEQUENCE:14\n" in playlist
+        parsed = hls_module._parse_hls_media_playlist(playlist)
+        assert parsed is not None
+        assert sum(segment.duration_ms for segment in parsed.segments) == 3_000
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playlist_preserves_speech_until_carrier_is_requested(tmp_path):
+    publisher, _ = await publisher_with_confirmed_gap(tmp_path, "iphone-a")
+    try:
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000011.ts",
+        )
+
+        playlist = publisher.playlist_text("iphone-a", "owner-iphone-a")
+
+        assert "#EXT-X-MEDIA-SEQUENCE:10\n" in playlist
+        assert "segment_000000010.ts" in playlist
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playlist_isolated_and_progress_is_monotonic(tmp_path):
+    publisher, _ = await publisher_with_confirmed_gap(
+        tmp_path,
+        "iphone-a",
+        "iphone-b",
+    )
+    try:
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000012.ts",
+        )
+        compacted = publisher.playlist_text("iphone-a", "owner-iphone-a")
+        untouched = publisher.playlist_text("iphone-b", "owner-iphone-b")
+
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000011.ts",
+        )
+        after_old_retry = publisher.playlist_text(
+            "iphone-a",
+            "owner-iphone-a",
+        )
+
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in compacted
+        assert "#EXT-X-MEDIA-SEQUENCE:10\n" in untouched
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in after_old_retry
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playlists_parse_each_shared_manifest_version_once(
+    tmp_path,
+    monkeypatch,
+):
+    publisher, _ = await publisher_with_confirmed_gap(
+        tmp_path,
+        "iphone-a",
+        "iphone-b",
+    )
+    real_parser = hls_module._parse_hls_media_playlist
+    parse_calls = 0
+
+    def counting_parser(playlist):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parser(playlist)
+
+    monkeypatch.setattr(hls_module, "_parse_hls_media_playlist", counting_parser)
+    try:
+        publisher.playlist_text("iphone-a", "owner-iphone-a")
+        publisher.playlist_text("iphone-b", "owner-iphone-b")
+
+        assert parse_calls == 1
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playback_state_resets_after_remove_and_rejoin(tmp_path):
+    publisher, _ = await publisher_with_confirmed_gap(
+        tmp_path,
+        "iphone-a",
+        "iphone-b",
+    )
+    try:
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000012.ts",
+        )
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in publisher.playlist_text(
+            "iphone-a",
+            "owner-iphone-a",
+        )
+
+        assert await publisher.remove_listener(
+            "iphone-a",
+            "owner-iphone-a",
+        )
+        await publisher.touch_listener("iphone-a", "owner-iphone-a")
+
+        rejoined = publisher.playlist_text("iphone-a", "owner-iphone-a")
+        assert "#EXT-X-MEDIA-SEQUENCE:10\n" in rejoined
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_listener_playback_state_resets_after_expiry_and_rejoin(tmp_path):
+    clock = FakeClock()
+    publisher, _ = await publisher_with_confirmed_gap(
+        tmp_path,
+        "iphone-a",
+        "iphone-b",
+        clock=clock,
+    )
+    try:
+        publisher.segment_path(
+            "iphone-a",
+            "owner-iphone-a",
+            "segment_000000012.ts",
+        )
+        assert "#EXT-X-MEDIA-SEQUENCE:15\n" in publisher.playlist_text(
+            "iphone-a",
+            "owner-iphone-a",
+        )
+
+        clock.value = 150.0
+        await publisher.touch_listener("iphone-b", "owner-iphone-b")
+        clock.value = 161.0
+        assert await publisher.prune_expired() == 1
+        await publisher.touch_listener("iphone-a", "owner-iphone-a")
+
+        rejoined = publisher.playlist_text("iphone-a", "owner-iphone-a")
+        assert "#EXT-X-MEDIA-SEQUENCE:10\n" in rejoined
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.parametrize(
+    ("backlog_ms", "expected"),
+    [
+        (0, 1.0),
+        (5_999, 1.0),
+        (6_000, 1.2),
+        (14_999, 1.2),
+        (15_000, 1.4),
+        (19_999, 1.4),
+        (20_000, 1.5),
+    ],
+)
+def test_global_tts_multiplier_boundaries(backlog_ms, expected):
+    assert hls_module.select_global_tts_multiplier(backlog_ms) == expected
+
+
+@pytest.mark.asyncio
+async def test_speech_epoch_skips_idle_debt_and_survives_first_listener_exit(
+    tmp_path,
+):
+    synth = FakeSynthesizer(make_wav())
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: FakeEncoder(root),
+        root_dir=tmp_path,
+        baseline_tts_speed=1.05,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.publish(ready_item(0))
+        await publisher.publish(ready_item(1))
+        assert publisher.status.speech_epoch_id == ""
+        assert publisher.status.translated_audio_backlog_ms == 0
+        assert publisher.status.translated_audio_backlog_count == 0
+
+        await publisher.touch_listener("iphone-a", "owner-a")
+        epoch = publisher.status.speech_epoch_id
+        assert epoch.startswith("epoch-")
+        await publisher.touch_listener("chrome-b", "owner-b")
+        await publisher.wait_idle()
+        assert synth.calls == [("Stable translation 1.", "English")]
+        assert synth.speed_calls == [("Stable translation 1.", "English", 1.05)]
+
+        await publisher.remove_listener("iphone-a", "owner-a")
+        assert publisher.status.speech_epoch_id == epoch
+        assert publisher.status.listener_count == 1
+
+        await publisher.remove_listener("chrome-b", "owner-b")
+        assert publisher.status.speech_epoch_id == ""
+        assert publisher.status.global_speed_multiplier == 1.0
+        assert publisher.status.translated_audio_backlog_ms == 0
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_worker_applies_global_multiplier_as_absolute_kokoro_speed(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 40_000
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        baseline_tts_speed=1.05,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.publish(ready_item(text="Accelerated together."))
+        await publisher.wait_idle()
+
+        assert synth.speed_calls == [
+            ("Accelerated together.", "English", pytest.approx(1.575))
+        ]
+        assert publisher.status.global_speed_multiplier == 1.5
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_release_reuses_speed_selected_when_audio_was_prepared(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 10_000
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        baseline_tts_speed=1.05,
+        clock=FakeClock(),
+    )
+    item = ready_item(text="Keep the selected accelerated voice.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(item) is True
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+        assert synth.speed_calls[-1][2] == pytest.approx(1.26)
+
+        encoder.pending_audio_ms = 0
+        assert await publisher.publish(item) is True
+        await publisher.wait_idle()
+
+        assert [call[2] for call in synth.speed_calls] == pytest.approx([1.26])
+        assert publisher.status.global_speed_multiplier == 1.2
+        assert len(encoder.appended) == 1
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_effective_speed_falls_back_without_stopping_epoch(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 40_000
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        baseline_tts_speed=1.5,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.publish(ready_item(text="Stay in range."))
+        await publisher.wait_idle()
+
+        assert synth.speed_calls[-1][2] == pytest.approx(1.5)
+        assert publisher.status.global_speed_multiplier == 1.0
+        assert publisher.status.speech_epoch_id.startswith("epoch-")
+    finally:
+        await publisher.close()
+
+
+def test_fast_audio_observation_is_normalized_to_baseline_duration(tmp_path):
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=lambda root: FakeEncoder(root),
+        root_dir=tmp_path,
+        sentence_pause_ms=0,
+        clock=FakeClock(),
+    )
+    item = ready_item(text="abcdefghij")
+
+    publisher._observe_item_audio_ms(item, 1_000, displayed_multiplier=1.5)
+
+    assert publisher._estimate_item_audio_ms(item) == 1_650
+
+
+@pytest.mark.asyncio
+async def test_shared_publisher_synthesizes_once_for_multiple_listeners(tmp_path):
+    clock = FakeClock()
+    synth = FakeSynthesizer(make_wav())
+    encoders: list[FakeEncoder] = []
+
+    def encoder_factory(root: Path) -> FakeEncoder:
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        listener_ttl_sec=60,
+        queue_size=8,
+        sentence_pause_ms=300,
+        clock=clock,
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.touch_listener("iphone-b", "owner-b")
+        assert await publisher.publish(ready_item()) is True
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Stable translation 0.", "English")]
+        assert len(encoders) == 1
+        assert encoders[0].start_count == 1
+        assert len(encoders[0].appended) == 1
+        assert len(encoders[0].appended[0]) == (2400 + 7200) * 2
+        assert publisher.listener_count == 2
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_three_listeners_share_one_encoder_and_one_synthesis_per_item(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoders: list[FakeEncoder] = []
+
+    def encoder_factory(root: Path) -> FakeEncoder:
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        listener_ttl_sec=60,
+        queue_size=16,
+        clock=FakeClock(),
+    )
+    try:
+        for index in range(3):
+            await publisher.touch_listener(f"iphone-{index}", f"owner-{index}")
+        for index in range(10):
+            assert await publisher.publish(ready_item(index)) is True
+        await publisher.wait_idle()
+
+        assert synth.calls == [
+            (f"Stable translation {index}.", "English") for index in range(10)
+        ]
+        assert len(encoders) == 1
+        assert encoders[0].start_count == 1
+        assert len(encoders[0].appended) == 10
+        assert publisher.listener_count == 3
+
+        assert await publisher.remove_listener("iphone-1", "owner-1") is True
+        assert await publisher.publish(ready_item(10)) is True
+        await publisher.wait_idle()
+        assert len(synth.calls) == 11
+        assert len(encoders) == 1
+        assert encoders[0].close_count == 0
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_first_listener_starts_from_latest_translation_queued_before_join(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        queue_size=4,
+        clock=FakeClock(),
+    )
+    try:
+        assert await publisher.publish(ready_item(0)) is True
+        assert await publisher.publish(ready_item(1)) is True
+        assert synth.calls == []
+        assert publisher.status.queue_depth == 2
+
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Stable translation 1.", "English")]
+        assert len(encoder.appended) == 1
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_idle_backlog_is_bounded_to_most_recent_stable_translations(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        queue_size=2,
+        clock=FakeClock(),
+    )
+    try:
+        for order in range(3):
+            assert await publisher.publish(ready_item(order)) is True
+        assert publisher.status.queue_depth == 2
+
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Stable translation 2.", "English")]
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_status_counts_item_while_kokoro_synthesis_is_in_flight(tmp_path):
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingSynthesizer(FakeSynthesizer):
+        def synthesize(
+            self, text: str, target_language: str, *, speed: float | None = None
+        ):
+            started.set()
+            assert release.wait(timeout=2)
+            return super().synthesize(text, target_language, speed=speed)
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=BlockingSynthesizer(make_wav()),
+        encoder_factory=lambda root: FakeEncoder(root),
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.publish(ready_item())
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await asyncio.to_thread(started.wait, 1)
+
+        assert publisher.status.synthesis_active is True
+        assert publisher.status.queue_depth == 1
+
+        release.set()
+        await publisher.wait_idle()
+        assert publisher.status.synthesis_active is False
+        assert publisher.status.queue_depth == 0
+    finally:
+        release.set()
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_exact_revision_is_prepared_without_publishing_audio(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    item = ready_item(4, revision=2, text="Prepared exact revision.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+
+        assert await publisher.prepare(item) is True
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+
+        assert synth.calls == [("Prepared exact revision.", "English")]
+        assert encoder.appended == []
+        assert publisher.status.preparation_active is False
+
+        assert await publisher.publish(item) is True
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Prepared exact revision.", "English")]
+        assert len(encoder.appended) == 1
+        assert publisher.status.prepared_audio_count == 0
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_caption_cue_is_created_only_when_stable_audio_is_published(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=250), duration_ms=250)
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    item = ready_item(11, revision=2, text="Prepared exact revision.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(item) is True
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+
+        assert publisher.caption_snapshot("iphone-a", "owner-a").cues == ()
+
+        assert await publisher.publish(item) is True
+        await publisher.wait_idle()
+        snapshot = publisher.caption_snapshot("iphone-a", "owner-a")
+
+        assert snapshot.live_edge_at_ms == 100_550
+        assert len(snapshot.cues) == 1
+        cue = snapshot.cues[0]
+        assert cue.text == "Prepared exact revision."
+        assert cue.start_at_ms == 100_000
+        assert cue.end_at_ms == 100_250
+        assert cue.cue_id
+        assert encoder.receipts == [
+            HLSAppendReceipt(start_at_ms=100_000, end_at_ms=100_550)
+        ]
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_caption_cue_excludes_synthesized_edge_silence(tmp_path):
+    sample_rate = 24000
+    leading_samples = round(sample_rate * 0.08)
+    speech_samples = round(sample_rate * 0.25)
+    trailing_samples = round(sample_rate * 0.10)
+    samples = (
+        [0] * leading_samples
+        + [
+            round(1200 * math.sin(2 * math.pi * 440 * index / sample_rate))
+            for index in range(speech_samples)
+        ]
+        + [0] * trailing_samples
+    )
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+
+    synth = FakeSynthesizer(output.getvalue(), duration_ms=430)
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.publish(ready_item(12)) is True
+        await publisher.wait_idle()
+
+        cue = publisher.caption_snapshot("iphone-a", "owner-a").cues[0]
+        assert cue.start_at_ms == 100_080
+        assert cue.end_at_ms == 100_330
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_caption_cue_marks_only_wait_generated_carrier(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=100), duration_ms=100)
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        sentence_pause_ms=300,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.publish(ready_item(20, text="First.")) is True
+        await publisher.wait_idle()
+
+        encoder.next_discardable_gap_before_ms = 1_000
+        assert await publisher.publish(ready_item(21, text="Second.")) is True
+        await publisher.wait_idle()
+
+        first, second = publisher.caption_snapshot(
+            "iphone-a", "owner-a"
+        ).cues
+        assert first.discardable_gap_before_ms == 0
+        assert first.resume_at_ms is None
+        assert second.discardable_gap_before_ms == 1_000
+        assert second.start_at_ms - second.resume_at_ms == 300
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_caption_history_is_bounded_and_cleared_with_listener_epoch(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    encoders: list[FakeEncoder] = []
+
+    def encoder_factory(root: Path) -> FakeEncoder:
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        queue_size=300,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        for order in range(257):
+            assert await publisher.publish(ready_item(order)) is True
+        await publisher.wait_idle()
+
+        snapshot = publisher.caption_snapshot("iphone-a", "owner-a")
+        assert len(snapshot.cues) == 256
+        assert snapshot.cues[0].text == "Stable translation 1."
+        assert snapshot.cues[-1].text == "Stable translation 256."
+        with pytest.raises(HLSListenerNotFound):
+            publisher.caption_snapshot("iphone-a", "owner-b")
+
+        assert await publisher.remove_listener("iphone-a", "owner-a") is True
+        await publisher.touch_listener("iphone-b", "owner-b")
+        assert publisher.caption_snapshot("iphone-b", "owner-b").cues == ()
+        assert len(encoders) == 2
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_new_revision_invalidates_prepared_audio_for_same_sentence(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    revision_one = ready_item(6, revision=1, text="Old translation.")
+    revision_two = ready_item(6, revision=2, text="Corrected translation.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(revision_one) is True
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+
+        assert await publisher.prepare(revision_two) is True
+        await wait_until(
+            lambda: publisher.status.prepared_audio_count == 1
+            and len(synth.calls) == 2
+        )
+        assert await publisher.publish(revision_two) is True
+        await publisher.wait_idle()
+
+        assert synth.calls == [
+            ("Old translation.", "English"),
+            ("Corrected translation.", "English"),
+        ]
+        assert len(encoder.appended) == 1
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_stable_release_supersedes_pending_preparation_without_duplicate_synthesis(
+    tmp_path,
+):
+    worker_gate = asyncio.Event()
+    synth = FakeSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        worker_start_gate=worker_gate,
+        clock=FakeClock(),
+    )
+    item = ready_item(8, revision=3, text="Release takes priority.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(item) is True
+        assert await publisher.publish(item) is True
+
+        worker_gate.set()
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Release takes priority.", "English")]
+        assert len(encoder.appended) == 1
+        assert publisher.status.preparation_queue_depth == 0
+    finally:
+        worker_gate.set()
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_stable_release_reuses_preparation_already_in_flight(tmp_path):
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingSynthesizer(FakeSynthesizer):
+        def synthesize(
+            self, text: str, target_language: str, *, speed: float | None = None
+        ):
+            started.set()
+            assert release.wait(timeout=2)
+            return super().synthesize(text, target_language, speed=speed)
+
+    synth = BlockingSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    item = ready_item(9, revision=2, text="Already being prepared.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(item) is True
+        assert await asyncio.to_thread(started.wait, 1)
+
+        assert await publisher.publish(item) is True
+        release.set()
+        await publisher.wait_idle()
+
+        assert synth.calls == [("Already being prepared.", "English")]
+        assert len(encoder.appended) == 1
+        assert publisher.status.prepared_audio_count == 0
+    finally:
+        release.set()
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_revision_change_during_preparation_discards_stale_audio(tmp_path):
+    started = threading.Event()
+    release = threading.Event()
+
+    class FirstCallBlockingSynthesizer(FakeSynthesizer):
+        def synthesize(
+            self, text: str, target_language: str, *, speed: float | None = None
+        ):
+            if not self.calls:
+                started.set()
+                assert release.wait(timeout=2)
+            return super().synthesize(text, target_language, speed=speed)
+
+    synth = FirstCallBlockingSynthesizer(make_wav(duration_ms=250))
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    stale = ready_item(10, revision=1, text="Stale translation.")
+    current = ready_item(10, revision=2, text="Current translation.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(stale) is True
+        assert await asyncio.to_thread(started.wait, 1)
+        assert await publisher.prepare(current) is True
+
+        release.set()
+        await wait_until(
+            lambda: publisher.status.prepared_audio_count == 1
+            and len(synth.calls) == 2
+        )
+        assert await publisher.publish(current) is True
+        await publisher.wait_idle()
+
+        assert synth.calls == [
+            ("Stale translation.", "English"),
+            ("Current translation.", "English"),
+        ]
+        assert len(encoder.appended) == 1
+    finally:
+        release.set()
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_preparation_is_skipped_without_an_active_listener(tmp_path):
+    synth = FakeSynthesizer(make_wav(duration_ms=250))
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: FakeEncoder(root),
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        assert await publisher.prepare(ready_item()) is False
+        assert synth.calls == []
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_status_reports_pcm_audio_waiting_for_real_time_encoder(tmp_path):
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 1750
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+
+        assert publisher.status.pending_audio_ms == 1750
+        assert publisher.status.translated_audio_backlog_ms == 1750
+        assert publisher.status.translated_audio_backlog_count == 0
+        assert publisher.status.translated_audio_backlog_estimated is False
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_status_includes_prepared_translation_before_hls_publish(tmp_path):
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 1750
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(
+            make_wav(duration_ms=250),
+            duration_ms=250,
+        ),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+        sentence_pause_ms=300,
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(
+            ready_item(text="Successfully translated but not released.")
+        ) is True
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+
+        status = publisher.status
+        assert status.pending_audio_ms == 1750
+        assert status.translated_audio_backlog_ms == 2300
+        assert status.translated_audio_backlog_count == 1
+        assert status.translated_audio_backlog_estimated is False
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_status_counts_prepared_and_release_queue_overlap_once(tmp_path):
+    worker_gate = asyncio.Event()
+    encoder = FakeEncoder(tmp_path / "stream")
+    encoder.pending_audio_ms = 1750
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+        worker_start_gate=worker_gate,
+    )
+    item = ready_item(text="One successfully translated sentence.")
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.prepare(item) is True
+        assert await publisher.publish(item) is True
+
+        status = publisher.status
+        assert status.translated_audio_backlog_count == 1
+        assert status.translated_audio_backlog_ms > status.pending_audio_ms
+        assert status.translated_audio_backlog_estimated is True
+    finally:
+        worker_gate.set()
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_new_producer_session_can_discard_stale_idle_backlog(tmp_path):
+    synth = FakeSynthesizer(make_wav())
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=lambda root: FakeEncoder(root),
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.publish(ready_item(0))
+        await publisher.publish(ready_item(1))
+
+        assert await publisher.discard_idle_backlog() == 2
+        assert publisher.status.queue_depth == 0
+
+        await publisher.touch_listener("iphone-a", "owner-a")
+        await publisher.wait_idle()
+        assert synth.calls == []
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_shared_publisher_rejects_foreign_listener_owner(tmp_path):
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        with pytest.raises(HLSListenerNotFound):
+            await publisher.touch_listener("iphone-a", "owner-b")
+        with pytest.raises(HLSListenerNotFound):
+            publisher.playlist_text("iphone-a", "owner-b")
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_shared_publisher_bounds_new_listener_capacity(tmp_path):
+    clock = FakeClock()
+    encoders: list[FakeEncoder] = []
+
+    def encoder_factory(root: Path) -> FakeEncoder:
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        max_listeners=2,
+        clock=clock,
+    )
+    try:
+        await publisher.touch_listener("listener-a", "public:listener-a")
+        await publisher.touch_listener("listener-b", "public:listener-b")
+        refreshed = await publisher.touch_listener(
+            "listener-a",
+            "public:listener-a",
+        )
+
+        with pytest.raises(HLSListenerCapacityExceeded):
+            await publisher.touch_listener("listener-c", "public:listener-c")
+
+        assert refreshed.expires_at == clock.value + 90.0
+        assert publisher.listener_count == 2
+        assert len(encoders) == 1
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_shared_publisher_expires_idle_lease_and_stops_encoder(tmp_path):
+    clock = FakeClock()
+    encoder = FakeEncoder(tmp_path / "stream")
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FakeSynthesizer(make_wav()),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        listener_ttl_sec=10,
+        clock=clock,
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        clock.value += 11
+        assert await publisher.prune_expired() == 1
+        assert publisher.listener_count == 0
+        assert encoder.close_count == 1
+        assert await publisher.publish(ready_item()) is True
+        assert publisher.status.queue_depth == 1
+
+        await publisher.touch_listener("iphone-b", "owner-b")
+        await publisher.wait_idle()
+        assert publisher.status.queue_depth == 0
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_shared_publisher_queue_is_bounded(tmp_path):
+    encoder = FakeEncoder(tmp_path / "stream")
+    blocker = asyncio.Event()
+
+    class BlockingSynthesizer(FakeSynthesizer):
+        def synthesize(
+            self, text: str, target_language: str, *, speed: float | None = None
+        ):
+            del text, target_language, speed
+            raise AssertionError("worker should be suspended in this test")
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=BlockingSynthesizer(make_wav()),
+        encoder_factory=lambda root: encoder,
+        root_dir=tmp_path,
+        queue_size=1,
+        worker_start_gate=blocker,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("iphone-a", "owner-a")
+        assert await publisher.publish(ready_item(0)) is True
+        with pytest.raises(HLSQueueFull):
+            await publisher.publish(ready_item(1))
+    finally:
+        await publisher.close()
+
+
+def test_decode_mono_pcm16_wav_rejects_incompatible_audio():
+    with pytest.raises(ValueError, match="sample rate"):
+        decode_mono_pcm16_wav(make_wav(sample_rate=16000), expected_rate=24000)
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_append_receipts_follow_media_timeline_fifo(tmp_path):
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+    )
+    encoder._process = SimpleNamespace(returncode=None)
+    encoder._timeline_origin_at_ms = 100_000
+
+    first = await encoder.append_pcm(bytes(8000 * 2))
+    second = await encoder.append_pcm(bytes(4000 * 2))
+
+    assert first == HLSAppendReceipt(start_at_ms=100_128, end_at_ms=101_128)
+    assert second == HLSAppendReceipt(start_at_ms=101_128, end_at_ms=101_628)
+    encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_append_receipt_reports_only_previously_submitted_carrier(tmp_path):
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+    )
+    encoder._process = SimpleNamespace(returncode=None)
+    encoder._timeline_origin_at_ms = 100_000
+    encoder._scheduled_end_pcm_bytes = 32_000
+    encoder._submitted_pcm_bytes = 48_000
+
+    first = await encoder.append_pcm(bytes(8000 * 2))
+    second = await encoder.append_pcm(bytes(8000 * 2))
+
+    assert first.discardable_gap_before_ms == 1000
+    assert second.discardable_gap_before_ms == 0
+    encoder._process = None
+
+
+def test_hls_live_edge_uses_last_complete_program_date_time_segment():
+    playlist = """#EXTM3U
+#EXT-X-PROGRAM-DATE-TIME:2026-08-11T10:00:00.000-04:00
+#EXTINF:1.024,
+segment_000000001.ts
+#EXT-X-PROGRAM-DATE-TIME:2026-08-11T10:00:01.024-04:00
+#EXTINF:0.512,
+segment_000000002.ts
+"""
+
+    assert parse_hls_live_edge_at_ms(playlist) == 1_786_456_801_536
+
+
+def test_hls_live_edge_accepts_ffmpeg_program_time_after_extinf():
+    playlist = """#EXTM3U
+#EXTINF:1.024000,
+#EXT-X-PROGRAM-DATE-TIME:2026-08-11T00:29:06.816-0400
+segment_000000000.ts
+"""
+
+    assert parse_hls_live_edge_at_ms(playlist) == 1_786_422_547_840
+
+
+@pytest.mark.parametrize(
+    "playlist",
+    [
+        "",
+        "#EXTM3U\n#EXTINF:1.0,\nsegment_000000001.ts\n",
+        (
+            "#EXTM3U\n"
+            "#EXT-X-PROGRAM-DATE-TIME:not-a-date\n"
+            "#EXTINF:1.0,\nsegment_000000001.ts\n"
+        ),
+        (
+            "#EXTM3U\n"
+            "#EXT-X-PROGRAM-DATE-TIME:2026-08-11T10:00:00\n"
+            "#EXTINF:1.0,\nsegment_000000001.ts\n"
+        ),
+        (
+            "#EXTM3U\n"
+            "#EXT-X-PROGRAM-DATE-TIME:2026-08-11T10:00:00-04:00\n"
+            "#EXTINF:1.0,\n"
+        ),
+    ],
+)
+def test_hls_live_edge_rejects_incomplete_or_invalid_playlist(playlist):
+    assert parse_hls_live_edge_at_ms(playlist) is None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_applies_backpressure_to_pending_pcm(tmp_path):
+    encoder = FFmpegHLSEncoder(tmp_path / "live", pcm_queue_size=1)
+    encoder._process = SimpleNamespace(returncode=None)
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(b"\x00\x00")
+
+    blocked_append = asyncio.create_task(encoder.append_pcm(b"\x01\x00"))
+    await asyncio.sleep(0)
+    assert blocked_append.done() is False
+
+    encoder._pcm_queue.get_nowait()
+    encoder._pcm_queue.task_done()
+    await asyncio.wait_for(blocked_append, timeout=1)
+    encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_tracks_audio_until_writer_consumes_it(tmp_path):
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            return None
+
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=24000,
+        frame_ms=20,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    pcm = bytes(round(24000 * 0.1) * 2)
+    await encoder.append_pcm(pcm)
+
+    assert encoder.pending_audio_ms == 100
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        async def consumed() -> None:
+            while encoder.pending_audio_ms:
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(consumed(), timeout=1)
+        assert encoder.pending_audio_ms == 0
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_continues_realtime_carrier_without_audio_debt(
+    tmp_path,
+    monkeypatch,
+):
+    real_sleep = asyncio.sleep
+    delays: list[float] = []
+    writes: list[bytes] = []
+    wrote_two_idle_frames = asyncio.Event()
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+        await real_sleep(0)
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            writes.append(bytes(data))
+            if len(writes) >= 3:
+                wrote_two_idle_frames.set()
+
+        async def drain(self) -> None:
+            return None
+
+    monkeypatch.setattr(asyncio, "sleep", record_delay)
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+        frame_ms=100,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    speech_frame = b"\x01\x00" * 800
+    await encoder.append_pcm(speech_frame)
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        await asyncio.wait_for(wrote_two_idle_frames.wait(), timeout=1)
+
+        assert writes[:3] == [
+            speech_frame,
+            encoder._idle_carrier_pcm,
+            encoder._idle_carrier_pcm,
+        ]
+        assert delays[:3] == pytest.approx([0.05, 0.1, 0.1])
+        assert encoder.pending_audio_ms == 0
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_inserts_no_carrier_between_adjacent_clips(
+    tmp_path,
+    monkeypatch,
+):
+    real_sleep = asyncio.sleep
+    writes: list[bytes] = []
+    wrote_both_clips = asyncio.Event()
+
+    async def yield_immediately(delay: float) -> None:
+        del delay
+        await real_sleep(0)
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            writes.append(bytes(data))
+            if len(writes) >= 2:
+                wrote_both_clips.set()
+
+        async def drain(self) -> None:
+            return None
+
+    monkeypatch.setattr(asyncio, "sleep", yield_immediately)
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+        frame_ms=100,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    first = b"\x01\x00" * 800
+    second = b"\x02\x00" * 800
+    await encoder.append_pcm(first)
+    await encoder.append_pcm(second)
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        await asyncio.wait_for(wrote_both_clips.wait(), timeout=1)
+
+        assert writes[:2] == [first, second]
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_limits_two_x_burst_to_two_seconds(
+    tmp_path,
+    monkeypatch,
+):
+    real_sleep = asyncio.sleep
+    delays: list[float] = []
+    wrote_twenty_one_frames = asyncio.Event()
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+        if len(delays) >= 21:
+            wrote_twenty_one_frames.set()
+        await real_sleep(0)
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            return None
+
+    monkeypatch.setattr(asyncio, "sleep", record_delay)
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+        frame_ms=100,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(bytes(round(8000 * 3.0) * 2))
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        await asyncio.wait_for(wrote_twenty_one_frames.wait(), timeout=1)
+
+        assert delays[:20] == pytest.approx([0.05] * 20)
+        assert delays[20] == pytest.approx(0.1)
+        assert encoder.pending_audio_ms > 0
+        assert writer.done() is False
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_does_not_reset_burst_between_adjacent_clips(
+    tmp_path,
+    monkeypatch,
+):
+    real_sleep = asyncio.sleep
+    delays: list[float] = []
+    wrote_twenty_one_frames = asyncio.Event()
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+        if len(delays) >= 21:
+            wrote_twenty_one_frames.set()
+        await real_sleep(0)
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            return None
+
+    monkeypatch.setattr(asyncio, "sleep", record_delay)
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+        frame_ms=100,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(bytes(round(8000 * 1.5) * 2))
+    await encoder.append_pcm(bytes(round(8000 * 1.5) * 2))
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        await asyncio.wait_for(wrote_twenty_one_frames.wait(), timeout=1)
+
+        assert delays[:20] == pytest.approx([0.05] * 20)
+        assert delays[20] == pytest.approx(0.1)
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_resets_burst_after_genuine_queue_starvation(
+    tmp_path,
+    monkeypatch,
+):
+    real_sleep = asyncio.sleep
+    delays: list[float] = []
+
+    async def record_delay(delay: float) -> None:
+        delays.append(delay)
+        await real_sleep(0)
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            return None
+
+    monkeypatch.setattr(asyncio, "sleep", record_delay)
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=8000,
+        frame_ms=100,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(bytes(round(8000 * 2.1) * 2))
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        while encoder.pending_audio_ms:
+            await real_sleep(0)
+        await real_sleep(0)
+        delay_count_before_resume = len(delays)
+
+        await encoder.append_pcm(bytes(round(8000 * 0.1) * 2))
+        while len(delays) == delay_count_before_resume:
+            await real_sleep(0)
+
+        assert delays[20] == pytest.approx(0.1)
+        assert delays[delay_count_before_resume] == pytest.approx(0.05)
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_pending_audio_does_not_charge_frame_padding_to_next_clip(tmp_path):
+    first_write = asyncio.Event()
+
+    class FakeStdin:
+        def write(self, data: bytes) -> None:
+            del data
+            first_write.set()
+
+        async def drain(self) -> None:
+            return None
+
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "live",
+        sample_rate=24000,
+        frame_ms=20,
+    )
+    encoder._process = SimpleNamespace(returncode=None, stdin=FakeStdin())
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(bytes(100))
+    await encoder.append_pcm(bytes(9600))
+
+    writer = asyncio.create_task(encoder._writer_loop())
+    try:
+        await asyncio.wait_for(first_write.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert encoder.pending_audio_ms == 200
+    finally:
+        writer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await writer
+        encoder._process = None
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_produces_shared_aac_hls_segment(tmp_path):
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("FFmpeg tools are unavailable")
+    root = tmp_path / "live"
+    encoder = FFmpegHLSEncoder(
+        root,
+        sample_rate=24000,
+        segment_sec=0.5,
+        playlist_segments=6,
+        frame_ms=50,
+    )
+    await encoder.start()
+    try:
+        pcm = decode_mono_pcm16_wav(make_wav(duration_ms=700), expected_rate=24000)
+        await encoder.append_pcm(pcm)
+        await asyncio.sleep(1.0)
+        playlist = encoder.playlist_text()
+        probe = None
+        for segment_name in (
+            line.strip()
+            for line in playlist.splitlines()
+            if line.strip().endswith(".ts")
+        ):
+            candidate = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a:0",
+                    "-show_entries",
+                    "stream=codec_name,sample_rate",
+                    "-of",
+                    "default=nw=1",
+                    str(encoder.segment_path(segment_name)),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if candidate.returncode == 0 and "codec_name=aac" in candidate.stdout:
+                probe = candidate
+                break
+        assert probe is not None
+        assert "codec_name=aac" in probe.stdout
+        assert "sample_rate=24000" in probe.stdout
+    finally:
+        await encoder.close()
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_bootstrap_is_decodable_and_keeps_live_playlist_advancing(
+    tmp_path,
+):
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("FFmpeg tools are unavailable")
+    root = tmp_path / "idle-live"
+    encoder = FFmpegHLSEncoder(
+        root,
+        sample_rate=24000,
+        segment_sec=0.5,
+        playlist_segments=6,
+        frame_ms=50,
+    )
+    await encoder.start()
+    try:
+        await encoder.wait_ready(timeout=5)
+        await asyncio.sleep(0.7)
+        playlist = encoder.playlist_text()
+        bootstrap_segments = [
+            line.strip()
+            for line in playlist.splitlines()
+            if line.strip().endswith(".ts")
+        ]
+        assert bootstrap_segments
+        probe = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name,sample_rate",
+                "-of",
+                "default=nw=1",
+                str(encoder.segment_path(bootstrap_segments[0])),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert probe.returncode == 0, probe.stderr
+        assert "codec_name=aac" in probe.stdout
+        assert "sample_rate=24000" in probe.stdout
+
+        while encoder._bootstrap_pcm_bytes_remaining:
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.2)
+        idle_playlist = encoder.playlist_text()
+        idle_edge = parse_hls_live_edge_at_ms(idle_playlist)
+
+        await asyncio.sleep(0.8)
+
+        advanced_playlist = encoder.playlist_text()
+        advanced_edge = parse_hls_live_edge_at_ms(advanced_playlist)
+        assert advanced_playlist != idle_playlist
+        assert advanced_edge is not None
+        assert idle_edge is not None
+        assert advanced_edge > idle_edge
+        assert encoder.pending_audio_ms == 0
+    finally:
+        await encoder.close()
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_resumes_after_continuous_idle_carrier(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is unavailable")
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "speech-only-live",
+        sample_rate=24000,
+        segment_sec=0.5,
+        playlist_segments=8,
+        frame_ms=50,
+    )
+    tone = decode_mono_pcm16_wav(
+        make_wav(duration_ms=1200),
+        expected_rate=24000,
+    )
+    await encoder.start()
+    try:
+        await encoder.wait_ready(timeout=5)
+        while encoder._bootstrap_pcm_bytes_remaining:
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.2)
+        bootstrap_edge = parse_hls_live_edge_at_ms(encoder.playlist_text())
+        assert bootstrap_edge is not None
+
+        first = await encoder.append_pcm(tone)
+        await wait_until(lambda: encoder.pending_audio_ms == 0, timeout=3)
+        await wait_until(
+            lambda: (
+                parse_hls_live_edge_at_ms(encoder.playlist_text()) or 0
+            ) > bootstrap_edge,
+            timeout=3,
+        )
+        await asyncio.sleep(0.3)
+        first_idle_playlist = encoder.playlist_text()
+        first_idle_edge = parse_hls_live_edge_at_ms(first_idle_playlist)
+
+        await asyncio.sleep(0.8)
+        continued_idle_playlist = encoder.playlist_text()
+        continued_idle_edge = parse_hls_live_edge_at_ms(continued_idle_playlist)
+        assert continued_idle_playlist != first_idle_playlist
+        assert continued_idle_edge is not None
+        assert first_idle_edge is not None
+        assert continued_idle_edge > first_idle_edge
+
+        second = await encoder.append_pcm(tone)
+        assert second.discardable_gap_before_ms > 0
+        assert (
+            second.start_at_ms - first.end_at_ms
+            == second.discardable_gap_before_ms
+        )
+        await wait_until(lambda: encoder.pending_audio_ms == 0, timeout=3)
+        await wait_until(
+            lambda: (
+                parse_hls_live_edge_at_ms(encoder.playlist_text()) or 0
+            ) >= second.end_at_ms,
+            timeout=3,
+        )
+    finally:
+        await encoder.close()
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_encoder_publishes_complete_latest_clip_and_stays_live(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is unavailable")
+    encoder = FFmpegHLSEncoder(
+        tmp_path / "complete-latest-clip",
+        sample_rate=24000,
+        segment_sec=1.0,
+        frame_ms=100,
+    )
+    tone = decode_mono_pcm16_wav(
+        make_wav(duration_ms=2500),
+        expected_rate=24000,
+    )
+    await encoder.start()
+    try:
+        await encoder.wait_ready(timeout=5)
+        while encoder._bootstrap_pcm_bytes_remaining:
+            await asyncio.sleep(0.02)
+
+        receipt = await encoder.append_pcm(tone)
+        await wait_until(lambda: encoder.pending_audio_ms == 0, timeout=3)
+        await wait_until(
+            lambda: (
+                parse_hls_live_edge_at_ms(encoder.playlist_text()) or 0
+            ) >= receipt.end_at_ms,
+            timeout=3,
+        )
+        completed_playlist = encoder.playlist_text()
+        completed_edge = parse_hls_live_edge_at_ms(completed_playlist)
+        assert completed_edge is not None
+
+        await asyncio.sleep(1.2)
+
+        live_playlist = encoder.playlist_text()
+        live_edge = parse_hls_live_edge_at_ms(live_playlist)
+        assert live_playlist != completed_playlist
+        assert live_edge is not None
+        assert live_edge > completed_edge
+        assert completed_edge >= receipt.end_at_ms
+    finally:
+        await encoder.close()
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_append_receipt_matches_decoded_hls_audio_timeline(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("FFmpeg is unavailable")
+    root = tmp_path / "live-sync"
+    encoder = FFmpegHLSEncoder(
+        root,
+        sample_rate=24000,
+        segment_sec=1.0,
+        frame_ms=100,
+    )
+    tone_pcm = struct.pack(
+        "<28800h",
+        *[
+            round(12000 * math.sin(2 * math.pi * 997 * index / 24000))
+            for index in range(28800)
+        ],
+    )
+
+    await encoder.start()
+    try:
+        await encoder.wait_ready(timeout=5)
+        await asyncio.sleep(0.2)
+        receipt = await encoder.append_pcm(tone_pcm)
+        await asyncio.sleep(3.0)
+    finally:
+        await encoder.close()
+
+    playlist = encoder.playlist_path.read_text(encoding="utf-8")
+    ended_playlist = root / "ended.m3u8"
+    ended_playlist.write_text(playlist + "#EXT-X-ENDLIST\n", encoding="utf-8")
+    decoded_path = root / "decoded.pcm"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(ended_playlist),
+            "-map",
+            "0:a:0",
+            "-ac",
+            "1",
+            "-ar",
+            "24000",
+            "-f",
+            "s16le",
+            "-y",
+            str(decoded_path),
+        ],
+        check=True,
+    )
+    first_program_line = next(
+        line
+        for line in playlist.splitlines()
+        if line.startswith("#EXT-X-PROGRAM-DATE-TIME:")
+    )
+    timeline_origin_ms = round(
+        datetime.fromisoformat(first_program_line.split(":", 1)[1]).timestamp()
+        * 1000
+    )
+    decoded = decoded_path.read_bytes()
+    samples = struct.unpack(f"<{len(decoded) // 2}h", decoded)
+    window_samples = 240
+    audible_windows = []
+    for offset in range(0, len(samples) - window_samples + 1, window_samples):
+        window = samples[offset : offset + window_samples]
+        rms = math.sqrt(sum(value * value for value in window) / len(window))
+        if rms >= 1000:
+            audible_windows.append(offset // window_samples)
+    assert audible_windows
+    actual_audio_start_ms = timeline_origin_ms + audible_windows[0] * 10
+
+    assert abs(receipt.start_at_ms - actual_audio_start_ms) <= 20
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end_epoch", ["remove", "expire"])
+async def test_new_hls_epoch_clears_past_synthesis_error_before_next_utterance(
+    tmp_path, end_epoch
+):
+    class TransientFailureSynthesizer(FakeSynthesizer):
+        def synthesize(self, text, target_language, *, speed=None):
+            if text == "Transient failure":
+                raise RuntimeError("temporary synthesis failure")
+            return super().synthesize(text, target_language, speed=speed)
+
+    clock = FakeClock()
+    synth = TransientFailureSynthesizer(make_wav())
+    encoders = []
+
+    def encoder_factory(root):
+        encoder = FakeEncoder(root)
+        encoders.append(encoder)
+        return encoder
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth,
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        listener_ttl_sec=10,
+        clock=clock,
+    )
+    try:
+        await publisher.touch_listener("native", "owner-native")
+        first_epoch = publisher.status.speech_epoch_id
+        await publisher.publish(ready_item(0, text="Transient failure"))
+        await publisher.wait_idle()
+        assert publisher.status.last_error == "RuntimeError"
+
+        # Renewing or joining a live epoch must not hide its current error.
+        await publisher.touch_listener("native", "owner-native")
+        await publisher.touch_listener("audience", "owner-audience")
+        assert publisher.status.speech_epoch_id == first_epoch
+        assert publisher.status.last_error == "RuntimeError"
+        await publisher.remove_listener("audience", "owner-audience")
+        assert publisher.status.last_error == "RuntimeError"
+
+        if end_epoch == "remove":
+            assert await publisher.remove_listener("native", "owner-native") is True
+        else:
+            clock.value += 11
+            assert await publisher.prune_expired() == 1
+        assert publisher.status.speech_epoch_id == ""
+        assert publisher.status.last_error == "RuntimeError"
+        assert encoders[0].close_count == 1
+
+        await publisher.touch_listener("native", "owner-native")
+        next_epoch = publisher.status.speech_epoch_id
+        assert next_epoch and next_epoch != first_epoch
+        assert publisher.status.last_error == ""
+        # The speaker can stay silent across status polls before another synthesis.
+        for _ in range(4):
+            clock.value += 1
+            await publisher.touch_listener("native", "owner-native")
+            assert publisher.status.speech_epoch_id == next_epoch
+            assert publisher.status.last_error == ""
+            assert publisher.status.encoder_active is True
+        assert encoders[1].appended == []
+        assert synth.calls == []
+
+        await publisher.publish(ready_item(1, text="Recovered speech"))
+        await publisher.wait_idle()
+        assert synth.calls == [("Recovered speech", "English")]
+        assert len(encoders[1].appended) == 1
+        assert publisher.status.last_error == ""
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_hls_epoch_start_does_not_hide_previous_error(tmp_path):
+    class FailingSynthesizer(FakeSynthesizer):
+        def synthesize(self, text, target_language, *, speed=None):
+            raise RuntimeError("synthesis failed")
+
+    class FailedStartEncoder(FakeEncoder):
+        async def start(self):
+            raise OSError("encoder unavailable")
+
+    starts = 0
+
+    def encoder_factory(root):
+        nonlocal starts
+        starts += 1
+        return FakeEncoder(root) if starts == 1 else FailedStartEncoder(root)
+
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=FailingSynthesizer(make_wav()),
+        encoder_factory=encoder_factory,
+        root_dir=tmp_path,
+        clock=FakeClock(),
+    )
+    try:
+        await publisher.touch_listener("native", "owner-native")
+        await publisher.publish(ready_item())
+        await publisher.wait_idle()
+        assert publisher.status.last_error == "RuntimeError"
+        await publisher.remove_listener("native", "owner-native")
+        with pytest.raises(OSError, match="encoder unavailable"):
+            await publisher.touch_listener("native", "owner-native")
+        assert publisher.status.last_error == "RuntimeError"
+        assert publisher.status.speech_epoch_id == ""
+        assert publisher.status.listener_count == 0
+        assert publisher.status.encoder_active is False
+    finally:
+        await publisher.close()
+
+
+def test_chinese_whole_sentence_reaches_shared_audio_and_subtitle_metadata(tmp_path):
+    async def scenario():
+        text = '当我们一同学习神的话语时，不仅要明白经文原本的意思，也要思想这些教导怎样影响我们的家庭和教会生活，让我们在面对困难的时候仍然能够彼此扶持，并且带着信心继续前行。'
+        wav = make_wav()
+        synth = FakeSynthesizer(wav)
+        encoder = FakeEncoder(tmp_path)
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path,
+            encoder_factory=lambda root: encoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('native', 'owner')
+            await stream.publish(TTSReadyItem('whole-zh', 1, 1, 'Chinese', text))
+            await asyncio.wait_for(stream.wait_idle(), 3)
+            chunks = stream.native_pcm.snapshot(0)['chunks']
+            assert [(c['text'], c['index'], c['count']) for c in chunks] == [(text, 0, 1)]
+            assert synth.calls == [(text, 'Chinese')]
+            # One audio payload, with the existing 300 ms pause only at its end.
+            assert len(encoder.appended) == 1
+            pcm = decode_mono_pcm16_wav(wav, expected_rate=24000)
+            assert encoder.appended[0] == pcm + bytes(24000 * 2 * 300 // 1000)
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_release_while_second_preparation_blocks(tmp_path):
+    async def scenario():
+        second = threading.Event()
+        unblock = threading.Event()
+        class Blocking(FakeSynthesizer):
+            def synthesize(self, text, target_language, *, speed=None):
+                if self.calls:
+                    second.set()
+                    assert unblock.wait(3)
+                return super().synthesize(text, target_language, speed=speed)
+        synth = Blocking(make_wav())
+        encoders = []
+        def factory(root):
+            encoder = FakeEncoder(root); encoders.append(encoder); return encoder
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path, encoder_factory=factory, chunked_synthesis=True)
+        item = TTSReadyItem('chunk', 1, 1, 'English', 'One two three four five six seven eight, nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.')
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.prepare(item)
+            assert await asyncio.to_thread(second.wait, 2)
+            assert stream.native_pcm.snapshot(0)['chunks'] == []
+            await stream.publish(item)
+            for _ in range(100):
+                if stream.native_pcm.snapshot(0)['chunks']: break
+                await asyncio.sleep(.005)
+            first = stream.native_pcm.snapshot(0)['chunks']
+            assert len(first) == 1
+            assert first[0]['index'] == 0 and first[0]['count'] == 2
+            assert first[0]['duration_ms'] == 100
+            assert stream.status.queue_depth == 1
+            assert stream.status.synthesis_active
+            assert stream.status.translated_audio_backlog_count == 1
+            unblock.set()
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            chunks = stream.native_pcm.snapshot(0)['chunks']
+            assert [c['duration_ms'] for c in chunks] == [100, 400]
+            assert len(encoders[0].appended) == 2
+        finally:
+            unblock.set(); await stream.close()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('reset_epoch', [False, True])
+def test_chunk_obsolete_inflight_audio_cannot_publish(tmp_path, reset_epoch):
+    async def scenario():
+        entered = threading.Event(); unblock = threading.Event()
+        class Blocking(FakeSynthesizer):
+            def synthesize(self, text, target_language, *, speed=None):
+                if text == 'old':
+                    entered.set(); assert unblock.wait(3)
+                return super().synthesize(text, target_language, speed=speed)
+        stream = SharedHLSTTSPublisher(synthesizer=Blocking(make_wav()), root_dir=tmp_path,
+            encoder_factory=FakeEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            epoch = stream.status.speech_epoch_id
+            await stream.publish(TTSReadyItem('s', 1, 1, 'English', 'old'))
+            assert await asyncio.to_thread(entered.wait, 2)
+            if reset_epoch:
+                await stream.remove_listener('l', 'o')
+                await stream.touch_listener('l', 'o')
+                assert stream.status.speech_epoch_id != epoch
+            await stream.publish(TTSReadyItem('s', 2, 1, 'English', 'new'))
+            unblock.set()
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['new']
+            assert not await stream.publish(TTSReadyItem('s', 1, 1, 'English', 'old'))
+        finally:
+            unblock.set(); await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_publication_preserves_sentences_and_does_not_replay(tmp_path):
+    async def scenario():
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+            encoder_factory=FakeEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            first = TTSReadyItem('a', 1, 1, 'English', 'one two three four five six seven eight, nine ten')
+            second = TTSReadyItem('b', 1, 2, 'English', 'later')
+            await stream.prepare(second)
+            await stream.publish(first); await stream.publish(second)
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert [c['source_order'] for c in stream.native_pcm.snapshot(0)['chunks']] == [1, 1, 2]
+            await stream.publish(first)
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 3
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('discard', [False, True])
+def test_chunk_idle_eviction_never_synthesizes_dropped_work(tmp_path, discard):
+    async def scenario():
+        synth = FakeSynthesizer(make_wav())
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path, encoder_factory=FakeEncoder,
+                                       chunked_synthesis=True, queue_size=2)
+        try:
+            for i in range(10):
+                await stream.publish(TTSReadyItem(str(i), 1, i, 'English', f'word{i}'))
+            if discard:
+                assert await stream.discard_idle_backlog() == 2
+            await stream.touch_listener('l', 'o')
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            await asyncio.sleep(.02)
+            assert [text for text, _ in synth.calls] == ([] if discard else ['word9'])
+            assert not stream._chunk_states
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_replay_fence_survives_history_eviction(tmp_path):
+    async def scenario():
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=FakeEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            for i in range(258):
+                await stream.publish(TTSReadyItem(str(i), 1, i, 'English', 'hello'))
+                await asyncio.wait_for(stream.wait_idle(), 2)
+            await stream.publish(TTSReadyItem('0', 1, 0, 'English', 'hello'))
+            await stream.wait_idle()
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 258
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_failed_append_does_not_expose_or_duplicate_native_audio(tmp_path):
+    async def scenario():
+        class FailingEncoder(FakeEncoder):
+            async def append_pcm(self, pcm):
+                raise HLSUnavailable('rejected')
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                raise HLSUnavailable('rejected')
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=FailingEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            item = TTSReadyItem('s', 1, 1, 'English', 'hello')
+            for _ in range(2):
+                await stream.publish(item); await stream.wait_idle()
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 0
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_blocked_commit_rechecks_revision(tmp_path):
+    async def scenario():
+        entered = asyncio.Event(); unblock = asyncio.Event(); encoders = []
+        class BlockedEncoder(FakeEncoder):
+            async def append_pcm(self, pcm):
+                entered.set(); await unblock.wait()
+                return await super().append_pcm(pcm)
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                entered.set(); await unblock.wait()
+                if not is_current(): return None
+                receipt = await super().append_pcm(pcm)
+                on_commit()
+                return receipt
+        def factory(root):
+            encoder = BlockedEncoder(root); encoders.append(encoder); return encoder
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=factory, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(TTSReadyItem('s', 1, 1, 'English', 'old'))
+            await asyncio.wait_for(entered.wait(), 2)
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 0
+            await stream.publish(TTSReadyItem('s', 2, 1, 'English', 'new'))
+            unblock.set(); await asyncio.wait_for(stream.wait_idle(), 2)
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['new']
+            assert len(encoders[0].appended) == 1
+        finally:
+            unblock.set(); await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_preparation_budget_backpressures_and_releases_payloads(tmp_path):
+    async def scenario():
+        entered = asyncio.Event(); unblock = asyncio.Event()
+        class BlockedEncoder(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                entered.set(); await unblock.wait()
+                if not is_current(): return None
+                receipt = await super().append_pcm(pcm); on_commit(); return receipt
+        synth = FakeSynthesizer(make_wav())
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path, encoder_factory=BlockedEncoder,
+            chunked_synthesis=True, preparation_max_bytes=24000, preparation_max_chunks=2, sentence_pause_ms=0)
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(TTSReadyItem('s', 1, 1, 'English', ' '.join(['word'] * 180)))
+            await asyncio.wait_for(entered.wait(), 2)
+            await asyncio.sleep(.03)
+            assert len(synth.calls) <= 3
+            assert stream.prepared_pcm_bytes <= 24000
+            assert stream.prepared_pcm_chunks <= 2
+            unblock.set(); await asyncio.wait_for(stream.wait_idle(), 2)
+            assert stream.prepared_pcm_bytes == 0
+            assert stream.prepared_pcm_chunks == 0
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 10
+        finally:
+            unblock.set(); await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_new_source_generation_accepts_restarted_order(tmp_path):
+    async def scenario():
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=FakeEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(TTSReadyItem('old', 1, 100, 'English', 'old'))
+            await stream.wait_idle()
+            stream.begin_source_generation()
+            await stream.publish(TTSReadyItem('new', 1, 0, 'English', 'new'))
+            await stream.wait_idle()
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['old', 'new']
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_shared_commit_checks_fence_after_queue_wait(tmp_path):
+    encoder = FFmpegHLSEncoder(tmp_path / 'live', pcm_queue_size=1)
+    encoder._process = SimpleNamespace(returncode=None)
+    encoder._timeline_origin_at_ms = 100_000
+    await encoder.append_pcm(b'\x00\x00')
+    committed = []
+    current = True
+    pending = asyncio.create_task(encoder.append_pcm_committed(
+        b'\x01\x00', is_current=lambda: current, on_commit=lambda: committed.append('yes')))
+    await asyncio.sleep(0)
+    assert not pending.done() and committed == []
+    current = False
+    encoder._pcm_queue.get_nowait(); encoder._pcm_queue.task_done()
+    assert await asyncio.wait_for(pending, 1) is None
+    assert encoder._pcm_queue.empty() and committed == []
+    receipt = await encoder.append_pcm_committed(
+        b'\x02\x00', is_current=lambda: True, on_commit=lambda: committed.append('yes'))
+    assert isinstance(receipt, HLSAppendReceipt)
+    assert committed == ['yes']
+    assert encoder._pcm_queue.get_nowait() == b'\x02\x00'
+
+
+def test_chunk_reset_fences_blocked_commit_even_with_reused_identity(tmp_path):
+    async def scenario():
+        entered = asyncio.Event(); unblock = asyncio.Event(); encoders = []
+        class BlockedEncoder(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                entered.set(); await unblock.wait()
+                if not is_current(): return None
+                receipt = await super().append_pcm(pcm); on_commit(); return receipt
+        def factory(root):
+            encoder = BlockedEncoder(root); encoders.append(encoder); return encoder
+        class ChangingSynth(FakeSynthesizer):
+            def synthesize(self, text, target_language, *, speed=None):
+                self.wav_bytes = make_wav(duration_ms=100 * (len(self.calls) + 1))
+                return super().synthesize(text, target_language, speed=speed)
+        stream = SharedHLSTTSPublisher(synthesizer=ChangingSynth(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=factory, chunked_synthesis=True, sentence_pause_ms=0)
+        item = TTSReadyItem('same', 1, 0, 'English', 'same')
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(item); await asyncio.wait_for(entered.wait(), 2)
+            stream.begin_source_generation()
+            await stream.publish(item)
+            unblock.set(); await asyncio.wait_for(stream.wait_idle(), 2)
+            assert len(encoders[0].appended) == 1
+            assert len(encoders[0].appended[0]) == 9600
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 1
+        finally:
+            unblock.set(); await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_partial_delivery_failure_cannot_replay_committed_prefix(tmp_path):
+    async def scenario():
+        encoders = []
+        class SecondFails(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                if self.appended: raise HLSUnavailable('second append failed')
+                return await super().append_pcm_committed(pcm, is_current=is_current, on_commit=on_commit)
+        def factory(root):
+            encoder = SecondFails(root); encoders.append(encoder); return encoder
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+                                       encoder_factory=factory, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            item = TTSReadyItem('s', 1, 0, 'English', 'one two three four five six seven eight, nine ten')
+            await stream.publish(item); await stream.wait_idle()
+            await stream.publish(item); await stream.wait_idle()
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 1
+            assert len(encoders[0].appended) == 1
+            assert stream.prepared_pcm_bytes == 0
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_speculation_cannot_block_approved_audio_at_budget(tmp_path):
+    async def scenario():
+        synth = FakeSynthesizer(make_wav())
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path, encoder_factory=FakeEncoder,
+            chunked_synthesis=True, preparation_max_bytes=4800, preparation_max_chunks=1, sentence_pause_ms=0)
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.prepare(TTSReadyItem('speculative', 1, 2, 'English', 'later'))
+            for _ in range(100):
+                if stream.prepared_pcm_chunks: break
+                await asyncio.sleep(.002)
+            assert stream.prepared_pcm_chunks == 1
+            await stream.publish(TTSReadyItem('approved', 1, 1, 'English', 'now'))
+            await asyncio.wait_for(stream.wait_idle(), 1)
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['now']
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_duplicate_idle_release_does_not_evict_its_own_identity(tmp_path):
+    async def scenario():
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+            encoder_factory=FakeEncoder, chunked_synthesis=True, queue_size=1)
+        try:
+            item = TTSReadyItem('same', 1, 0, 'English', 'hello')
+            await stream.publish(item); await stream.publish(item)
+            await stream.touch_listener('l', 'o'); await stream.wait_idle()
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 1
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_chunk_later_released_cache_cannot_block_publication_head(tmp_path):
+    async def scenario():
+        synth = FakeSynthesizer(make_wav())
+        encoders = []
+        def factory(root):
+            encoder = FakeEncoder(root); encoders.append(encoder); return encoder
+        stream = SharedHLSTTSPublisher(synthesizer=synth, root_dir=tmp_path, encoder_factory=factory,
+            chunked_synthesis=True, preparation_max_bytes=4800, preparation_max_chunks=1, sentence_pause_ms=0)
+        first = TTSReadyItem('A', 1, 1, 'English', 'first')
+        later = TTSReadyItem('B', 1, 2, 'English', 'later')
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.prepare(later)
+            for _ in range(100):
+                if stream.prepared_pcm_chunks == 1: break
+                await asyncio.sleep(.002)
+            assert stream.prepared_pcm_chunks == 1
+            await stream.publish(first)
+            await stream.publish(later)
+            await asyncio.wait_for(stream.wait_idle(), .5)
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['first', 'later']
+            assert len(encoders[0].appended) == 2
+            assert stream.prepared_pcm_bytes == 0
+        finally:
+            await stream.close()
+    asyncio.run(scenario())

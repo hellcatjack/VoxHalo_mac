@@ -1,0 +1,2020 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import io
+import logging
+import math
+import shutil
+import sys
+import time
+import uuid
+import wave
+from array import array
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Protocol
+
+from .jobs import TTSReadyItem
+from .chunks import split_speech_chunks
+from .pcm import NativePCMBuffer
+
+
+logger = logging.getLogger(__name__)
+
+ACTIVE_PCM_BURST_RATE = 2.0
+ACTIVE_PCM_BURST_MEDIA_SEC = 2.0
+DEFAULT_ENGLISH_AUDIO_MS_PER_CHAR = 65.0
+DEFAULT_CHINESE_AUDIO_MS_PER_CHAR = 180.0
+MIN_ESTIMATED_SENTENCE_AUDIO_MS = 500
+DURATION_ESTIMATE_ALPHA = 0.25
+ItemKey = tuple[str, int, str, str]
+
+
+def select_global_tts_multiplier(backlog_ms: int) -> float:
+    """Return the shared Auto multiplier for conservative unpublished speech."""
+
+    value = max(0, int(backlog_ms))
+    if value >= 20_000:
+        return 1.5
+    if value >= 15_000:
+        return 1.4
+    if value >= 6_000:
+        return 1.2
+    return 1.0
+
+
+class HLSError(Exception):
+    """Base error for the shared translated-speech stream."""
+
+
+class HLSUnavailable(HLSError):
+    """Raised when the shared encoder cannot serve media."""
+
+
+class HLSListenerNotFound(HLSError):
+    """Raised for an absent, expired, or foreign listener lease."""
+
+
+class HLSListenerCapacityExceeded(HLSError):
+    """Raised when a new listener would exceed the active lease limit."""
+
+
+class HLSQueueFull(HLSError):
+    """Raised instead of growing the pending speech queue without bound."""
+
+
+@dataclass(frozen=True, slots=True)
+class HLSListenerLease:
+    listener_id: str
+    owner_key: str
+    expires_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class HLSAppendReceipt:
+    start_at_ms: int
+    end_at_ms: int
+    discardable_gap_before_ms: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class HLSCaptionCue:
+    cue_id: str
+    start_at_ms: int
+    end_at_ms: int
+    text: str
+    discardable_gap_before_ms: int = 0
+    resume_at_ms: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class HLSCaptionSnapshot:
+    live_edge_at_ms: int | None
+    cues: tuple[HLSCaptionCue, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class HLSStreamStatus:
+    available: bool
+    listener_count: int
+    queue_depth: int
+    synthesis_active: bool
+    preparation_queue_depth: int
+    preparation_active: bool
+    prepared_audio_count: int
+    pending_audio_ms: int
+    translated_audio_backlog_ms: int
+    translated_audio_backlog_count: int
+    translated_audio_backlog_estimated: bool
+    speech_epoch_id: str
+    global_speed_mode: str
+    global_speed_multiplier: float
+    tts_effective_speed: float
+    encoder_active: bool
+    last_error: str
+
+
+@dataclass(frozen=True, slots=True)
+class _HLSMediaSegment:
+    sequence: int
+    name: str
+    start_at_ms: int
+    end_at_ms: int
+    duration_ms: int
+    block_start: int
+
+
+@dataclass(frozen=True, slots=True)
+class _HLSMediaPlaylist:
+    text: str
+    lines: tuple[str, ...]
+    media_sequence_line: int
+    target_duration_ms: int
+    segments: tuple[_HLSMediaSegment, ...]
+
+
+@dataclass(slots=True)
+class _HLSListenerPlayback:
+    last_segment_name: str | None = None
+    last_segment_number: int = -1
+    playlist_floor_sequence: int | None = None
+
+
+class HLSEncoder(Protocol):
+    root: Path
+
+    @property
+    def pending_audio_ms(self) -> int: ...
+
+    async def start(self) -> None: ...
+
+    async def append_pcm(self, pcm: bytes) -> HLSAppendReceipt | None: ...
+
+    async def append_pcm_committed(
+        self, pcm: bytes, *, is_current: Callable[[], bool], on_commit: Callable[[], None]
+    ) -> HLSAppendReceipt | None: ...
+
+    async def wait_ready(self, timeout: float = 5.0) -> None: ...
+
+    def playlist_text(self) -> str: ...
+
+    def live_edge_at_ms(self) -> int | None: ...
+
+    def segment_path(self, name: str) -> Path: ...
+
+    async def close(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedAudio:
+    pcm: bytes
+    audio_ms: int
+    cue_start_offset_ms: int
+    cue_end_offset_ms: int
+    synthesis_ms: int
+    prepared_at: float
+    displayed_multiplier: float
+    effective_speed: float
+
+
+def decode_mono_pcm16_wav(wav_bytes: bytes, *, expected_rate: int) -> bytes:
+    """Return validated mono signed-16 PCM from a synthesized WAV."""
+
+    try:
+        with wave.open(io.BytesIO(bytes(wav_bytes)), "rb") as source:
+            channels = int(source.getnchannels())
+            sample_width = int(source.getsampwidth())
+            sample_rate = int(source.getframerate())
+            compression = str(source.getcomptype())
+            frames = source.readframes(source.getnframes())
+    except (EOFError, wave.Error) as exc:
+        raise ValueError("invalid synthesized WAV") from exc
+    if compression != "NONE":
+        raise ValueError("synthesized WAV must contain uncompressed PCM")
+    if channels != 1:
+        raise ValueError("synthesized WAV must be mono")
+    if sample_width != 2:
+        raise ValueError("synthesized WAV must contain 16-bit PCM")
+    if sample_rate != int(expected_rate):
+        raise ValueError(
+            f"synthesized WAV sample rate must be {int(expected_rate)}, got {sample_rate}"
+        )
+    if not frames:
+        raise ValueError("synthesized WAV contains no audio")
+    return frames
+
+
+def _pcm_activity_bounds_ms(pcm: bytes, *, sample_rate: int) -> tuple[int, int]:
+    """Find synthesized speech edges without interpreting its language or text."""
+
+    data = bytes(pcm)
+    duration_ms = max(1, round(len(data) * 1000 / (sample_rate * 2)))
+    samples = array("h")
+    samples.frombytes(data)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    window_samples = max(1, round(sample_rate * 0.01))
+    window_energy: list[float] = []
+    for start in range(0, len(samples), window_samples):
+        window = samples[start : start + window_samples]
+        if len(window) < window_samples:
+            break
+        window_energy.append(
+            sum(int(value) * int(value) for value in window) / len(window)
+        )
+    if not window_energy:
+        return 0, duration_ms
+    peak_rms = max(window_energy) ** 0.5
+    threshold_rms = max(32.0, peak_rms * 0.03)
+    threshold_energy = threshold_rms * threshold_rms
+    active = [
+        index
+        for index, energy in enumerate(window_energy)
+        if energy >= threshold_energy
+    ]
+    if not active:
+        return 0, duration_ms
+    start_ms = round(active[0] * window_samples * 1000 / sample_rate)
+    end_ms = min(
+        duration_ms,
+        round((active[-1] + 1) * window_samples * 1000 / sample_rate),
+    )
+    return start_ms, max(start_ms + 1, end_ms)
+
+
+def _parse_hls_timeline_bounds_at_ms(
+    playlist: str,
+) -> tuple[int, int] | None:
+    program_time: datetime | None = None
+    duration_sec: float | None = None
+    first_start_ms: int | None = None
+    last_end_ms: int | None = None
+    for raw_line in str(playlist or "").splitlines():
+        line = raw_line.strip()
+        if line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
+            value = line.split(":", 1)[1].strip()
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                program_time = None
+            else:
+                program_time = parsed if parsed.tzinfo is not None else None
+            continue
+        if line.startswith("#EXTINF:"):
+            value = line.split(":", 1)[1].split(",", 1)[0].strip()
+            try:
+                parsed_duration = float(value)
+            except ValueError:
+                duration_sec = None
+            else:
+                duration_sec = parsed_duration if parsed_duration > 0 else None
+            continue
+        if not line or line.startswith("#"):
+            continue
+        if program_time is not None and duration_sec is not None:
+            start_ms = round(program_time.timestamp() * 1000.0)
+            if first_start_ms is None:
+                first_start_ms = start_ms
+            last_end_ms = round(
+                (program_time.timestamp() + duration_sec) * 1000.0
+            )
+        program_time = None
+        duration_sec = None
+    if first_start_ms is None or last_end_ms is None:
+        return None
+    return first_start_ms, last_end_ms
+
+
+def _parse_hls_media_playlist(playlist: str) -> _HLSMediaPlaylist | None:
+    """Parse the FFmpeg live-playlist metadata needed for safe prefix removal."""
+
+    text = str(playlist or "")
+    lines = tuple(text.splitlines())
+    target_duration_ms: int | None = None
+    media_sequence: int | None = None
+    media_sequence_line: int | None = None
+    pending_duration_ms: int | None = None
+    pending_program_time: datetime | None = None
+    pending_block_start: int | None = None
+    segments: list[_HLSMediaSegment] = []
+
+    for line_index, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        if line in {"#EXT-X-DISCONTINUITY", "#EXT-X-ENDLIST"} or line.startswith(
+            (
+                "#EXT-X-PLAYLIST-TYPE:",
+                "#EXT-X-KEY:",
+                "#EXT-X-MAP:",
+                "#EXT-X-BYTERANGE:",
+                "#EXT-X-GAP",
+            )
+        ):
+            return None
+        if line.startswith("#EXT-X-TARGETDURATION:"):
+            try:
+                value = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+            if value <= 0:
+                return None
+            target_duration_ms = value * 1000
+            continue
+        if line.startswith("#EXT-X-MEDIA-SEQUENCE:"):
+            try:
+                value = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+            if value < 0:
+                return None
+            media_sequence = value
+            media_sequence_line = line_index
+            continue
+        if line.startswith("#EXTINF:"):
+            if pending_block_start is None:
+                pending_block_start = line_index
+            try:
+                duration_sec = float(
+                    line.split(":", 1)[1].split(",", 1)[0].strip()
+                )
+            except ValueError:
+                return None
+            if not math.isfinite(duration_sec) or duration_sec <= 0:
+                return None
+            pending_duration_ms = round(duration_sec * 1000.0)
+            continue
+        if line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
+            if pending_block_start is None:
+                pending_block_start = line_index
+            value = line.split(":", 1)[1].strip()
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if parsed.tzinfo is None:
+                return None
+            pending_program_time = parsed
+            continue
+        if not line or line.startswith("#"):
+            continue
+        if (
+            media_sequence is None
+            or pending_duration_ms is None
+            or pending_program_time is None
+            or pending_block_start is None
+        ):
+            return None
+        start_at_ms = round(pending_program_time.timestamp() * 1000.0)
+        segments.append(
+            _HLSMediaSegment(
+                sequence=media_sequence + len(segments),
+                name=Path(line).name,
+                start_at_ms=start_at_ms,
+                end_at_ms=start_at_ms + pending_duration_ms,
+                duration_ms=pending_duration_ms,
+                block_start=pending_block_start,
+            )
+        )
+        pending_duration_ms = None
+        pending_program_time = None
+        pending_block_start = None
+
+    if (
+        target_duration_ms is None
+        or media_sequence is None
+        or media_sequence_line is None
+        or not segments
+    ):
+        return None
+    return _HLSMediaPlaylist(
+        text=text,
+        lines=lines,
+        media_sequence_line=media_sequence_line,
+        target_duration_ms=target_duration_ms,
+        segments=tuple(segments),
+    )
+
+
+def _trim_hls_playlist(
+    playlist: _HLSMediaPlaylist,
+    *,
+    floor_sequence: int,
+) -> str:
+    """Remove a parsed live-playlist prefix while preserving original blocks."""
+
+    retained = next(
+        (
+            segment
+            for segment in playlist.segments
+            if segment.sequence >= int(floor_sequence)
+        ),
+        None,
+    )
+    if retained is None or retained.sequence <= playlist.segments[0].sequence:
+        return playlist.text
+    lines = list(playlist.lines[: playlist.segments[0].block_start])
+    lines[playlist.media_sequence_line] = (
+        f"#EXT-X-MEDIA-SEQUENCE:{retained.sequence}"
+    )
+    lines.extend(playlist.lines[retained.block_start :])
+    suffix = "\n" if playlist.text.endswith(("\n", "\r")) else ""
+    return "\n".join(lines) + suffix
+
+
+def _hls_segment_number(name: str) -> int | None:
+    value = Path(str(name or "")).name
+    prefix = "segment_"
+    suffix = ".ts"
+    if not value.startswith(prefix) or not value.endswith(suffix):
+        return None
+    digits = value[len(prefix) : -len(suffix)]
+    if not digits.isdigit():
+        return None
+    return int(digits)
+
+
+def _select_hls_gap_floor_sequence(
+    playlist: _HLSMediaPlaylist,
+    *,
+    last_segment_name: str | None,
+    cues: tuple[HLSCaptionCue, ...],
+) -> int | None:
+    """Choose the latest currently legal prefix floor for confirmed carrier."""
+
+    if last_segment_name is None or len(cues) < 2:
+        return None
+    last_index = next(
+        (
+            index
+            for index, segment in enumerate(playlist.segments)
+            if segment.name == last_segment_name
+        ),
+        None,
+    )
+    if last_index is None:
+        return None
+    last_segment = playlist.segments[last_index]
+
+    minimum_window_ms = playlist.target_duration_ms * 3
+    retained_duration_ms = 0
+    latest_window_floor_index: int | None = None
+    for index in range(len(playlist.segments) - 1, -1, -1):
+        retained_duration_ms += playlist.segments[index].duration_ms
+        if retained_duration_ms >= minimum_window_ms:
+            latest_window_floor_index = index
+            break
+    if latest_window_floor_index is None:
+        return None
+
+    for previous, current in zip(cues, cues[1:]):
+        resume_at_ms = current.resume_at_ms
+        if current.discardable_gap_before_ms <= 0 or resume_at_ms is None:
+            continue
+        if last_segment.start_at_ms < previous.end_at_ms:
+            continue
+        if last_segment.end_at_ms > resume_at_ms:
+            continue
+        resume_index = next(
+            (
+                index
+                for index, segment in enumerate(playlist.segments)
+                if segment.end_at_ms > resume_at_ms
+            ),
+            None,
+        )
+        if resume_index is None:
+            continue
+        floor_index = min(resume_index, latest_window_floor_index)
+        if floor_index <= last_index:
+            return None
+        return playlist.segments[floor_index].sequence
+    return None
+
+
+def parse_hls_timeline_origin_at_ms(playlist: str) -> int | None:
+    """Return the wall-clock start of the first complete HLS media segment."""
+
+    bounds = _parse_hls_timeline_bounds_at_ms(playlist)
+    return bounds[0] if bounds is not None else None
+
+
+def parse_hls_live_edge_at_ms(playlist: str) -> int | None:
+    """Return the wall-clock end of the last complete HLS media segment."""
+
+    bounds = _parse_hls_timeline_bounds_at_ms(playlist)
+    return bounds[1] if bounds is not None else None
+
+
+class _PCMQueue(asyncio.Queue[bytes]):
+    """Expose writable capacity without reserving or enqueuing unapproved PCM."""
+
+    def __init__(self, maxsize: int):
+        super().__init__(maxsize=maxsize)
+        self.space_available = asyncio.Event()
+        self.space_available.set()
+
+    def get_nowait(self) -> bytes:
+        data = super().get_nowait()
+        self.space_available.set()
+        return data
+
+
+class FFmpegHLSEncoder:
+    """Encode one real-time mono PCM timeline into shared audio-only HLS."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        sample_rate: int = 24000,
+        segment_sec: float = 1.0,
+        playlist_segments: int = 1200,
+        bitrate: str = "64k",
+        ffmpeg_path: str = "ffmpeg",
+        frame_ms: int = 100,
+        pcm_queue_size: int = 8,
+    ) -> None:
+        self.root = Path(root)
+        self.sample_rate = max(8000, int(sample_rate))
+        self.segment_sec = max(0.25, float(segment_sec))
+        self.playlist_segments = max(3, int(playlist_segments))
+        self.bitrate = str(bitrate or "64k")
+        self.ffmpeg_path = str(ffmpeg_path or "ffmpeg")
+        self.frame_ms = max(20, int(frame_ms))
+        self._frame_bytes = max(
+            1,
+            round(self.sample_rate * self.frame_ms / 1000),
+        ) * 2
+        frame_samples = self._frame_bytes // 2
+        idle_carrier = array(
+            "h",
+            (
+                round(2 * math.sin(2 * math.pi * 1000 * index / self.sample_rate))
+                for index in range(frame_samples)
+            ),
+        )
+        if sys.byteorder != "little":
+            idle_carrier.byteswap()
+        # Exact digital silence is optimized into table-only MPEG-TS segments by
+        # FFmpeg's AAC encoder. This -84 dBFS carrier keeps idle HLS decodable.
+        self._idle_carrier_pcm = idle_carrier.tobytes()
+        self._pcm_queue = _PCMQueue(
+            maxsize=max(1, int(pcm_queue_size))
+        )
+        self._process: asyncio.subprocess.Process | None = None
+        self._writer_task: asyncio.Task[None] | None = None
+        self._stderr_task: asyncio.Task[None] | None = None
+        self._stderr_tail = bytearray()
+        self._pcm_space = self._pcm_queue.space_available
+        self._pending_pcm_bytes = 0
+        self._submitted_pcm_bytes = 0
+        self._scheduled_end_pcm_bytes = 0
+        self._bootstrap_pcm_bytes_total = 0
+        self._bootstrap_pcm_bytes_remaining = 0
+        self._timeline_origin_at_ms: int | None = None
+        self._closed = False
+
+    @property
+    def pending_audio_ms(self) -> int:
+        bytes_per_second = self.sample_rate * 2
+        return max(0, round(self._pending_pcm_bytes * 1000 / bytes_per_second))
+
+    @property
+    def playlist_path(self) -> Path:
+        return self.root / "index.m3u8"
+
+    def _required_bootstrap_pcm_bytes(self) -> int:
+        frame_sec = self._frame_bytes / (self.sample_rate * 2)
+        aac_frame_sec = 1024 / self.sample_rate
+        # Cross one HLS boundary and leave enough PCM for the writer and AAC
+        # encoders to emit the packet that finalizes the first segment.
+        bootstrap_sec = self.segment_sec + frame_sec + aac_frame_sec
+        frame_count = max(1, math.ceil(bootstrap_sec / frame_sec))
+        return frame_count * self._frame_bytes
+
+    async def start(self) -> None:
+        if self._process is not None:
+            return
+        if shutil.which(self.ffmpeg_path) is None:
+            raise HLSUnavailable("FFmpeg executable is unavailable")
+        self.root.mkdir(parents=True, exist_ok=True)
+        command = [
+            self.ffmpeg_path,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-analyzeduration",
+            "0",
+            "-probesize",
+            "32",
+            "-f",
+            "s16le",
+            "-ar",
+            str(self.sample_rate),
+            "-ac",
+            "1",
+            "-i",
+            "pipe:0",
+            "-c:a",
+            "aac",
+            "-b:a",
+            self.bitrate,
+            "-f",
+            "hls",
+            "-hls_time",
+            f"{self.segment_sec:g}",
+            "-hls_list_size",
+            str(self.playlist_segments),
+            "-hls_flags",
+            "delete_segments+omit_endlist+independent_segments+program_date_time",
+            "-hls_segment_filename",
+            str(self.root / "segment_%09d.ts"),
+            str(self.playlist_path),
+        ]
+        try:
+            self._process = await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise HLSUnavailable("failed to start FFmpeg") from exc
+        self._bootstrap_pcm_bytes_total = self._required_bootstrap_pcm_bytes()
+        self._bootstrap_pcm_bytes_remaining = self._bootstrap_pcm_bytes_total
+        self._scheduled_end_pcm_bytes = max(
+            self._scheduled_end_pcm_bytes,
+            self._bootstrap_pcm_bytes_total,
+        )
+        self._writer_task = asyncio.create_task(self._writer_loop())
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
+
+    async def append_pcm(self, pcm: bytes) -> HLSAppendReceipt:
+        receipt = await self.append_pcm_committed(pcm, is_current=lambda: True, on_commit=lambda: None)
+        assert receipt is not None
+        return receipt
+
+    async def append_pcm_committed(
+        self, pcm: bytes, *, is_current: Callable[[], bool], on_commit: Callable[[], None]
+    ) -> HLSAppendReceipt | None:
+        if self._closed or self._process is None:
+            raise HLSUnavailable("HLS encoder is not running")
+        data = bytes(pcm)
+        if not data or len(data) % 2:
+            raise ValueError("PCM payload must contain complete signed-16 samples")
+        if self._timeline_origin_at_ms is None:
+            await self.wait_ready(timeout=5.0)
+        timeline_origin_at_ms = self._timeline_origin_at_ms
+        if timeline_origin_at_ms is None:
+            raise HLSUnavailable("HLS media timeline is unavailable")
+        while self._pcm_queue.full():
+            self._pcm_space.clear()
+            await self._pcm_space.wait()
+        if self._closed or self._process is None:
+            raise HLSUnavailable("HLS encoder is not running")
+        if not is_current():
+            return None
+        # No await from this fence through queue admission, accounting, and
+        # shared PCM visibility. on_commit must be synchronous and prevalidated.
+        on_commit()
+        self._pcm_queue.put_nowait(data)
+        bytes_per_second = self.sample_rate * 2
+        discardable_gap_bytes = max(
+            0,
+            self._submitted_pcm_bytes - self._scheduled_end_pcm_bytes,
+        )
+        start_pcm_bytes = max(
+            self._submitted_pcm_bytes,
+            self._scheduled_end_pcm_bytes,
+        )
+        padded_bytes = (
+            (len(data) + self._frame_bytes - 1) // self._frame_bytes
+        ) * self._frame_bytes
+        self._scheduled_end_pcm_bytes = start_pcm_bytes + padded_bytes
+        self._pending_pcm_bytes += len(data)
+        # MPEG-TS AAC exposes one 1024-sample encoder frame before new PCM is audible.
+        aac_priming_bytes = 1024 * 2
+        start_at_ms = timeline_origin_at_ms + round(
+            (start_pcm_bytes + aac_priming_bytes) * 1000.0 / bytes_per_second
+        )
+        end_at_ms = round(
+            start_at_ms + len(data) * 1000.0 / bytes_per_second
+        )
+        discardable_gap_before_ms = round(
+            discardable_gap_bytes * 1000.0 / bytes_per_second
+        )
+        return HLSAppendReceipt(
+            start_at_ms=start_at_ms,
+            end_at_ms=end_at_ms,
+            discardable_gap_before_ms=discardable_gap_before_ms,
+        )
+
+    async def _writer_loop(self) -> None:
+        frame_bytes = self._frame_bytes
+        frame_samples = frame_bytes // 2
+        frame_sec = frame_samples / self.sample_rate
+        active = b""
+        active_burst_bytes_remaining = round(
+            self.sample_rate * 2 * ACTIVE_PCM_BURST_MEDIA_SEC
+        )
+        queue_starved = False
+        try:
+            while True:
+                bootstrapping = self._bootstrap_pcm_bytes_remaining > 0
+                if bootstrapping:
+                    chunk = self._idle_carrier_pcm
+                    self._bootstrap_pcm_bytes_remaining = max(
+                        0,
+                        self._bootstrap_pcm_bytes_remaining - frame_bytes,
+                    )
+                    writing_audio = False
+                    consumed_bytes = 0
+                else:
+                    if not active:
+                        try:
+                            active = self._pcm_queue.get_nowait()
+                            self._pcm_space.set()
+                        except asyncio.QueueEmpty:
+                            queue_starved = True
+                        else:
+                            if queue_starved:
+                                active_burst_bytes_remaining = round(
+                                    self.sample_rate
+                                    * 2
+                                    * ACTIVE_PCM_BURST_MEDIA_SEC
+                                )
+                            queue_starved = False
+                    if active:
+                        writing_audio = True
+                        chunk = active[:frame_bytes]
+                        consumed_bytes = len(chunk)
+                        active = active[len(chunk) :]
+                        if len(chunk) < frame_bytes:
+                            chunk += bytes(frame_bytes - len(chunk))
+                    else:
+                        writing_audio = False
+                        chunk = self._idle_carrier_pcm
+                        consumed_bytes = 0
+                process = self._process
+                if process is None or process.returncode is not None or process.stdin is None:
+                    raise HLSUnavailable("FFmpeg exited while streaming")
+                process.stdin.write(chunk)
+                self._submitted_pcm_bytes += len(chunk)
+                await process.stdin.drain()
+                if writing_audio:
+                    self._pending_pcm_bytes = max(
+                        0,
+                        self._pending_pcm_bytes - consumed_bytes,
+                    )
+                    if not active:
+                        self._pcm_queue.task_done()
+                publish_rate = 1.0
+                if writing_audio and active_burst_bytes_remaining > 0:
+                    publish_rate = ACTIVE_PCM_BURST_RATE
+                    active_burst_bytes_remaining = max(
+                        0,
+                        active_burst_bytes_remaining - len(chunk),
+                    )
+                await asyncio.sleep(frame_sec / publish_rate)
+        except asyncio.CancelledError:
+            raise
+        except (BrokenPipeError, ConnectionResetError, HLSUnavailable) as exc:
+            logger.warning("shared HLS encoder stopped: %s", type(exc).__name__)
+
+    async def _drain_stderr(self) -> None:
+        process = self._process
+        if process is None or process.stderr is None:
+            return
+        try:
+            while True:
+                chunk = await process.stderr.read(1024)
+                if not chunk:
+                    return
+                self._stderr_tail.extend(chunk)
+                if len(self._stderr_tail) > 4096:
+                    del self._stderr_tail[:-4096]
+        except asyncio.CancelledError:
+            raise
+
+    async def wait_ready(self, timeout: float = 5.0) -> None:
+        deadline = asyncio.get_running_loop().time() + max(0.1, float(timeout))
+        while asyncio.get_running_loop().time() < deadline:
+            if self._process is not None and self._process.returncode is not None:
+                raise HLSUnavailable("FFmpeg exited before producing a playlist")
+            if self.playlist_path.is_file():
+                text = self.playlist_path.read_text(encoding="utf-8", errors="replace")
+                timeline_origin_at_ms = parse_hls_timeline_origin_at_ms(text)
+                if timeline_origin_at_ms is not None:
+                    if self._timeline_origin_at_ms is None:
+                        self._timeline_origin_at_ms = timeline_origin_at_ms
+                    return
+            await asyncio.sleep(0.05)
+        raise HLSUnavailable("HLS playlist was not ready in time")
+
+    def playlist_text(self) -> str:
+        try:
+            return self.playlist_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HLSUnavailable("HLS playlist is unavailable") from exc
+
+    def live_edge_at_ms(self) -> int | None:
+        try:
+            return parse_hls_live_edge_at_ms(self.playlist_text())
+        except HLSUnavailable:
+            return None
+
+    def segment_path(self, name: str) -> Path:
+        value = str(name or "")
+        if not value.startswith("segment_") or not value.endswith(".ts"):
+            raise HLSUnavailable("invalid HLS segment")
+        if Path(value).name != value:
+            raise HLSUnavailable("invalid HLS segment")
+        path = self.root / value
+        if not path.is_file():
+            raise HLSUnavailable("HLS segment is unavailable")
+        return path
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._pending_pcm_bytes = 0
+        self._submitted_pcm_bytes = 0
+        self._scheduled_end_pcm_bytes = 0
+        self._bootstrap_pcm_bytes_total = 0
+        self._bootstrap_pcm_bytes_remaining = 0
+        self._timeline_origin_at_ms = None
+        writer = self._writer_task
+        self._writer_task = None
+        if writer is not None:
+            writer.cancel()
+            try:
+                await writer
+            except asyncio.CancelledError:
+                pass
+        process = self._process
+        self._process = None
+        if process is not None:
+            if process.stdin is not None:
+                process.stdin.close()
+                try:
+                    await process.stdin.wait_closed()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            try:
+                await asyncio.wait_for(process.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+        stderr_task = self._stderr_task
+        self._stderr_task = None
+        if stderr_task is not None:
+            try:
+                await stderr_task
+            except asyncio.CancelledError:
+                pass
+
+
+@dataclass(slots=True)
+class _ChunkPreparation:
+    item: TTSReadyItem
+    texts: tuple[str, ...]
+    chunks: deque[_PreparedAudio] = field(default_factory=deque)
+    next_index: int = 0
+    total_audio_ms: int = 0
+    synthesis_ms: int = 0
+    changed: asyncio.Event = field(default_factory=asyncio.Event)
+    done: bool = False
+    released: bool = False
+    release_order: int = -1
+    published: int = 0
+
+
+class SharedHLSTTSPublisher:
+    """Own one TTS/encoder pipeline and fan its HLS files out to leases."""
+
+    def __init__(
+        self,
+        *,
+        synthesizer: object,
+        root_dir: Path,
+        encoder_factory: Callable[[Path], HLSEncoder] | None = None,
+        listener_ttl_sec: float = 90.0,
+        max_listeners: int = 128,
+        queue_size: int = 128,
+        preparation_cache_size: int = 8,
+        preparation_max_bytes: int = 16 * 1024 * 1024,
+        preparation_max_chunks: int = 256,
+        caption_history_size: int = 256,
+        sample_rate: int = 24000,
+        sentence_pause_ms: int = 300,
+        baseline_tts_speed: float = 1.05,
+        auto_speed_enabled: bool = True,
+        chunked_synthesis: bool = False,
+        clock: Callable[[], float] = time.monotonic,
+        worker_start_gate: asyncio.Event | None = None,
+    ) -> None:
+        if listener_ttl_sec <= 0:
+            raise ValueError("listener_ttl_sec must be positive")
+        if max_listeners <= 0:
+            raise ValueError("max_listeners must be positive")
+        if queue_size <= 0:
+            raise ValueError("queue_size must be positive")
+        if preparation_cache_size <= 0:
+            raise ValueError("preparation_cache_size must be positive")
+        if caption_history_size <= 0:
+            raise ValueError("caption_history_size must be positive")
+        if not math.isfinite(float(baseline_tts_speed)) or not (
+            0.5 <= float(baseline_tts_speed) <= 2.0
+        ):
+            raise ValueError("baseline_tts_speed must be between 0.5 and 2.0")
+        if preparation_max_bytes <= 0 or preparation_max_chunks <= 0:
+            raise ValueError("preparation budgets must be positive")
+        self._preparation_max_bytes = int(preparation_max_bytes)
+        self._preparation_max_chunks = int(preparation_max_chunks)
+        self._source_generation = 0
+        self._chunk_consumed_source_order = -1
+        self._chunked_synthesis = bool(chunked_synthesis)
+        if self._chunked_synthesis and sample_rate != 24000:
+            raise ValueError("native PCM requires 24000 Hz")
+        self.native_pcm = NativePCMBuffer()
+        self._chunk_states: dict[ItemKey, _ChunkPreparation] = {}
+        self._chunk_publish_active = False
+        self._chunk_release_serial = 0
+        self._chunk_completed: deque[ItemKey] = deque(maxlen=256)
+        self._chunk_synth_task: asyncio.Task[None] | None = None
+        self._synthesizer = synthesizer
+        self._root_dir = Path(root_dir)
+        self._encoder_factory = encoder_factory or (lambda root: FFmpegHLSEncoder(root))
+        self._listener_ttl_sec = float(listener_ttl_sec)
+        self._max_listeners = int(max_listeners)
+        self._sample_rate = max(8000, int(sample_rate))
+        self._sentence_pause_ms = max(0, int(sentence_pause_ms))
+        self._baseline_tts_speed = float(baseline_tts_speed)
+        self._auto_speed_enabled = bool(auto_speed_enabled)
+        self._clock = clock
+        self._worker_start_gate = worker_start_gate
+        self._leases: dict[str, HLSListenerLease] = {}
+        self._listener_playback: dict[str, _HLSListenerPlayback] = {}
+        self._playlist_cache_text: str | None = None
+        self._playlist_cache: _HLSMediaPlaylist | None = None
+        self._queue: asyncio.Queue[TTSReadyItem] = asyncio.Queue(maxsize=int(queue_size))
+        self._preparation_cache_size = int(preparation_cache_size)
+        self._caption_cues: deque[HLSCaptionCue] = deque(
+            maxlen=int(caption_history_size)
+        )
+        self._preparation_pending: dict[ItemKey, TTSReadyItem] = {}
+        self._prepared_audio: dict[ItemKey, _PreparedAudio] = {}
+        self._known_items: dict[ItemKey, TTSReadyItem] = {}
+        self._audio_ms_per_char: dict[str, float] = {}
+        self._latest_key_by_sentence: dict[str, ItemKey] = {}
+        self._work_available = asyncio.Event()
+        self._encoder: HLSEncoder | None = None
+        self._active_root: Path | None = None
+        self._worker: asyncio.Task[None] | None = None
+        self._reaper: asyncio.Task[None] | None = None
+        self._inflight_item: TTSReadyItem | None = None
+        self._inflight_key: ItemKey | None = None
+        self._inflight_kind = ""
+        self._lock = asyncio.Lock()
+        self._closed = False
+        self._last_error = ""
+        self._idle_backlog_dropped = 0
+        self._speech_epoch_id = ""
+        self._global_speed_multiplier = 1.0
+        self._first_epoch_item_key: ItemKey | None = None
+
+    @property
+    def listener_count(self) -> int:
+        return len(self._leases)
+
+    @property
+    def status(self) -> HLSStreamStatus:
+        pending_audio_ms, backlog_ms, backlog_count, backlog_estimated = (
+            self._backlog_snapshot()
+        )
+        multiplier = self._global_speed_multiplier if self._speech_epoch_id else 1.0
+        return HLSStreamStatus(
+            available=not self._closed and self._synthesizer is not None,
+            listener_count=len(self._leases),
+            queue_depth=self._queue.qsize() + int(self._chunk_publish_active if self._chunked_synthesis else self._inflight_kind == "release"),
+            synthesis_active=self._inflight_item is not None,
+            preparation_queue_depth=(sum(not x.done and not x.released and k != self._inflight_key for k, x in self._chunk_states.items()) if self._chunked_synthesis else len(self._preparation_pending)),
+            preparation_active=self._inflight_kind == "prepare",
+            prepared_audio_count=(sum(bool(x.chunks) for x in self._chunk_states.values()) if self._chunked_synthesis else len(self._prepared_audio)),
+            pending_audio_ms=pending_audio_ms,
+            translated_audio_backlog_ms=backlog_ms,
+            translated_audio_backlog_count=backlog_count,
+            translated_audio_backlog_estimated=backlog_estimated,
+            speech_epoch_id=self._speech_epoch_id,
+            global_speed_mode="auto" if self._auto_speed_enabled else "fixed",
+            global_speed_multiplier=multiplier,
+            tts_effective_speed=self._baseline_tts_speed * multiplier,
+            encoder_active=self._encoder is not None,
+            last_error=self._last_error,
+        )
+
+    def _backlog_snapshot(self) -> tuple[int, int, int, bool]:
+        if not self._leases or self._encoder is None or not self._speech_epoch_id:
+            return 0, 0, 0, False
+        pending_audio_ms = max(
+            0,
+            int(getattr(self._encoder, "pending_audio_ms", 0) or 0),
+        )
+        future_audio_ms = 0
+        backlog_estimated = False
+        for key, item in self._known_items.items():
+            state = self._chunk_states.get(key) if self._chunked_synthesis else None
+            if state is not None:
+                future_audio_ms += sum(x.audio_ms for x in state.chunks)
+                if not state.done:
+                    remaining = sum(len(text) for text in state.texts[state.next_index:])
+                    future_audio_ms += round(self._estimate_item_audio_ms(item) * remaining / max(1, len(item.text)))
+                    backlog_estimated = True
+                continue
+            prepared = self._prepared_audio.get(key)
+            if prepared is not None:
+                future_audio_ms += int(prepared.audio_ms)
+            else:
+                future_audio_ms += self._estimate_item_audio_ms(item)
+                backlog_estimated = True
+        return (
+            pending_audio_ms,
+            pending_audio_ms + future_audio_ms,
+            len(self._known_items),
+            backlog_estimated,
+        )
+
+    @staticmethod
+    def _require_identity(value: str, name: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError(f"{name} must be a non-empty string")
+        return normalized
+
+    @staticmethod
+    def _item_key(item: TTSReadyItem) -> ItemKey:
+        text_hash = hashlib.sha256(str(item.text).encode("utf-8")).hexdigest()
+        return (
+            str(item.sentence_id),
+            int(item.revision),
+            str(item.target_language),
+            text_hash,
+        )
+
+    @staticmethod
+    def _language_key(language: str) -> str:
+        normalized = str(language or "").strip().lower()
+        if "chinese" in normalized or "中文" in normalized:
+            return "chinese"
+        return "english"
+
+    def _estimate_item_audio_ms(self, item: TTSReadyItem) -> int:
+        language = self._language_key(item.target_language)
+        default_ms_per_char = (
+            DEFAULT_CHINESE_AUDIO_MS_PER_CHAR
+            if language == "chinese"
+            else DEFAULT_ENGLISH_AUDIO_MS_PER_CHAR
+        )
+        observed_ms_per_char = self._audio_ms_per_char.get(language, 0.0)
+        ms_per_char = max(default_ms_per_char, observed_ms_per_char * 1.10)
+        text_chars = max(1, len(str(item.text or "").strip()))
+        return max(
+            MIN_ESTIMATED_SENTENCE_AUDIO_MS,
+            round(text_chars * ms_per_char) + self._sentence_pause_ms,
+        )
+
+    def _observe_item_audio_ms(
+        self,
+        item: TTSReadyItem,
+        audio_ms: int,
+        *,
+        displayed_multiplier: float,
+    ) -> None:
+        text_chars = len(str(item.text or "").strip())
+        if text_chars < 1:
+            return
+        language = self._language_key(item.target_language)
+        speech_audio_ms = max(1, int(audio_ms) - self._sentence_pause_ms)
+        baseline_speech_ms = speech_audio_ms * max(1.0, displayed_multiplier)
+        observed = baseline_speech_ms / text_chars
+        previous = self._audio_ms_per_char.get(language)
+        self._audio_ms_per_char[language] = (
+            observed
+            if previous is None
+            else previous * (1.0 - DURATION_ESTIMATE_ALPHA)
+            + observed * DURATION_ESTIMATE_ALPHA
+        )
+
+    def _select_synthesis_speed_locked(
+        self,
+        key: ItemKey,
+        kind: str,
+    ) -> tuple[float, float, int]:
+        _, backlog_ms, _, _ = self._backlog_snapshot()
+        force_join_baseline = (
+            kind == "release" and key == self._first_epoch_item_key
+        )
+        multiplier = 1.0
+        if self._auto_speed_enabled and not force_join_baseline:
+            multiplier = select_global_tts_multiplier(backlog_ms)
+        effective_speed = self._baseline_tts_speed * multiplier
+        if not math.isfinite(effective_speed) or not 0.5 <= effective_speed <= 2.0:
+            logger.warning(
+                "shared HLS TTS speed fallback epoch=%s backlog_ms=%d multiplier=%.1f effective_speed=%.3f",
+                self._speech_epoch_id,
+                backlog_ms,
+                multiplier,
+                effective_speed,
+            )
+            self._last_error = "TTSSpeedRangeError"
+            multiplier = 1.0
+            effective_speed = self._baseline_tts_speed
+        self._global_speed_multiplier = multiplier
+        if force_join_baseline:
+            self._first_epoch_item_key = None
+        return multiplier, effective_speed, backlog_ms
+
+    def _select_latest_item_locked(
+        self,
+        item: TTSReadyItem,
+        key: ItemKey,
+    ) -> None:
+        sentence_id = str(item.sentence_id)
+        self._latest_key_by_sentence[sentence_id] = key
+        for old_key in list(self._chunk_states):
+            if old_key[0] == sentence_id and old_key != key:
+                old_state = self._chunk_states.pop(old_key)
+                old_state.chunks.clear()
+                old_state.changed.set()
+        for prepared_key in list(self._preparation_pending):
+            if prepared_key[0] == sentence_id and prepared_key != key:
+                del self._preparation_pending[prepared_key]
+        for prepared_key in list(self._prepared_audio):
+            if prepared_key[0] == sentence_id and prepared_key != key:
+                del self._prepared_audio[prepared_key]
+        for known_key in list(self._known_items):
+            if known_key[0] == sentence_id and known_key != key:
+                del self._known_items[known_key]
+
+    def _retain_latest_idle_item_locked(self) -> tuple[int, ItemKey | None]:
+        """Collapse pre-listener speech to the current live sentence."""
+
+        queued: list[TTSReadyItem] = []
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            self._queue.task_done()
+            queued.append(item)
+        if not queued:
+            return 0, None
+
+        latest = queued[-1]
+        self._queue.put_nowait(latest)
+        stale = queued[:-1]
+        for item in stale:
+            key = self._item_key(item)
+            sentence_id = str(item.sentence_id)
+            if self._latest_key_by_sentence.get(sentence_id) == key:
+                self._latest_key_by_sentence.pop(sentence_id, None)
+            self._chunk_states.pop(key, None)
+            self._preparation_pending.pop(key, None)
+            self._prepared_audio.pop(key, None)
+            self._known_items.pop(key, None)
+
+        dropped = len(stale)
+        if dropped:
+            self._idle_backlog_dropped += dropped
+            logger.info(
+                "shared HLS live join skipped stale backlog skipped=%d retained=%d total_skipped=%d",
+                dropped,
+                self._queue.qsize(),
+                self._idle_backlog_dropped,
+            )
+        return dropped, self._item_key(latest)
+
+    async def touch_listener(self, listener_id: str, owner_key: str) -> HLSListenerLease:
+        listener = self._require_identity(listener_id, "listener_id")
+        owner = self._require_identity(owner_key, "owner_key")
+        await self.prune_expired()
+        async with self._lock:
+            if self._closed or self._synthesizer is None:
+                raise HLSUnavailable("shared HLS TTS is unavailable")
+            existing = self._leases.get(listener)
+            if existing is not None and existing.owner_key != owner:
+                raise HLSListenerNotFound("listener lease is unavailable")
+            if existing is None and len(self._leases) >= self._max_listeners:
+                raise HLSListenerCapacityExceeded("listener capacity reached")
+            if self._encoder is None:
+                _, retained_key = self._retain_latest_idle_item_locked()
+                root = self._root_dir / f"epoch-{uuid.uuid4().hex}"
+                encoder = self._encoder_factory(root)
+                try:
+                    await encoder.start()
+                except Exception:
+                    shutil.rmtree(root, ignore_errors=True)
+                    raise
+                self._active_root = root
+                self._speech_epoch_id = root.name
+                self.native_pcm.reset(root.name)
+                # A successfully started epoch must not inherit an old TTS failure.
+                # Lease renewals/joins within this epoch retain its current error.
+                self._last_error = ""
+                self._global_speed_multiplier = 1.0
+                self._first_epoch_item_key = retained_key
+                self._encoder = encoder
+                self._worker = asyncio.create_task(
+                    self._chunk_publish_loop() if self._chunked_synthesis else self._worker_loop()
+                )
+                if self._chunked_synthesis:
+                    self._chunk_synth_task = asyncio.create_task(self._chunk_synthesis_loop())
+                self._reaper = asyncio.create_task(self._reaper_loop())
+                if self._queue.qsize() or self._preparation_pending:
+                    self._work_available.set()
+            lease = HLSListenerLease(
+                listener_id=listener,
+                owner_key=owner,
+                expires_at=self._clock() + self._listener_ttl_sec,
+            )
+            self._leases[listener] = lease
+            self._listener_playback.setdefault(listener, _HLSListenerPlayback())
+            return lease
+
+    def _require_lease(self, listener_id: str, owner_key: str) -> HLSListenerLease:
+        listener = self._require_identity(listener_id, "listener_id")
+        owner = self._require_identity(owner_key, "owner_key")
+        lease = self._leases.get(listener)
+        if (
+            lease is None
+            or lease.owner_key != owner
+            or lease.expires_at <= self._clock()
+        ):
+            raise HLSListenerNotFound("listener lease is unavailable")
+        return lease
+
+    async def publish(self, item: TTSReadyItem) -> bool:
+        await self.prune_expired()
+        async with self._lock:
+            if self._closed or self._synthesizer is None:
+                return False
+            key = self._item_key(item)
+            if self._chunked_synthesis:
+                latest = self._latest_key_by_sentence.get(str(item.sentence_id))
+                if latest is not None and latest[1] > key[1]:
+                    return False
+                if key in self._chunk_completed or item.source_order <= self._chunk_consumed_source_order:
+                    return True
+                existing_state = self._chunk_states.get(key)
+                if existing_state is not None and existing_state.released:
+                    return True
+            self._select_latest_item_locked(item, key)
+            try:
+                self._queue.put_nowait(item)
+            except asyncio.QueueFull as exc:
+                if self._leases and self._encoder is not None:
+                    raise HLSQueueFull("shared HLS TTS queue is full") from exc
+                dropped_item = self._queue.get_nowait()
+                self._queue.task_done()
+                self._drop_chunk_item(self._item_key(dropped_item))
+                self._queue.put_nowait(item)
+                self._idle_backlog_dropped += 1
+                if self._idle_backlog_dropped == 1 or self._idle_backlog_dropped % 32 == 0:
+                    logger.info(
+                        "shared HLS idle backlog dropped oldest total=%d retained=%d",
+                        self._idle_backlog_dropped,
+                        self._queue.qsize(),
+                    )
+            self._known_items[key] = item
+            if self._chunked_synthesis:
+                state = self._chunk_state(item, key)
+                state.released = True
+                state.release_order = self._chunk_release_serial
+                self._chunk_release_serial += 1
+                state.changed.set()
+            self._work_available.set()
+            return True
+
+    async def prepare(self, item: TTSReadyItem) -> bool:
+        """Prepare an exact translation revision without publishing its audio."""
+
+        await self.prune_expired()
+        async with self._lock:
+            if (
+                self._closed
+                or self._synthesizer is None
+                or not self._leases
+                or self._encoder is None
+            ):
+                return False
+            key = self._item_key(item)
+            if self._chunked_synthesis:
+                latest = self._latest_key_by_sentence.get(str(item.sentence_id))
+                if latest is not None and latest[1] > key[1]:
+                    return False
+                if key in self._chunk_completed or item.source_order <= self._chunk_consumed_source_order:
+                    return True
+            self._select_latest_item_locked(item, key)
+            self._known_items[key] = item
+            if self._chunked_synthesis:
+                if key not in self._chunk_states and len(self._chunk_states) >= self._preparation_cache_size:
+                    self._known_items.pop(key, None)
+                    return False
+                self._chunk_state(item, key)
+                self._work_available.set()
+                return True
+            if (
+                key in self._prepared_audio
+                or key in self._preparation_pending
+                or key == self._inflight_key
+            ):
+                return True
+            if len(self._preparation_pending) >= self._preparation_cache_size:
+                return False
+            self._preparation_pending[key] = item
+            self._work_available.set()
+            return True
+
+    async def wait_idle(self) -> None:
+        await self._queue.join()
+
+    async def discard_idle_backlog(self) -> int:
+        """Drop retained speech only when no listener epoch is active."""
+
+        async with self._lock:
+            if self._leases or self._encoder is not None or self._inflight_item is not None:
+                return 0
+            dropped = 0
+            while True:
+                try:
+                    dropped_item = self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                else:
+                    self._queue.task_done()
+                    self._drop_chunk_item(self._item_key(dropped_item))
+                    dropped += 1
+            return dropped
+
+    async def wait_ready(self, listener_id: str, owner_key: str, timeout: float = 5.0) -> None:
+        self._require_lease(listener_id, owner_key)
+        encoder = self._encoder
+        if encoder is None:
+            raise HLSUnavailable("shared HLS encoder is unavailable")
+        await encoder.wait_ready(timeout)
+
+    def playlist_text(self, listener_id: str, owner_key: str, *, compact_gaps: bool = True) -> str:
+        lease = self._require_lease(listener_id, owner_key)
+        encoder = self._encoder
+        if encoder is None:
+            raise HLSUnavailable("shared HLS encoder is unavailable")
+        playlist = encoder.playlist_text()
+        # AVPlayer can discard its buffered audio when a gap shortcut jumps the
+        # playlist past its playhead. Native playback uses the continuous timeline.
+        if not compact_gaps:
+            return playlist
+        if playlist != self._playlist_cache_text:
+            self._playlist_cache_text = playlist
+            self._playlist_cache = _parse_hls_media_playlist(playlist)
+        parsed = self._playlist_cache
+        state = self._listener_playback.get(lease.listener_id)
+        if parsed is None or state is None:
+            return playlist
+        candidate = _select_hls_gap_floor_sequence(
+            parsed,
+            last_segment_name=state.last_segment_name,
+            cues=tuple(self._caption_cues),
+        )
+        previous_floor = state.playlist_floor_sequence
+        if candidate is not None and (
+            previous_floor is None or candidate > previous_floor
+        ):
+            state.playlist_floor_sequence = candidate
+            logger.info(
+                "shared HLS listener gap compacted epoch=%s listener=%s last_segment=%s floor_sequence=%d",
+                self._speech_epoch_id,
+                lease.listener_id,
+                state.last_segment_name,
+                candidate,
+            )
+        floor = state.playlist_floor_sequence
+        if floor is None:
+            return playlist
+        return _trim_hls_playlist(parsed, floor_sequence=floor)
+
+    def segment_path(self, listener_id: str, owner_key: str, name: str) -> Path:
+        lease = self._require_lease(listener_id, owner_key)
+        encoder = self._encoder
+        if encoder is None:
+            raise HLSUnavailable("shared HLS encoder is unavailable")
+        path = encoder.segment_path(name)
+        segment_number = _hls_segment_number(name)
+        state = self._listener_playback.get(lease.listener_id)
+        if (
+            state is not None
+            and segment_number is not None
+            and segment_number > state.last_segment_number
+        ):
+            state.last_segment_name = Path(str(name)).name
+            state.last_segment_number = segment_number
+        return path
+
+    def caption_snapshot(
+        self,
+        listener_id: str,
+        owner_key: str,
+    ) -> HLSCaptionSnapshot:
+        self._require_lease(listener_id, owner_key)
+        encoder = self._encoder
+        live_edge_at_ms: int | None = None
+        if encoder is not None:
+            get_live_edge = getattr(encoder, "live_edge_at_ms", None)
+            if callable(get_live_edge):
+                live_edge_at_ms = get_live_edge()
+        return HLSCaptionSnapshot(
+            live_edge_at_ms=live_edge_at_ms,
+            cues=tuple(self._caption_cues),
+        )
+
+    async def remove_listener(self, listener_id: str, owner_key: str) -> bool:
+        listener = self._require_identity(listener_id, "listener_id")
+        owner = self._require_identity(owner_key, "owner_key")
+        should_stop = False
+        async with self._lock:
+            existing = self._leases.get(listener)
+            if existing is None or existing.owner_key != owner:
+                return False
+            del self._leases[listener]
+            self._listener_playback.pop(listener, None)
+            should_stop = not self._leases
+        if should_stop:
+            await self._stop_stream()
+        return True
+
+    async def prune_expired(self) -> int:
+        now = self._clock()
+        removed = 0
+        should_stop = False
+        async with self._lock:
+            for listener_id, lease in list(self._leases.items()):
+                if lease.expires_at <= now:
+                    del self._leases[listener_id]
+                    self._listener_playback.pop(listener_id, None)
+                    removed += 1
+            should_stop = removed > 0 and not self._leases
+        if should_stop:
+            await self._stop_stream()
+        return removed
+
+    def _chunk_state(self, item: TTSReadyItem, key: ItemKey) -> _ChunkPreparation:
+        state = self._chunk_states.get(key)
+        if state is None:
+            state = _ChunkPreparation(item, split_speech_chunks(item.text, item.target_language))
+            self._chunk_states[key] = state
+        return state
+
+    def _chunk_valid(self, key: ItemKey, encoder: HLSEncoder, generation: int) -> bool:
+        return (self._source_generation == generation and self._encoder is encoder
+                and key in self._chunk_states
+                and self._latest_key_by_sentence.get(key[0]) == key)
+
+    @property
+    def prepared_pcm_bytes(self) -> int:
+        return sum(len(chunk.pcm) for state in self._chunk_states.values() for chunk in state.chunks)
+
+    @property
+    def prepared_pcm_chunks(self) -> int:
+        return sum(len(state.chunks) for state in self._chunk_states.values())
+
+    def _drop_chunk_item(self, key: ItemKey) -> None:
+        self._known_items.pop(key, None)
+        state = self._chunk_states.pop(key, None)
+        if state is not None:
+            state.chunks.clear()
+            state.changed.set()
+        if self._latest_key_by_sentence.get(key[0]) == key:
+            self._latest_key_by_sentence.pop(key[0], None)
+        self._work_available.set()
+
+    def begin_source_generation(self) -> None:
+        """Fence old producer work; permit a new producer's source-order origin."""
+        self._source_generation += 1
+        self._chunk_consumed_source_order = -1
+        self._chunk_completed.clear()
+        for state in self._chunk_states.values():
+            state.chunks.clear()
+            state.changed.set()
+        self._chunk_states.clear()
+        self._known_items.clear()
+        self._latest_key_by_sentence.clear()
+        self._preparation_pending.clear()
+        self._prepared_audio.clear()
+        while not self._queue.empty():
+            self._queue.get_nowait()
+            self._queue.task_done()
+        self._work_available.set()
+
+    def _make_preparation_room(self, *, required_bytes: int = 0) -> bool:
+        def fits():
+            return (self.prepared_pcm_chunks < self._preparation_max_chunks
+                    and self.prepared_pcm_bytes + required_bytes <= self._preparation_max_bytes)
+        released = [state for state in self._chunk_states.values() if state.released]
+        head = min(released, key=lambda state: state.release_order) if released else None
+        if not fits() and head is not None and not head.done:
+            # Later cached work cannot own the capacity needed by the FIFO head.
+            # It is safe to recompute released work until its first chunk commits.
+            for state in self._chunk_states.values():
+                if state is not head and state.published == 0 and state.chunks:
+                    state.chunks.clear()
+                    state.next_index = 0
+                    state.total_audio_ms = 0
+                    state.synthesis_ms = 0
+                    state.done = False
+                    if fits():
+                        break
+        return fits()
+
+    async def _chunk_synthesis_loop(self) -> None:
+        if self._worker_start_gate is not None:
+            await self._worker_start_gate.wait()
+        while True:
+            await self._work_available.wait()
+            candidates = [(key, state) for key, state in self._chunk_states.items() if not state.done]
+            if not candidates or not self._make_preparation_room():
+                self._work_available.clear()
+                continue
+            key, state = min(candidates, key=lambda pair: (not pair[1].released, pair[1].release_order if pair[1].released else pair[1].item.source_order))
+            item = state.item
+            encoder = self._encoder
+            generation = self._source_generation
+            index = state.next_index
+            if not self._chunk_valid(key, encoder, generation):
+                self._drop_chunk_item(key)
+                continue
+            self._inflight_item, self._inflight_key = item, key
+            self._inflight_kind = "prepare"
+            multiplier, speed, _ = self._select_synthesis_speed_locked(key, "release" if state.released else "prepare")
+            started = time.monotonic()
+            try:
+                if not state.texts:
+                    state.done = True
+                    continue
+                audio = await asyncio.to_thread(self._synthesizer.synthesize, state.texts[index], item.target_language, speed=speed)
+                if not self._chunk_valid(key, encoder, generation):
+                    continue
+                pcm = decode_mono_pcm16_wav(audio.wav_bytes, expected_rate=self._sample_rate)
+                cue_start, cue_end = _pcm_activity_bounds_ms(pcm, sample_rate=self._sample_rate)
+                if index == len(state.texts) - 1:
+                    pcm += bytes(round(self._sample_rate * self._sentence_pause_ms / 1000) * 2)
+                if len(pcm) > min(self.native_pcm.max_bytes, self._preparation_max_bytes):
+                    raise ValueError("oversized PCM chunk")
+                while not self._make_preparation_room(required_bytes=len(pcm)):
+                    self._work_available.clear()
+                    await self._work_available.wait()
+                    if not self._chunk_valid(key, encoder, generation):
+                        break
+                if not self._chunk_valid(key, encoder, generation):
+                    continue
+                synthesis_ms = round((time.monotonic() - started) * 1000)
+                prepared = _PreparedAudio(pcm, max(1, round(len(pcm) / 48)), cue_start, cue_end,
+                    synthesis_ms, self._clock(), multiplier, speed)
+                if state.next_index != index:
+                    continue  # Speculative cache was evicted while waiting for space.
+                state.chunks.append(prepared)
+                state.next_index += 1
+                state.total_audio_ms += prepared.audio_ms
+                state.synthesis_ms += synthesis_ms
+                state.done = state.next_index == len(state.texts)
+                if index == 0:
+                    logger.info("shared TTS first chunk synthesized epoch=%s source_order=%d first_chunk_ms=%d", self._speech_epoch_id, item.source_order, synthesis_ms)
+                if state.done:
+                    self._observe_item_audio_ms(item, state.total_audio_ms, displayed_multiplier=multiplier)
+                    logger.info("shared TTS chunks synthesis completed source_order=%d audio_ms=%d total_synthesis_ms=%d", item.source_order, state.total_audio_ms, state.synthesis_ms)
+                # Drop local references before sleeping or starting another inference.
+                del pcm, audio, prepared
+                await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                state.done = True
+                self._last_error = type(exc).__name__
+                logger.warning("shared chunk TTS failed source_order=%d error=%s", item.source_order, type(exc).__name__)
+            finally:
+                state.changed.set()
+                self._inflight_item = self._inflight_key = None
+                self._inflight_kind = ""
+
+    async def _chunk_publish_loop(self) -> None:
+        if self._worker_start_gate is not None:
+            await self._worker_start_gate.wait()
+        while True:
+            item = await self._queue.get()
+            self._chunk_publish_active = True
+            key = self._item_key(item)
+            encoder = self._encoder
+            generation = self._source_generation
+            try:
+                if not self._chunk_valid(key, encoder, generation) or key in self._chunk_completed:
+                    continue
+                state = self._chunk_state(item, key)
+                state.released = True
+                self._work_available.set()
+                while self._chunk_valid(key, encoder, generation):
+                    state.changed.clear()
+                    while state.chunks and self._chunk_valid(key, encoder, generation):
+                        index = state.published
+                        prepared = state.chunks[0]
+                        def commit():
+                            self.native_pcm.append(pcm=prepared.pcm, sentence_id=item.sentence_id,
+                                revision=item.revision, source_order=item.source_order, index=index,
+                                count=len(state.texts), text=state.texts[index])
+                            self._chunk_consumed_source_order = max(self._chunk_consumed_source_order, item.source_order)
+                        receipt = await encoder.append_pcm_committed(
+                            prepared.pcm, is_current=lambda: self._chunk_valid(key, encoder, generation), on_commit=commit)
+                        if receipt is None:
+                            break
+                        state.published += 1
+                        state.chunks.popleft()
+                        self._work_available.set()
+                        if self._chunk_valid(key, encoder, generation) and isinstance(receipt, HLSAppendReceipt):
+                            self._caption_cues.append(HLSCaptionCue(
+                                cue_id=f"{self._speech_epoch_id}:{item.sentence_id}:{item.revision}:{index}",
+                                start_at_ms=receipt.start_at_ms + prepared.cue_start_offset_ms,
+                                end_at_ms=min(receipt.end_at_ms, receipt.start_at_ms + prepared.cue_end_offset_ms),
+                                text=state.texts[index],
+                            ))
+                        del prepared, commit
+                    if state.done:
+                        break
+                    await state.changed.wait()
+                if generation == self._source_generation:
+                    self._chunk_completed.append(key)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._last_error = type(exc).__name__
+                logger.warning("shared PCM publish failed error=%s", type(exc).__name__)
+            finally:
+                if generation == self._source_generation:
+                    self._known_items.pop(key, None)
+                    finished_state = self._chunk_states.pop(key, None)
+                    if finished_state is not None:
+                        finished_state.chunks.clear()
+                self._work_available.set()
+                self._chunk_publish_active = False
+                self._queue.task_done()
+
+    async def _worker_loop(self) -> None:
+        if self._worker_start_gate is not None:
+            await self._worker_start_gate.wait()
+        while True:
+            await self._work_available.wait()
+            item: TTSReadyItem | None = None
+            key: ItemKey | None = None
+            prepared: _PreparedAudio | None = None
+            kind = ""
+            displayed_multiplier = 1.0
+            effective_speed = self._baseline_tts_speed
+            decision_backlog_ms = 0
+            speed_source = "decision"
+            async with self._lock:
+                try:
+                    item = self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    item = None
+                if item is not None:
+                    kind = "release"
+                    key = self._item_key(item)
+                    self._select_latest_item_locked(item, key)
+                    self._preparation_pending.pop(key, None)
+                    prepared = self._prepared_audio.pop(key, None)
+                elif self._preparation_pending:
+                    key, item = min(
+                        self._preparation_pending.items(),
+                        key=lambda pair: int(pair[1].source_order),
+                    )
+                    del self._preparation_pending[key]
+                    kind = "prepare"
+                else:
+                    self._work_available.clear()
+                    continue
+                self._inflight_item = item
+                self._inflight_key = key
+                self._inflight_kind = kind
+                if prepared is not None:
+                    _, decision_backlog_ms, _, _ = self._backlog_snapshot()
+                    displayed_multiplier = prepared.displayed_multiplier
+                    effective_speed = prepared.effective_speed
+                    self._global_speed_multiplier = displayed_multiplier
+                    speed_source = "prepared"
+                    if key == self._first_epoch_item_key:
+                        self._first_epoch_item_key = None
+                else:
+                    displayed_multiplier, effective_speed, decision_backlog_ms = (
+                        self._select_synthesis_speed_locked(key, kind)
+                    )
+            try:
+                encoder = self._encoder
+                if encoder is None or item is None or key is None:
+                    continue
+                cache_hit = prepared is not None
+                if prepared is None:
+                    synthesis_started = time.monotonic()
+                    logger.info(
+                        "shared HLS TTS %s started epoch=%s source_order=%d revision=%d text_chars=%d stable_pending=%d prepare_pending=%d backlog_ms=%d multiplier=%.1f effective_speed=%.3f speed_source=%s",
+                        "preparation" if kind == "prepare" else "synthesis",
+                        self._speech_epoch_id,
+                        int(item.source_order),
+                        int(item.revision),
+                        len(str(item.text)),
+                        self.status.queue_depth,
+                        self.status.preparation_queue_depth,
+                        decision_backlog_ms,
+                        displayed_multiplier,
+                        effective_speed,
+                        speed_source,
+                    )
+                    audio = await asyncio.to_thread(
+                        self._synthesizer.synthesize,
+                        item.text,
+                        item.target_language,
+                        speed=effective_speed,
+                    )
+                    pcm = decode_mono_pcm16_wav(
+                        audio.wav_bytes,
+                        expected_rate=self._sample_rate,
+                    )
+                    cue_start_offset_ms, cue_end_offset_ms = _pcm_activity_bounds_ms(
+                        pcm,
+                        sample_rate=self._sample_rate,
+                    )
+                    pause_samples = round(
+                        self._sample_rate * self._sentence_pause_ms / 1000
+                    )
+                    if pause_samples > 0:
+                        pcm += bytes(pause_samples * 2)
+                    synthesis_ms = round((time.monotonic() - synthesis_started) * 1000)
+                    audio_ms = max(
+                        1,
+                        round(len(pcm) * 1000 / (self._sample_rate * 2)),
+                    )
+                    prepared = _PreparedAudio(
+                        pcm=pcm,
+                        audio_ms=audio_ms,
+                        cue_start_offset_ms=cue_start_offset_ms,
+                        cue_end_offset_ms=cue_end_offset_ms,
+                        synthesis_ms=synthesis_ms,
+                        prepared_at=self._clock(),
+                        displayed_multiplier=displayed_multiplier,
+                        effective_speed=effective_speed,
+                    )
+                    self._observe_item_audio_ms(
+                        item,
+                        audio_ms,
+                        displayed_multiplier=displayed_multiplier,
+                    )
+
+                if kind == "prepare":
+                    cached = False
+                    async with self._lock:
+                        if (
+                            self._encoder is encoder
+                            and self._latest_key_by_sentence.get(str(item.sentence_id)) == key
+                        ):
+                            while len(self._prepared_audio) >= self._preparation_cache_size:
+                                oldest_key = next(iter(self._prepared_audio))
+                                del self._prepared_audio[oldest_key]
+                            self._prepared_audio[key] = prepared
+                            cached = True
+                    self._last_error = ""
+                    logger.info(
+                        "shared HLS TTS preparation completed epoch=%s source_order=%d revision=%d synthesis_ms=%d audio_ms=%d rtf=%.3f cached=%s prepared=%d backlog_ms=%d multiplier=%.1f effective_speed=%.3f",
+                        self._speech_epoch_id,
+                        int(item.source_order),
+                        int(item.revision),
+                        int(prepared.synthesis_ms),
+                        int(prepared.audio_ms),
+                        prepared.synthesis_ms / prepared.audio_ms,
+                        str(cached).lower(),
+                        len(self._prepared_audio),
+                        decision_backlog_ms,
+                        displayed_multiplier,
+                        effective_speed,
+                    )
+                    continue
+
+                receipt = await encoder.append_pcm(prepared.pcm)
+                published_discardable_gap_ms = 0
+                async with self._lock:
+                    self._known_items.pop(key, None)
+                if isinstance(receipt, HLSAppendReceipt):
+                    cue_start_at_ms = (
+                        int(receipt.start_at_ms)
+                        + int(prepared.cue_start_offset_ms)
+                    )
+                    cue_end_at_ms = min(
+                        int(receipt.end_at_ms),
+                        int(receipt.start_at_ms)
+                        + int(prepared.cue_end_offset_ms),
+                    )
+                    if cue_end_at_ms > cue_start_at_ms:
+                        previous = (
+                            self._caption_cues[-1]
+                            if self._caption_cues
+                            else None
+                        )
+                        actual_gap_ms = (
+                            0
+                            if previous is None
+                            else max(
+                                0,
+                                cue_start_at_ms - previous.end_at_ms,
+                            )
+                        )
+                        discardable_gap_ms = min(
+                            actual_gap_ms,
+                            max(
+                                0,
+                                int(receipt.discardable_gap_before_ms),
+                            ),
+                        )
+                        published_discardable_gap_ms = discardable_gap_ms
+                        natural_gap_ms = max(
+                            0,
+                            actual_gap_ms - discardable_gap_ms,
+                        )
+                        resume_at_ms = (
+                            cue_start_at_ms - natural_gap_ms
+                            if previous is not None
+                            and discardable_gap_ms > 0
+                            else None
+                        )
+                        epoch = self._active_root.name if self._active_root else ""
+                        cue_key = (
+                            f"{epoch}:{item.sentence_id}:{int(item.revision)}:"
+                            f"{cue_start_at_ms}"
+                        )
+                        self._caption_cues.append(
+                            HLSCaptionCue(
+                                cue_id=hashlib.sha256(
+                                    cue_key.encode("utf-8")
+                                ).hexdigest()[:16],
+                                start_at_ms=cue_start_at_ms,
+                                end_at_ms=cue_end_at_ms,
+                                text=str(item.text),
+                                discardable_gap_before_ms=discardable_gap_ms,
+                                resume_at_ms=resume_at_ms,
+                            )
+                        )
+                self._last_error = ""
+                preparation_age_ms = max(
+                    0,
+                    round((self._clock() - prepared.prepared_at) * 1000),
+                )
+                logger.info(
+                    "shared HLS TTS audio published epoch=%s source_order=%d revision=%d cache_hit=%s synthesis_ms=%d preparation_age_ms=%d audio_ms=%d pending=%d pending_audio_ms=%d backlog_ms=%d multiplier=%.1f effective_speed=%.3f speed_source=%s discardable_gap_before_ms=%d",
+                    self._speech_epoch_id,
+                    int(item.source_order),
+                    int(item.revision),
+                    str(cache_hit).lower(),
+                    int(prepared.synthesis_ms),
+                    preparation_age_ms,
+                    int(prepared.audio_ms),
+                    self._queue.qsize(),
+                    int(getattr(encoder, "pending_audio_ms", 0) or 0),
+                    decision_backlog_ms,
+                    displayed_multiplier,
+                    effective_speed,
+                    speed_source,
+                    published_discardable_gap_ms,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._last_error = type(exc).__name__
+                if kind == "release" and key is not None:
+                    async with self._lock:
+                        self._known_items.pop(key, None)
+                logger.warning(
+                    "shared HLS TTS item failed source_order=%d error=%s",
+                    int(item.source_order),
+                    type(exc).__name__,
+                )
+            finally:
+                async with self._lock:
+                    self._inflight_item = None
+                    self._inflight_key = None
+                    self._inflight_kind = ""
+                    if self._queue.qsize() or self._preparation_pending:
+                        self._work_available.set()
+                    else:
+                        self._work_available.clear()
+                if kind == "release":
+                    self._queue.task_done()
+
+    async def _reaper_loop(self) -> None:
+        interval = max(1.0, min(self._listener_ttl_sec / 3.0, 15.0))
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                await self.prune_expired()
+                if not self._leases:
+                    return
+        except asyncio.CancelledError:
+            raise
+
+    async def _stop_stream(self) -> None:
+        async with self._lock:
+            if self._leases:
+                return
+            synth_task = self._chunk_synth_task
+            self._chunk_synth_task = None
+            worker = self._worker
+            reaper = self._reaper
+            encoder = self._encoder
+            root = self._active_root
+            self._worker = None
+            self._reaper = None
+            self._encoder = None
+            self._active_root = None
+            self._speech_epoch_id = ""
+            self.native_pcm.reset("")
+            for state in self._chunk_states.values():
+                state.changed.set()
+            self._chunk_states.clear()
+            self._chunk_completed.clear()
+            self._chunk_consumed_source_order = -1
+            self._global_speed_multiplier = 1.0
+            self._first_epoch_item_key = None
+            while True:
+                try:
+                    self._queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                self._queue.task_done()
+            self._preparation_pending.clear()
+            self._prepared_audio.clear()
+            self._known_items.clear()
+            self._latest_key_by_sentence.clear()
+            self._caption_cues.clear()
+            self._listener_playback.clear()
+            self._playlist_cache_text = None
+            self._playlist_cache = None
+            self._work_available.clear()
+        current = asyncio.current_task()
+        for task in (worker, reaper, synth_task):
+            if task is not None and task is not current:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        if encoder is not None:
+            await encoder.close()
+        if root is not None:
+            shutil.rmtree(root, ignore_errors=True)
+
+    async def close(self) -> None:
+        async with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._leases.clear()
+            self._listener_playback.clear()
+            self._playlist_cache_text = None
+            self._playlist_cache = None
+        await self._stop_stream()
+        while True:
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
+                self._queue.task_done()
+
+
+__all__ = [
+    "FFmpegHLSEncoder",
+    "HLSAppendReceipt",
+    "HLSCaptionCue",
+    "HLSCaptionSnapshot",
+    "HLSError",
+    "HLSListenerCapacityExceeded",
+    "HLSListenerLease",
+    "HLSListenerNotFound",
+    "HLSQueueFull",
+    "HLSStreamStatus",
+    "HLSUnavailable",
+    "SharedHLSTTSPublisher",
+    "decode_mono_pcm16_wav",
+    "parse_hls_live_edge_at_ms",
+    "parse_hls_timeline_origin_at_ms",
+    "select_global_tts_multiplier",
+]

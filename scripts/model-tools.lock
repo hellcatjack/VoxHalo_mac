@@ -1,0 +1,6 @@
+# Used only in runtime/model-tools to reproduce the verified Kokoro graph repair.
+onnx==1.22.0
+numpy==2.5.3
+protobuf==7.36.1
+typing_extensions==4.16.0
+ml_dtypes==0.6.0
