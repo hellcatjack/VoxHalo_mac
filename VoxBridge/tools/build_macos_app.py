@@ -12,7 +12,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / 'deploy/macos/app'
-APP_NAME = '教会同声传译.app'
+APP_NAME = '同声传译.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
 
 
@@ -53,8 +53,8 @@ def build(destination: Path, desktop_link: bool):
         (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
-            'CFBundleName': '教会同声传译',
-            'CFBundleDisplayName': '教会同声传译',
+            'CFBundleName': '同声传译',
+            'CFBundleDisplayName': '同声传译',
             'CFBundleExecutable': 'VoxBridgeConsole',
             'CFBundlePackageType': 'APPL',
             'CFBundleShortVersionString': '1.5.1',

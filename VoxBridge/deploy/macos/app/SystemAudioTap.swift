@@ -96,7 +96,7 @@ final class SystemAudioTap: @unchecked Sendable {
             throw NativeAudioError.message("无法排除本 App 的朗读音频，已取消采集以防止回声。")
         }
         let description = CATapDescription(monoGlobalTapButExcludeProcesses: [process])
-        description.name = "教会同声传译 · 只听译音"
+        description.name = "同声传译 · 只听译音"
         description.uuid = UUID()
         description.isPrivate = true
         description.muteBehavior = .mutedWhenTapped
@@ -124,7 +124,7 @@ final class SystemAudioTap: @unchecked Sendable {
 
     private func check(_ status: OSStatus, _ step: String) throws {
         guard status == noErr else {
-            throw NativeAudioError.message("系统声音采集失败（\(step)：\(status)）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“教会同声传译”。")
+            throw NativeAudioError.message("系统声音采集失败（\(step)：\(status)）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。")
         }
     }
 

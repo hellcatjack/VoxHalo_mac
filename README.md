@@ -6,7 +6,7 @@ Local Chinese ↔ English speech interpretation for Apple Silicon Macs, with nat
 
 **App:** 1.5.1, build 16 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
-The App is named **教会同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
+The App is named **同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 
 ## Documentation
 
@@ -84,7 +84,7 @@ cd "$HOME/Projects"
 git clone https://github.com/hellcatjack/VoxHalo_mac.git
 cd VoxHalo_mac
 ./setup.sh
-open "$HOME/Applications/教会同声传译.app"
+open "$HOME/Applications/同声传译.app"
 ```
 
 No Homebrew, Docker, separately installed Python, virtual sound card, paid API, or remote inference server is required. The installer creates local environments, installs pinned dependencies, verifies model SHA-256 values, repairs Chinese speed handling, and builds the App. It does not start recording.
@@ -143,7 +143,7 @@ Open issues and pull requests at [hellcatjack/VoxHalo_mac](https://github.com/he
 cd VoxBridge
 ../.venv/bin/python -m pytest -q
 cd ..
-./build-app.sh --destination "$PWD/dist/教会同声传译.app"
+./build-app.sh --destination "$PWD/dist/同声传译.app"
 ```
 
 Optional browser and ffprobe-dependent checks may skip when their tools are absent. Read [AGENTS.md](AGENTS.md), keep models/media/environments/runtime state out of Git, and maintain English and Chinese user documentation together.

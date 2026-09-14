@@ -90,7 +90,7 @@ import CoreImage
     private func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 750),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "教会同声传译"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = "同声传译"; window.isReleasedWhenClosed = false; window.delegate = self
         window.minSize = NSSize(width: 700, height: 680); window.center()
         let content = vertical([], spacing: 14); content.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(content)
@@ -100,7 +100,7 @@ import CoreImage
             content.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24),
             content.bottomAnchor.constraint(lessThanOrEqualTo: window.contentView!.bottomAnchor, constant: -20)
         ])
-        let title = NSTextField(labelWithString: "教会同声传译")
+        let title = NSTextField(labelWithString: "同声传译")
         title.font = .systemFont(ofSize: 25, weight: .bold)
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版"
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
@@ -210,7 +210,7 @@ import CoreImage
         }
         edit.submenu = editMenu; main.addItem(edit); NSApp.mainMenu = main
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "教会同声传译")
+        statusItem.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "同声传译")
         let menu = NSMenu(); menu.autoenablesItems = false
         menu.addItem(item("显示控制面板", #selector(showWindow)))
         startMenu = item("启动服务", #selector(startService)); stopMenu = item("停止服务", #selector(stopService))
@@ -315,7 +315,7 @@ import CoreImage
         let error = lastError ?? session.lastError ?? snapshot?.service_error ?? session.ttsWarning
         detailLabel.stringValue = error.map { String($0.prefix(300)) } ?? "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。"
         detailLabel.textColor = error == nil ? .secondaryLabelColor : .systemRed; detailLabel.toolTip = error
-        statusItem.button?.toolTip = "教会同声传译 · " + (sessionBusy ? session.message : stateLabel.stringValue)
+        statusItem.button?.toolTip = "同声传译 · " + (sessionBusy ? session.message : stateLabel.stringValue)
     }
 
     private func updateQR(_ address: String?) {

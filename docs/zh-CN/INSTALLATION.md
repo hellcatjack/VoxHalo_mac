@@ -70,7 +70,7 @@ cd VoxHalo_mac
 4. 为 ONNX 图修复建立独立 `runtime/model-tools` 环境。
 5. 下载并核对 `scripts/runtime-assets.json` 中的 Qwen、HY-MT、Kokoro、VAD 和 llama.cpp。
 6. 单独生成中文浮点语速模型，核对预期校验值。
-7. 检查本地资源，编译并签名 **教会同声传译.app**，安装到 `~/Applications`。
+7. 检查本地资源，编译并签名 **同声传译.app**，安装到 `~/Applications`。
 
 模型／运行时资源约 4.55 GB，另有 Python 及依赖包，完成时间取决于网络。App 第一次启动服务还需要加载并量化 ASR 模型，请等模型就绪再采集声音。
 
@@ -81,7 +81,7 @@ cd VoxHalo_mac
 默认 `~/Applications` 为当前用户目录；如果账号有写入权限，也可指定系统“应用程序”目录：
 
 ```sh
-VOXHALO_APP_PATH="/Applications/教会同声传译.app" ./setup.sh
+VOXHALO_APP_PATH="/Applications/同声传译.app" ./setup.sh
 ```
 
 复用另一份安装的模型时，将下面路径替换为实际工作区根目录：
@@ -116,14 +116,14 @@ VOXHALO_ASSET_CACHE="/absolute/path/to/existing/VoxHalo_mac" ./setup.sh
 ## 6. 打开 App 并授权音频访问
 
 ```sh
-open "$HOME/Applications/教会同声传译.app"
+open "$HOME/Applications/同声传译.app"
 ```
 
 若安装时选择了 `/Applications`，请从相应路径打开。当前构建使用临时签名，不是 Developer ID 公证应用；macOS 阻止本机构建副本时，按系统打开提示或“隐私与安全性”选项操作，不要全局关闭 Gatekeeper。
 
 | 输入或操作 | 所需处理 |
 |---|---|
-| 麦克风 | 在“隐私与安全性 → 麦克风”允许“教会同声传译” |
+| 麦克风 | 在“隐私与安全性 → 麦克风”允许“同声传译” |
 | 系统播放声音 | 在“屏幕与系统音频录制”或相应系统版本的同类选项中允许 App |
 | 工作区位于受保护目录 | 如果确为选择的安装目录，允许对应文件夹访问请求 |
 | 局域网听众 | macOS 防火墙提示时允许相应服务接受传入连接 |
@@ -176,10 +176,12 @@ git pull --ff-only
 构建到独立验收目录，避免覆盖已安装 App：
 
 ```sh
-./build-app.sh --destination "$PWD/dist/教会同声传译.app"
+./build-app.sh --destination "$PWD/dist/同声传译.app"
 ```
 
 以前选择过自定义 App 位置时，重建时也应明确指定；shell 脚本不会自动记住这个选择。音频及字幕偏好设置则独立保存在 macOS UserDefaults 中。
+
+从旧中文名称升级时，先退出旧 App。新入口为 `同声传译.app`，确认新版正常后移除旧应用副本和桌面快捷方式，避免打开早期构建。应用标识保持一致，可沿用既有偏好设置。
 
 ## 10. 更换目录、迁移与卸载
 

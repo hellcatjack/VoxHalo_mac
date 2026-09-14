@@ -70,7 +70,7 @@ The script performs these steps:
 4. Creates the isolated `runtime/model-tools` environment for ONNX graph repair.
 5. Downloads and checks the assets in `scripts/runtime-assets.json`, including Qwen, HY-MT, Kokoro, VAD, and llama.cpp.
 6. Generates the separate Chinese floating-point-speed model and checks its expected hash.
-7. Checks local resources and compiles/codesigns **教会同声传译.app** into `~/Applications`.
+7. Checks local resources and compiles/codesigns **同声传译.app** into `~/Applications`.
 
 About 4.55 GB of model/runtime assets are downloaded, plus Python and packages. Installation time depends on your network; no fixed duration is promised. The first App service start also loads and quantizes the ASR model, so allow it to finish before trying to capture audio.
 
@@ -81,7 +81,7 @@ The installer needs access to GitHub release assets, Hugging Face model files, a
 The default `~/Applications` destination is user-owned. To use the system Applications folder instead, if your account can write there:
 
 ```sh
-VOXHALO_APP_PATH="/Applications/教会同声传译.app" ./setup.sh
+VOXHALO_APP_PATH="/Applications/同声传译.app" ./setup.sh
 ```
 
 To reuse matching assets from an existing installation, substitute its actual root directory below:
@@ -116,14 +116,14 @@ Both `app.ready` and `translation.ready` should be `true`. This starts models bu
 ## 6. Open the App and allow audio access
 
 ```sh
-open "$HOME/Applications/教会同声传译.app"
+open "$HOME/Applications/同声传译.app"
 ```
 
 If you selected `/Applications`, open the App at that path instead. Current builds use an ad-hoc signature, not Developer ID notarization. If macOS blocks a locally built copy, follow the system's app-opening prompt or its Privacy & Security controls; do not disable Gatekeeper globally.
 
 | Input or operation | Required action |
 |---|---|
-| Microphone | Allow **教会同声传译** under Privacy & Security → Microphone |
+| Microphone | Allow **同声传译** under Privacy & Security → Microphone |
 | System playback | Allow the App under Screen & System Audio Recording, or the equivalent label in your macOS version |
 | Checkout in a protected folder | Allow the specific folder request if it is your chosen installation location |
 | LAN listeners | Allow incoming connections for the relevant service if macOS Firewall prompts |
@@ -176,10 +176,12 @@ Save or commit local changes before pulling; do not discard them with a forced r
 To build a review copy without replacing the installed App:
 
 ```sh
-./build-app.sh --destination "$PWD/dist/教会同声传译.app"
+./build-app.sh --destination "$PWD/dist/同声传译.app"
 ```
 
 If you previously chose a custom App destination, specify it again when rebuilding; it is not automatically remembered by the shell script. App audio/subtitle preferences are stored separately in macOS UserDefaults.
+
+When upgrading from the former Chinese App name, quit the old App first. The new entry is `同声传译.app`. After verifying the new copy, remove the old App copy and desktop shortcut to avoid opening the earlier build. The bundle identifier remains unchanged, so existing preferences can be reused.
 
 ## 10. Relocate, migrate, or uninstall
 

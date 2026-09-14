@@ -44,4 +44,4 @@ fi
 .venv/bin/python scripts/setup_assets.py --repair-python "$ROOT/runtime/model-tools/bin/python"
 ./macos.sh check
 ./build-app.sh
-print '安装完成。打开上方路径中的「教会同声传译.app」选择设备并开始传译。'
+print '安装完成。打开上方路径中的「同声传译.app」选择设备并开始传译。'

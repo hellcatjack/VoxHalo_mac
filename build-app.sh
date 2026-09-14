@@ -6,4 +6,4 @@ if [[ ! -x .venv/bin/python ]]; then
   exit 1
 fi
 exec .venv/bin/python VoxBridge/tools/build_macos_app.py \
-  --destination "${VOXHALO_APP_PATH:-$HOME/Applications/教会同声传译.app}" "$@"
+  --destination "${VOXHALO_APP_PATH:-$HOME/Applications/同声传译.app}" "$@"

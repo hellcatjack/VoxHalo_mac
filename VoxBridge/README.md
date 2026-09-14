@@ -52,7 +52,7 @@ Browser PCM + audio activity events
 
 ### Apple Silicon 本机 App
 
-Mac 本地版本使用“教会同声传译.app”控制 Qwen3-ASR 0.6B MLX INT8、HY-MT Q8_0 Metal
+Mac 本地版本使用“同声传译.app”控制 Qwen3-ASR 0.6B MLX INT8、HY-MT Q8_0 Metal
 和共享朗读服务，提供启动、停止、运行状态、字幕网页及自动 LAN 地址入口。
 打开“应用程序”或桌面的 App 即可使用，无需打开终端。
 App 复用已部署的本地模型与 Python 环境；完整安装、首次文件授权和构建说明见

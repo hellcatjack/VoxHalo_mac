@@ -2,6 +2,11 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## Chinese name update · 2026-09-14
+
+- Standardized the Chinese project name to “同声传译” across App titles, menu-bar and permission messages, bundle filenames, and bilingual documentation.
+- Kept `org.pccs.voxbridge.console` as the application identifier so existing device and subtitle preferences remain accessible.
+
 ## Documentation update · 2026-09-14
 
 - Added separate English `README.md` and Chinese `README.zh-CN.md` entry points.

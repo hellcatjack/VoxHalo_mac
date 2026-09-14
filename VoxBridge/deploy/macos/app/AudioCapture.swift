@@ -317,7 +317,7 @@ enum MicrophoneReconfiguration {
         default: allowed = false
         }
         guard generation == token else { throw CancellationError() }
-        guard allowed else { throw NativeAudioError.message("请在系统设置 → 隐私与安全性 → 麦克风中允许“教会同声传译” 访问麦克风。") }
+        guard allowed else { throw NativeAudioError.message("请在系统设置 → 隐私与安全性 → 麦克风中允许“同声传译” 访问麦克风。") }
         let uid = inputUID == "default" ? AudioDevices.defaultInputUID() : inputUID
         guard let uid = uid, let selected = try AudioDevices.inputs().first(where: { $0.uid == uid }) else {
             throw NativeAudioError.message("所选输入设备不可用，请连接该设备后重试。")
@@ -368,7 +368,7 @@ enum MicrophoneReconfiguration {
     private func startSystem(run: AudioCaptureRun, token: UUID) async throws {
         let content: SCShareableContent
         do { content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false) }
-        catch { throw NativeAudioError.message("无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“教会同声传译”。\n\(error.localizedDescription)") }
+        catch { throw NativeAudioError.message("无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。\n\(error.localizedDescription)") }
         guard generation == token else { throw CancellationError() }
         guard let display = content.displays.first else { throw NativeAudioError.message("未找到可用于系统音频采集的显示器。") }
         let ownApps = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }

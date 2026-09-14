@@ -1,4 +1,4 @@
-# VoxHalo for macOS · 教会同声传译
+# VoxHalo for macOS · 同声传译
 
 [English](README.md) | **简体中文**
 
@@ -6,7 +6,7 @@
 
 **App 版本：**1.5.1，build 16 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
-App 名称为 **教会同声传译**，当前界面为中文。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
+App 名称为 **同声传译**，当前界面为中文。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
 
 ## 文档导航
 
@@ -84,7 +84,7 @@ cd "$HOME/Projects"
 git clone https://github.com/hellcatjack/VoxHalo_mac.git
 cd VoxHalo_mac
 ./setup.sh
-open "$HOME/Applications/教会同声传译.app"
+open "$HOME/Applications/同声传译.app"
 ```
 
 无需预装 Homebrew、Docker、独立 Python、虚拟声卡、付费 API 或远端推理服务器。安装器会建立本地环境、安装固定依赖、核对模型 SHA-256、修复中文语速输入并编译 App；不会自动开始录音。
@@ -143,7 +143,7 @@ M4／24 GB 上已测试中文讲道 600 秒和英文音频 609.479 秒。译文�
 cd VoxBridge
 ../.venv/bin/python -m pytest -q
 cd ..
-./build-app.sh --destination "$PWD/dist/教会同声传译.app"
+./build-app.sh --destination "$PWD/dist/同声传译.app"
 ```
 
 未安装可选浏览器或 ffprobe 工具时，相应检查可能跳过。请阅读 [AGENTS.md](AGENTS.md)，不要提交模型、媒体、虚拟环境和运行状态；修改用户文档时同步维护中英文版本。
