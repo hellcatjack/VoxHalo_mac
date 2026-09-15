@@ -4,6 +4,7 @@ on:
     branches: ['release/1.8.0']
     paths: ['.github/workflows/release-diagnostic.yml']
 permissions:
+  contents: read
   actions: read
 jobs:
   diagnostic:
@@ -13,7 +14,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh api "repos/$GH_REPO/actions/jobs/104420121121/logs" > prior-build.log
+        run: gh api "repos/$GH_REPO/actions/jobs/104420121121/logs" > prior-build.log 2>&1 || true
       - name: Show failure tail
         shell: python3 {0}
         run: |

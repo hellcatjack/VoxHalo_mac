@@ -22,6 +22,9 @@ jobs:
         shell: bash
         env:
           VOXHALO_CI_ALLOW_NO_METAL: '1'
+          UV_HTTP_CONNECT_TIMEOUT: '30'
+          UV_HTTP_TIMEOUT: '120'
+          UV_HTTP_RETRIES: '5'
         run: |
           set -o pipefail
           ./scripts/bootstrap_release.sh 2>&1 | tee desktop-build.log
