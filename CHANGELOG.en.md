@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.6.1 · build 19 · 2026-09-14
+
+- Bind confirmation to exact source revisions; revoke unshared speech on edits or decoder withdrawal, and lock a sentence only at its first shared PCM commit.
+- Use actual English decoder agreement for early release, with more conservative handling of negation, numbers and proper-name hints; retain preparation and existing timer settings.
+- Make the App translation area follow audible captions; keep published speech and later corrections separate in the monitor.
+- Preserve complete Chinese synthesis, automatic speed, the eight-language catalog and independent native operation. See [speech consistency](docs/en/SPEECH-CONSISTENCY.md).
+
 ## 1.6.0 · build 18 · 2026-09-14
 
 - Redesign the listener page for multilingual interpretation, remove church branding from the page and lock-screen metadata, and improve responsive caption layout while preserving playback behavior.

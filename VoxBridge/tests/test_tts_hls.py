@@ -2445,6 +2445,98 @@ def test_chunk_blocked_commit_rechecks_revision(tmp_path):
     asyncio.run(scenario())
 
 
+def test_source_edit_revokes_audio_before_retranslation_and_commit_locks_revision(tmp_path):
+    async def scenario():
+        entered, unblock = asyncio.Event(), asyncio.Event()
+        committed, discarded = [], []
+        class BlockedEncoder(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                entered.set()
+                await unblock.wait()
+                if not is_current():
+                    return None
+                receipt = await super().append_pcm(pcm)
+                on_commit()
+                return receipt
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+            encoder_factory=BlockedEncoder, chunked_synthesis=True)
+        try:
+            await stream.touch_listener('l', 'o')
+            old = TTSReadyItem('s', 1, 0, 'Chinese', '原文不能提前锁定。')
+            new = TTSReadyItem('s', 2, 0, 'Chinese', '修订后的完整中文句子。')
+            await stream.publish(old, on_commit=lambda: committed.append(1), on_discard=lambda: discarded.append(1))
+            await asyncio.wait_for(entered.wait(), 2)
+            assert stream.revise_source('s', 2, 0)
+            unblock.set()
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 0
+            assert committed == [] and discarded == []
+            assert not await stream.prepare(old)
+            assert not await stream.publish(old)
+            await stream.prepare(new)
+            await stream.publish(new, on_commit=lambda: committed.append(2))
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert committed == [2]
+            assert not stream.revise_source('s', 3, 0)
+            assert [c['text'] for c in stream.native_pcm.snapshot(0)['chunks']] == ['修订后的完整中文句子。']
+            assert stream.caption_snapshot('l', 'o').cues[0].text == '修订后的完整中文句子。'
+        finally:
+            unblock.set()
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_failed_pcm_publication_notifies_ordering_buffer(tmp_path):
+    async def scenario():
+        class FailedEncoder(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                raise HLSUnavailable('test failure')
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+            encoder_factory=FailedEncoder, chunked_synthesis=True)
+        discarded = []
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(TTSReadyItem('s', 1, 0, 'Chinese', '测试。'),
+                                 on_discard=lambda: discarded.append('s'))
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert discarded == ['s']
+        finally:
+            await stream.close()
+    asyncio.run(scenario())
+
+
+def test_confirmation_withdrawal_can_retry_same_revision_without_duplicate_audio(tmp_path):
+    async def scenario():
+        entered, unblock = asyncio.Event(), asyncio.Event()
+        current = False
+        class BlockedEncoder(FakeEncoder):
+            async def append_pcm_committed(self, pcm, *, is_current, on_commit):
+                entered.set()
+                await unblock.wait()
+                return await super().append_pcm_committed(pcm, is_current=is_current, on_commit=on_commit)
+        stream = SharedHLSTTSPublisher(synthesizer=FakeSynthesizer(make_wav()), root_dir=tmp_path,
+            encoder_factory=BlockedEncoder, chunked_synthesis=True)
+        committed, discarded = [], []
+        item = TTSReadyItem('s', 1, 0, 'Chinese', '整句确认后再朗读。')
+        try:
+            await stream.touch_listener('l', 'o')
+            await stream.publish(item, can_commit=lambda: current,
+                                 on_commit=lambda: committed.append(1), on_discard=lambda: discarded.append(1))
+            await asyncio.wait_for(entered.wait(), 2)
+            unblock.set()
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert committed == [] and discarded == [1]
+            assert stream.native_pcm.snapshot(-1)['cursor'] == 0
+            current = True
+            await stream.publish(item, can_commit=lambda: current, on_commit=lambda: committed.append(1))
+            await asyncio.wait_for(stream.wait_idle(), 2)
+            assert committed == [1] and stream.native_pcm.snapshot(-1)['cursor'] == 1
+        finally:
+            unblock.set()
+            await stream.close()
+    asyncio.run(scenario())
+
+
 def test_chunk_preparation_budget_backpressures_and_releases_payloads(tmp_path):
     async def scenario():
         entered = asyncio.Event(); unblock = asyncio.Event()

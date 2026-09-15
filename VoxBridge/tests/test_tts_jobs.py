@@ -19,6 +19,93 @@ class FakeClock:
         self.value += seconds
 
 
+@pytest.mark.parametrize('seal', [False, True])
+def test_new_revision_cannot_inherit_confirmation_or_final_seal(seal):
+    clock = FakeClock(0)
+    buffer = RevisionStableTTSBuffer(stable_sec=3, hold_latest_until_sealed=True,
+                                    confirmed_urgent_stable_sec=1, clock=clock)
+    buffer.register('s', 1, 0)
+    (buffer.seal_through if seal else buffer.confirm_through)(0)
+    buffer.register('s', 2, 0)
+    buffer.mark_ready('s', 2, '修订后的完整句子。', 'Chinese')
+    buffer.set_playback_pressure(urgent=True)
+    clock.advance(10)
+    assert buffer.drain() == []
+    buffer.seal_through(0)
+    assert [x.revision for x in buffer.drain()] == [2]
+
+
+def test_prepared_release_remains_replaceable_until_shared_commit():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for sid, order in [('first', 0), ('second', 1)]:
+        buffer.register(sid, 1, order)
+        buffer.mark_ready(sid, 1, sid, 'Chinese')
+    assert [x.text for x in buffer.drain()] == ['first']
+    assert buffer.drain() == []
+    assert buffer.next_deadline() is None
+    assert buffer.register('first', 2, 0).accepted
+    buffer.mark_ready('first', 2, 'corrected', 'Chinese')
+    assert not buffer.commit('first', 1)
+    assert [x.text for x in buffer.drain()] == ['corrected']
+    assert buffer.commit('first', 2)
+    assert buffer.register('first', 3, 0).late_after_release
+    assert [x.text for x in buffer.drain()] == ['second']
+
+
+def test_final_drain_flushes_pending_sentences_without_repeating_offered_head():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for i in range(3):
+        buffer.register(str(i), 1, i)
+        buffer.mark_ready(str(i), 1, str(i), 'Chinese')
+    assert [x.text for x in buffer.drain()] == ['0']
+    assert [x.text for x in buffer.drain(force=True)] == ['1', '2']
+    assert buffer.pending_count == 0
+
+
+def test_failed_unpublished_head_does_not_block_next_sentence():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for i in range(2):
+        buffer.register(str(i), 1, i)
+        buffer.mark_ready(str(i), 1, str(i), 'Chinese')
+    buffer.drain()
+    buffer.mark_failed('0', 1)
+    assert [x.text for x in buffer.drain()] == ['1']
+
+
+def test_withdrawn_hypothesis_revokes_a_ready_but_unpublished_sentence():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True, require_confirmation=True)
+    buffer.register('s', 1, 0)
+    buffer.mark_ready('s', 1, '原句。', 'Chinese')
+    buffer.confirm_revision('s', 1)
+    assert len(buffer.drain()) == 1 and buffer.can_commit('s', 1)
+    assert buffer.revoke_confirmation('s', 1)
+    assert not buffer.can_commit('s', 1)
+    assert buffer.retry_pending('s', 1)
+    assert buffer.drain() == []
+    buffer.confirm_revision('s', 1)
+    assert len(buffer.drain()) == 1
+    assert buffer.commit('s', 1)
+    assert not buffer.revoke_confirmation('s', 1)
+    assert buffer.can_commit('s', 1)
+
+
+def test_reconfirmation_cannot_reuse_an_old_offers_quiet_window():
+    clock = FakeClock(0)
+    buffer = RevisionStableTTSBuffer(stable_sec=3, defer_commit=True, require_confirmation=True, clock=clock)
+    buffer.register('s', 1, 0)
+    buffer.mark_ready('s', 1, '完整句子。', 'Chinese')
+    buffer.confirm_revision('s', 1)
+    clock.advance(3)
+    buffer.drain()
+    clock.advance(.1)
+    buffer.revoke_confirmation('s', 1)
+    clock.advance(.1)
+    buffer.confirm_revision('s', 1, allow_urgent=False)
+    assert not buffer.can_commit('s', 1)
+    clock.advance(2.9)
+    assert buffer.can_commit('s', 1)
+
+
 def test_urgent_playback_shortens_only_confirmed_source_and_reuses_source_clock():
     clock = FakeClock(100)
     buffer = RevisionStableTTSBuffer(stable_sec=3, hold_latest_until_sealed=True,

@@ -87,6 +87,10 @@ class _RevisionStableEntry:
     target_language: str | None = None
     text: str | None = None
     translation_ready_at: float | None = None
+    confirmed: bool = False
+    sealed: bool = False
+    allow_urgent: bool = True
+    offered: bool = False
 
 
 class RevisionStableTTSBuffer:
@@ -100,6 +104,8 @@ class RevisionStableTTSBuffer:
         hold_latest_until_sealed: bool = False,
         confirmed_urgent_stable_sec: float | None = None,
         playback_pressure: Callable[[], bool] | None = None,
+        defer_commit: bool = False,
+        require_confirmation: bool = False,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if stable_sec < 0:
@@ -117,6 +123,8 @@ class RevisionStableTTSBuffer:
         self._confirmed_urgent_stable_sec = confirmed_urgent_stable_sec
         self._playback_urgent = False
         self._playback_pressure = playback_pressure
+        self._defer_commit = bool(defer_commit)
+        self._require_confirmation = bool(require_confirmation)
         self._clock = clock
         self._entries: dict[int, _RevisionStableEntry] = {}
         self._sentence_orders: dict[str, int] = {}
@@ -243,6 +251,10 @@ class RevisionStableTTSBuffer:
             next_value = max(self._sealed_through, int(source_order))
             changed = next_value != self._sealed_through
             self._sealed_through = next_value
+            for entry in self._entries.values():
+                if entry.source_order <= source_order:
+                    changed |= not entry.sealed
+                    entry.sealed = True
             return changed
 
     def confirm_through(self, source_order: int) -> bool:
@@ -252,7 +264,61 @@ class RevisionStableTTSBuffer:
             next_value = max(self._confirmed_through, int(source_order))
             changed = next_value != self._confirmed_through
             self._confirmed_through = next_value
+            for entry in self._entries.values():
+                if entry.source_order <= source_order:
+                    changed |= not entry.confirmed
+                    entry.confirmed = True
             return changed
+
+    def confirm_revision(self, sentence_id: str, revision: int, *, allow_urgent: bool = True) -> bool:
+        """Confirmation belongs to an exact source revision, never future edits."""
+        with self._lock:
+            entry = self._current_entry(sentence_id, revision)
+            if entry is None:
+                return False
+            changed = not entry.confirmed or entry.allow_urgent != allow_urgent
+            entry.confirmed = True
+            entry.allow_urgent = allow_urgent
+            return changed
+
+    def commit(self, sentence_id: str, revision: int) -> bool:
+        """The synchronous first shared PCM commit makes this revision immutable."""
+        with self._lock:
+            entry = self._current_entry(sentence_id, revision)
+            if entry is None or not entry.offered or entry.source_order != self._next_order:
+                return False
+            self._released[sentence_id] = (revision, entry.source_order, self._clock())
+            del self._entries[self._next_order]
+            self._next_order += 1
+            return True
+
+    def can_commit(self, sentence_id: str, revision: int) -> bool:
+        with self._lock:
+            released = self._released.get(sentence_id)
+            if released is not None:
+                return released[0] == revision
+            entry = self._current_entry(sentence_id, revision)
+            if entry is None or not entry.offered or entry.status != "ready":
+                return False
+            required_sec, _, _, _ = self._release_policy(entry)
+            return required_sec is not None and self._clock() >= entry.changed_at + required_sec
+
+    def revoke_confirmation(self, sentence_id: str, revision: int) -> bool:
+        with self._lock:
+            entry = self._current_entry(sentence_id, revision)
+            if entry is None or entry.sealed or not entry.confirmed:
+                return False
+            entry.confirmed = False
+            entry.changed_at = self._clock()
+            return True
+
+    def retry_pending(self, sentence_id: str, revision: int) -> bool:
+        with self._lock:
+            entry = self._current_entry(sentence_id, revision)
+            if entry is None or entry.status != "ready":
+                return False
+            entry.offered = False
+            return True
 
     def mark_ready(
         self,
@@ -318,13 +384,15 @@ class RevisionStableTTSBuffer:
         self,
         entry: _RevisionStableEntry,
     ) -> tuple[float | None, str, bool, bool]:
-        if entry.source_order <= self._sealed_through:
+        if entry.sealed:
             return 0.0, "source_sealed", False, False
-        if entry.source_order <= self._confirmed_through:
+        if entry.confirmed:
             urgent = self._playback_pressure() if self._playback_pressure is not None else self._playback_urgent
-            if urgent and self._confirmed_urgent_stable_sec is not None:
+            if urgent and entry.allow_urgent and self._confirmed_urgent_stable_sec is not None:
                 return self._confirmed_urgent_stable_sec, "rollback_safe_urgent", False, False
             return self._stable_sec, "rollback_safe", False, False
+        if self._require_confirmation:
+            return None, "revision_confirmation", False, True
         if (
             entry.source_order == self._highest_source_order
             and self._hold_latest_until_sealed
@@ -348,7 +416,7 @@ class RevisionStableTTSBuffer:
         with self._lock:
             order = self._sentence_orders.get(sid)
             entry = self._entries.get(order) if order is not None else None
-            if entry is None or entry.status != "ready":
+            if entry is None or entry.status != "ready" or entry.offered:
                 return None
             quiet_age_ms = self._elapsed_ms(entry.changed_at, now)
             (
@@ -377,7 +445,7 @@ class RevisionStableTTSBuffer:
     def next_deadline(self) -> float | None:
         with self._lock:
             entry = self._entries.get(self._next_order)
-            if entry is None or entry.status != "ready":
+            if entry is None or entry.status != "ready" or entry.offered:
                 return None
             required_sec, _, _, _ = self._release_policy(entry)
             if required_sec is None:
@@ -396,18 +464,21 @@ class RevisionStableTTSBuffer:
                     del self._entries[self._next_order]
                     self._next_order += 1
                     continue
+                if entry.offered:
+                    if not force:
+                        break
+                    # Finish has reconciled all source text. Keep the already
+                    # queued head, then flush the remaining tail exactly once.
+                    self.commit(entry.sentence_id, entry.revision)
+                    continue
                 required_sec, release_reason, _, _ = self._release_policy(entry)
                 if not force and (
                     required_sec is None or now < entry.changed_at + required_sec
                 ):
                     break
-                del self._entries[self._next_order]
-                self._next_order += 1
-                self._released[entry.sentence_id] = (
-                    int(entry.revision),
-                    int(entry.source_order),
-                    float(now),
-                )
+                entry.offered = True
+                if not self._defer_commit or force:
+                    self.commit(entry.sentence_id, entry.revision)
                 ready.append(
                     TTSReadyItem(
                         sentence_id=entry.sentence_id,
@@ -425,6 +496,8 @@ class RevisionStableTTSBuffer:
                         ),
                     )
                 )
+                if self._defer_commit and not force:
+                    break
         return ready
 
     @property

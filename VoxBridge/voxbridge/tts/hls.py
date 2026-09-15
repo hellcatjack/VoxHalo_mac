@@ -976,6 +976,10 @@ class SharedHLSTTSPublisher:
         self._known_items: dict[ItemKey, TTSReadyItem] = {}
         self._audio_ms_per_char: dict[str, float] = {}
         self._latest_key_by_sentence: dict[str, ItemKey] = {}
+        self._source_revisions: dict[str, int] = {}
+        self._commit_callbacks: dict[ItemKey, Callable[[], None]] = {}
+        self._discard_callbacks: dict[ItemKey, Callable[[], None]] = {}
+        self._publication_guards: dict[ItemKey, Callable[[], bool]] = {}
         self._work_available = asyncio.Event()
         self._encoder: HLSEncoder | None = None
         self._active_root: Path | None = None
@@ -1147,9 +1151,13 @@ class SharedHLSTTSPublisher:
         key: ItemKey,
     ) -> None:
         sentence_id = str(item.sentence_id)
+        self._source_revisions[sentence_id] = item.revision
         self._latest_key_by_sentence[sentence_id] = key
         for old_key in list(self._chunk_states):
             if old_key[0] == sentence_id and old_key != key:
+                self._commit_callbacks.pop(old_key, None)
+                self._discard_callbacks.pop(old_key, None)
+                self._publication_guards.pop(old_key, None)
                 old_state = self._chunk_states.pop(old_key)
                 old_state.chunks.clear()
                 old_state.changed.set()
@@ -1260,13 +1268,45 @@ class SharedHLSTTSPublisher:
             raise HLSListenerNotFound("listener lease is unavailable")
         return lease
 
-    async def publish(self, item: TTSReadyItem) -> bool:
+    def revise_source(self, sentence_id: str, revision: int, source_order: int) -> bool:
+        """Fence unpublished audio immediately, before the new translation exists.
+
+        Runs synchronously on the publisher event loop, like the encoder's commit.
+        Once any chunk is shared, the entire sentence keeps its original version.
+        """
+        if not self._chunked_synthesis or source_order <= self._chunk_consumed_source_order:
+            return False
+        known = self._source_revisions.get(sentence_id, -1)
+        if revision < known:
+            return False
+        self._source_revisions[sentence_id] = revision
+        for key in list(self._chunk_states):
+            if key[0] == sentence_id and key[1] < revision:
+                self._commit_callbacks.pop(key, None)
+                self._discard_callbacks.pop(key, None)
+                self._publication_guards.pop(key, None)
+                self._drop_chunk_item(key)
+        return True
+
+    @staticmethod
+    def _notify_publication(callback: Callable[[], None] | None) -> None:
+        if callback is not None:
+            try:
+                callback()
+            except Exception:
+                logger.exception("speech publication observer failed")
+
+    async def publish(self, item: TTSReadyItem, *, on_commit: Callable[[], None] | None = None,
+                      on_discard: Callable[[], None] | None = None,
+                      can_commit: Callable[[], bool] | None = None) -> bool:
         await self.prune_expired()
         async with self._lock:
             if self._closed or self._synthesizer is None:
                 return False
             key = self._item_key(item)
             if self._chunked_synthesis:
+                if item.revision < self._source_revisions.get(item.sentence_id, -1):
+                    return False
                 latest = self._latest_key_by_sentence.get(str(item.sentence_id))
                 if latest is not None and latest[1] > key[1]:
                     return False
@@ -1294,6 +1334,12 @@ class SharedHLSTTSPublisher:
                     )
             self._known_items[key] = item
             if self._chunked_synthesis:
+                if on_commit is not None:
+                    self._commit_callbacks[key] = on_commit
+                if on_discard is not None:
+                    self._discard_callbacks[key] = on_discard
+                if can_commit is not None:
+                    self._publication_guards[key] = can_commit
                 state = self._chunk_state(item, key)
                 state.released = True
                 state.release_order = self._chunk_release_serial
@@ -1316,6 +1362,8 @@ class SharedHLSTTSPublisher:
                 return False
             key = self._item_key(item)
             if self._chunked_synthesis:
+                if item.revision < self._source_revisions.get(item.sentence_id, -1):
+                    return False
                 latest = self._latest_key_by_sentence.get(str(item.sentence_id))
                 if latest is not None and latest[1] > key[1]:
                     return False
@@ -1506,6 +1554,10 @@ class SharedHLSTTSPublisher:
     def begin_source_generation(self) -> None:
         """Fence old producer work; permit a new producer's source-order origin."""
         self._source_generation += 1
+        self._commit_callbacks.clear()
+        self._discard_callbacks.clear()
+        self._publication_guards.clear()
+        self._source_revisions.clear()
         self._chunk_consumed_source_order = -1
         self._chunk_completed.clear()
         for state in self._chunk_states.values():
@@ -1636,9 +1688,16 @@ class SharedHLSTTSPublisher:
                                 revision=item.revision, source_order=item.source_order, index=index,
                                 count=len(state.texts), text=state.texts[index])
                             self._chunk_consumed_source_order = max(self._chunk_consumed_source_order, item.source_order)
+                            self._discard_callbacks.pop(key, None)
+                            self._notify_publication(self._commit_callbacks.pop(key, None))
                         receipt = await encoder.append_pcm_committed(
-                            prepared.pcm, is_current=lambda: self._chunk_valid(key, encoder, generation), on_commit=commit)
+                            prepared.pcm, is_current=lambda: self._chunk_valid(key, encoder, generation)
+                            and self._publication_guards.get(key, lambda: True)(), on_commit=commit)
                         if receipt is None:
+                            # A withdrawn hypothesis can be confirmed again;
+                            # finish this attempt before allowing the same key.
+                            state.done = True
+                            state.chunks.clear()
                             break
                         state.published += 1
                         state.chunks.popleft()
@@ -1654,7 +1713,7 @@ class SharedHLSTTSPublisher:
                     if state.done:
                         break
                     await state.changed.wait()
-                if generation == self._source_generation:
+                if generation == self._source_generation and state.published:
                     self._chunk_completed.append(key)
             except asyncio.CancelledError:
                 raise
@@ -1663,6 +1722,9 @@ class SharedHLSTTSPublisher:
                 logger.warning("shared PCM publish failed error=%s", type(exc).__name__)
             finally:
                 if generation == self._source_generation:
+                    self._commit_callbacks.pop(key, None)
+                    self._notify_publication(self._discard_callbacks.pop(key, None))
+                    self._publication_guards.pop(key, None)
                     self._known_items.pop(key, None)
                     finished_state = self._chunk_states.pop(key, None)
                     if finished_state is not None:
@@ -1946,6 +2008,13 @@ class SharedHLSTTSPublisher:
             self._active_root = None
             self._speech_epoch_id = ""
             self.native_pcm.reset("")
+            callbacks = list(self._discard_callbacks.values())
+            self._discard_callbacks.clear()
+            self._commit_callbacks.clear()
+            self._publication_guards.clear()
+            self._source_revisions.clear()
+            for callback in callbacks:
+                self._notify_publication(callback)
             for state in self._chunk_states.values():
                 state.changed.set()
             self._chunk_states.clear()

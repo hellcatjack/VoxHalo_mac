@@ -339,7 +339,8 @@ import CoreImage
         let showTranscript = pair == session.languagePair
         ttsLabel.stringValue = session.isActive ? String(format: "\(pair.targetName)朗读待输出 %.1f 秒 · 合成语速 %.2f× · 音频连接 %d", session.backlogSeconds, session.speed, session.listenerCount) : "识别\(pair.sourceName) → 翻译并朗读\(pair.targetName) · 开始前可切换方向"
         sourceLabel.stringValue = !showTranscript || session.sourceText.isEmpty ? "\(pair.sourceName)原文将在这里显示" : session.sourceText
-        translationLabel.stringValue = !showTranscript || session.translationText.isEmpty ? "\(pair.targetName)译文将在这里显示" : session.translationText
+        let displayedTranslation = session.subtitleFollowsPlayback ? session.subtitleText : session.translationText
+        translationLabel.stringValue = !showTranscript || displayedTranslation.isEmpty ? "等待\(pair.targetName)\(session.subtitleFollowsPlayback ? "朗读字幕" : "译文")" : displayedTranslation
         addressLabel.stringValue = snapshot?.listener_url ?? snapshot?.lan_error ?? "连接局域网后自动显示地址"
         if lastQR != snapshot?.listener_url { lastQR = snapshot?.listener_url; updateQR(lastQR) }
         let error = lastError ?? session.lastError ?? snapshot?.service_error ?? session.ttsWarning

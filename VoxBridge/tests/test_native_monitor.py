@@ -77,6 +77,24 @@ def test_monitor_revision_reset_and_late_join_snapshot():
     state.observe({'type':'final'}); assert state.snapshot()['session']['status']=='stopped'
 
 
+def test_monitor_keeps_spoken_snapshot_when_source_and_translation_are_corrected():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState()
+    state.observe(dict(type='sentence_committed', sentence_id='a', revision=1, text='We can leave.'))
+    state.observe(dict(type='speech_committed', sentence_id='a', revision=1,
+                       source='We can leave.', translation='我们可以离开。'))
+    state.observe(dict(type='sentence_updated', sentence_id='a', revision=2, text='We cannot leave.'))
+    state.observe(dict(type='sentence_translation', sentence_id='a', revision=2, translation='我们不能离开。'))
+    row = state.snapshot()['rows'][0]
+    assert row['translation'] == '我们不能离开。'
+    assert row['spoken'] == [dict(sentence_id='a', revision=1, source='We can leave.', text='我们可以离开。')]
+    event = dict(type='speech_committed', sentence_id='a:addition:2', revision=2,
+                 source='until tomorrow.', translation='直到明天。')
+    state.observe(event)
+    state.observe(event)
+    assert [part['text'] for part in state.snapshot()['rows'][0]['spoken']] == ['我们可以离开。', '直到明天。']
+
+
 def test_native_control_token_is_stable_private_and_in_environment(monkeypatch,tmp_path):
     from tools import macos_service as service
     monkeypatch.setattr(service,'STATE',tmp_path)

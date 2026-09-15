@@ -4,13 +4,14 @@
 
 在 Apple Silicon Mac 上独立运行的八语言语音传译系统，提供原生音频采集、译音朗读、与播放同步的字幕，以及局域网听众功能。
 
-**App 版本：**1.6.0，build 18 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App 版本：**1.6.1，build 19 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
 App 名称为 **同声传译**，当前界面为中文。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
 
 ## 文档导航
 
 - [八语言验证与限制](docs/zh-CN/EIGHT-LANGUAGES.md)
+- [朗读与字幕版本一致性](docs/zh-CN/SPEECH-CONSISTENCY.md)
 - [第一阶段重构验收](docs/zh-CN/PHASE1-VALIDATION.md)
 - [架构与通用模块边界](docs/zh-CN/ARCHITECTURE.md)
 - [详细安装、更新与故障排查](docs/zh-CN/INSTALLATION.md)

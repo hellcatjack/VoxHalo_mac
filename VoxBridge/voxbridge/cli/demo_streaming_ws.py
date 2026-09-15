@@ -133,6 +133,7 @@ from voxbridge.streaming.sentence_rules import (
 from voxbridge.interpretation.translation_queue import run_translation_queue
 from voxbridge.interpretation.transcript import ChineseEnglishTextPolicy, SourceTextPolicy, source_text_policy as make_source_text_policy
 from voxbridge.tts.output import SharedSpeechOutput, SpeechOutput
+from voxbridge.tts.confirmation import SpeechConfirmation
 from voxbridge.translation.service import TranslationService
 from voxbridge.interpretation.contracts import TranslationRequest, TranslationRuntime
 from voxbridge.languages import normalize_direction, pair_for_direction, language_profile, language_capabilities
@@ -2689,6 +2690,7 @@ def _create_app(
             budget_sec=float(getattr(args, "qwen_submission_budget_sec", 8.0)),
         )
         qwen_observation = DecodeObservation()
+        speech_confirmation = SpeechConfirmation()
         qwen_candidates: Dict[int, StableCandidate] = {}
 
         source_text_policy: SourceTextPolicy = ChineseEnglishTextPolicy(
@@ -2991,6 +2993,7 @@ def _create_app(
             next_source_order=0,
             sentence_orders={},
             source_versions={},
+            source_segments={},
             released_sources={},
             covered_sources={},
             supplemented_sources={},
@@ -2998,6 +3001,8 @@ def _create_app(
                 stable_sec=tts_revision_stable_sec,
                 latest_revision_grace_sec=tts_latest_revision_grace_sec,
                 hold_latest_until_sealed=segment_final_redecode,
+                defer_commit=native_pcm_enabled,
+                require_confirmation=native_pcm_enabled and segment_final_redecode,
                 confirmed_urgent_stable_sec=getattr(args, "tts_confirmed_urgent_stable_sec", None),
                 playback_pressure=lambda: native_pcm_enabled and app.state.native_playback.urgent(
                     speech_output.status.speech_epoch_id),
@@ -3908,9 +3913,11 @@ def _create_app(
                 tts_runtime.next_source_order = 0
                 tts_runtime.sentence_orders.clear()
                 tts_runtime.source_versions.clear()
+                tts_runtime.source_segments.clear()
                 tts_runtime.released_sources.clear()
                 tts_runtime.covered_sources.clear()
                 tts_runtime.supplemented_sources.clear()
+                speech_confirmation.reset()
                 tts_runtime.ordered.reset()
                 tts_runtime.last_wait_key = None
                 tts_runtime.stability_wake.set()
@@ -3995,6 +4002,7 @@ def _create_app(
                 return
             async with tts_transition_lock:
                 tts_runtime.source_versions[(sid, int(revision))] = str(source_text)
+                tts_runtime.source_segments[(sid, int(revision))] = int(segment_runtime.id)
                 generation = int(tts_runtime.generation)
                 registered = tts_runtime.sentence_orders.get(sid)
                 if registered is None:
@@ -4011,6 +4019,8 @@ def _create_app(
                     int(source_order),
                 )
                 if registration.accepted:
+                    if native_pcm_enabled:
+                        speech_output.revise_source(sid, int(revision), int(source_order))
                     tts_runtime.stability_wake.set()
                 if registration.reset:
                     tts_runtime.last_wait_key = None
@@ -4045,6 +4055,58 @@ def _create_app(
                 if not _tts_output_active():
                     return
                 source = tts_runtime.source_versions.get((item.sentence_id, item.revision), "")
+                if native_pcm_enabled and not tts_runtime.enabled:
+                    generation = int(tts_runtime.generation)
+
+                    def committed(item=item, source=source, generation=generation):
+                        if generation != tts_runtime.generation:
+                            return
+                        tts_runtime.ordered.commit(item.sentence_id, item.revision)
+                        tts_runtime.released_sources[item.sentence_id] = source
+                        tts_runtime.covered_sources.setdefault(item.sentence_id, source)
+                        app.state.monitor.observe(dict(type="speech_committed", sentence_id=item.sentence_id,
+                            revision=item.revision, source=source, translation=item.text))
+                        # Compatibility listeners also receive the final tail
+                        # when capture and its scheduler have already stopped.
+                        if tts_runtime.broadcast_enabled:
+                            try:
+                                job = app.state.tts_broadcast.publish(item)
+                                if job is not None:
+                                    tts_runtime.session_issued_job_count += 1
+                            except TTSBroadcastQueueFull:
+                                logger.warning("TTS compatibility queue full at shared PCM commit")
+                        tts_runtime.stability_wake.set()
+                        _trace_event("tts_pcm_committed", sentence_hash8=_opaque_identifier_hash8(item.sentence_id),
+                            revision=item.revision, source_order=item.source_order,
+                            translated_hash8=_hash8(item.text))
+
+                    def discarded(item=item, generation=generation):
+                        if generation == tts_runtime.generation:
+                            if not tts_runtime.ordered.can_commit(item.sentence_id, item.revision):
+                                tts_runtime.ordered.retry_pending(item.sentence_id, item.revision)
+                            else:
+                                tts_runtime.ordered.mark_failed(item.sentence_id, item.revision)
+                            tts_runtime.stability_wake.set()
+                            _trace_event("tts_unpublished_discarded",
+                                sentence_hash8=_opaque_identifier_hash8(item.sentence_id), revision=item.revision)
+
+                    try:
+                        queued = await speech_output.publish(item, on_commit=committed, on_discard=discarded,
+                            can_commit=lambda item=item, generation=generation: generation == tts_runtime.generation
+                            and tts_runtime.ordered.can_commit(item.sentence_id, item.revision))
+                    except HLSQueueFull:
+                        queued = False
+                    _trace_event("tts_ready_for_publication", sentence_hash8=_opaque_identifier_hash8(item.sentence_id),
+                        revision=item.revision, source_order=item.source_order, queued=queued,
+                        release_reason=item.release_reason, source_quiet_age_ms=item.source_quiet_age_ms)
+                    if not queued:
+                        discarded()
+                    continue
+                if native_pcm_enabled:
+                    # Private pull clients can fetch audio as soon as a job is
+                    # sent. Their irreversible boundary is the job publication.
+                    tts_runtime.ordered.commit(item.sentence_id, item.revision)
+                    tts_runtime.stability_wake.set()
                 tts_runtime.released_sources[item.sentence_id] = source
                 tts_runtime.covered_sources.setdefault(item.sentence_id, source)
                 tts_runtime.last_wait_key = None
@@ -4169,6 +4231,7 @@ def _create_app(
             *,
             reason: str,
             lookahead_tokens: int,
+            allow_urgent: bool = True,
         ) -> None:
             def _transition() -> List[Any]:
                 registered = tts_runtime.sentence_orders.get(str(sentence_id or ""))
@@ -4177,7 +4240,11 @@ def _create_app(
                 source_order, registered_generation = registered
                 if int(registered_generation) != int(tts_runtime.generation):
                     return []
-                changed = tts_runtime.ordered.confirm_through(int(source_order))
+                current_index = _find_sentence_item_index(sentence_id)
+                if current_index is None:
+                    return []
+                revision = int(subtitle_state.sentence_items[current_index]["revision"])
+                changed = tts_runtime.ordered.confirm_revision(sentence_id, revision, allow_urgent=allow_urgent)
                 if not changed:
                     return []
                 tts_runtime.last_wait_key = None
@@ -4186,6 +4253,8 @@ def _create_app(
                     "tts_source_confirmed",
                     sentence_hash8=_opaque_identifier_hash8(str(sentence_id)),
                     source_order=int(source_order),
+                    revision=revision,
+                    allow_urgent=allow_urgent,
                     reason=str(reason or ""),
                     lookahead_tokens=int(lookahead_tokens),
                     required_lookahead_tokens=int(
@@ -6159,6 +6228,18 @@ def _create_app(
             allow_early_translation_promotion: bool = True,
         ) -> str:
             seq_no = int(seq_hint or 0)
+            decoder_text = str(getattr(state, "text", "") or "").strip()
+            if native_pcm_enabled and translation_runtime.source_language == "English":
+                # Revoke before any await can allow an old prepared chunk to
+                # reach the shared encoder. Display holdback is not ASR proof.
+                for current in subtitle_state.sentence_items[-64:]:
+                    sid, revision = str(current["id"]), int(current["revision"])
+                    if (tts_runtime.source_segments.get((sid, revision)) == int(segment_runtime.id)
+                            and str(current["zh"]) not in decoder_text):
+                        if tts_runtime.ordered.revoke_confirmation(sid, revision):
+                            tts_runtime.stability_wake.set()
+                            _trace_event("tts_confirmation_revoked", sentence_hash8=_opaque_identifier_hash8(sid),
+                                         revision=revision, reason="decoder_withdrawal")
             raw_full_text = str(full_text or "").strip()
             total_committed_count = len(subtitle_state.committed_sentences)
             commit_base = int(getattr(subtitle_state, "commit_base", 0) or 0)
@@ -7362,7 +7443,7 @@ def _create_app(
                     }
                 )
                 await _register_tts_source(sentence_id, revision, sentence)
-                if commit_rollback_safe:
+                if commit_rollback_safe and not (native_pcm_enabled and translation_runtime.source_language == "English"):
                     await _confirm_tts_source(
                         sentence_id,
                         reason="rollback_safe_commit",
@@ -7552,6 +7633,25 @@ def _create_app(
                     committed_count=int(len(subtitle_state.committed_sentences) - commit_base),
                     total_committed_count=len(subtitle_state.committed_sentences),
                 )
+            if native_pcm_enabled and translation_runtime.source_language == "English":
+                observation = (int(segment_runtime.id), qwen_chunk) if qwen_evidence_available else None
+                decoder_units, _ = _split_subtitle_units(decoder_text)
+                speech_confirmation.observe(decoder_units, observation)
+                if observation is not None:
+                    # Use only text present in this actual decode; old display
+                    # rows and repeated callbacks are not agreement evidence.
+                    for current in subtitle_state.sentence_items[-64:]:
+                        sid, source = str(current["id"]), str(current["zh"])
+                        if sid in tts_runtime.released_sources:
+                            continue
+                        allow_urgent = speech_confirmation.decision(source)
+                        position = decoder_text.find(source)
+                        if allow_urgent is None or position < 0:
+                            continue
+                        lookahead = _count_tokenizer_tokens(asr_tokenizer, decoder_text[position + len(source):])
+                        if lookahead is not None and lookahead >= early_translation_required_lookahead_tokens:
+                            await _confirm_tts_source(sid, reason="decode_agreement", lookahead_tokens=lookahead,
+                                                      allow_urgent=allow_urgent)
             return subtitle_state.tentative_tail
 
         async def _send_json(payload: Dict[str, Any]) -> None:
@@ -9061,6 +9161,8 @@ def _create_app(
                                 stable_sec=tts_revision_stable_sec,
                                 latest_revision_grace_sec=tts_latest_revision_grace_sec,
                                 hold_latest_until_sealed=segment_final_redecode,
+                                defer_commit=native_pcm_enabled,
+                                require_confirmation=native_pcm_enabled and segment_final_redecode,
                                 confirmed_urgent_stable_sec=getattr(args, "tts_confirmed_urgent_stable_sec", None),
                                 playback_pressure=lambda: native_pcm_enabled and app.state.native_playback.urgent(
                                     speech_output.status.speech_epoch_id),
