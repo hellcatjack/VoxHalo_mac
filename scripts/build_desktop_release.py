@@ -13,6 +13,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 
@@ -42,7 +43,14 @@ def digest(path: Path) -> str:
 
 def run(command, **kwargs):
     print('+ ' + ' '.join('<inline validation>' if '\n' in str(value) else str(value) for value in command), flush=True)
-    return subprocess.run([str(value) for value in command], check=True, **kwargs)
+    try:
+        return subprocess.run([str(value) for value in command], check=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        for output in (error.stdout, error.stderr):
+            if output:
+                message = output.decode(errors='replace') if isinstance(output, bytes) else output
+                print(message, end='' if message.endswith('\n') else '\n', file=sys.stderr, flush=True)
+        raise
 
 
 def copy_public_tree(source: Path, destination: Path) -> None:
@@ -239,13 +247,18 @@ def remove_downloaded_components(root: Path) -> None:
 
 
 MLX_VALIDATION = r'''
-metal_available = mx.metal.is_available()
+# metal.is_available() only reports that the wheel was compiled with Metal.
+metal_available = mx.is_available(mx.gpu)
 if not metal_available and not allow_no_metal:
     raise RuntimeError('Metal is unavailable; use --allow-no-metal only for CI import validation')
-mx.set_default_device(mx.gpu if metal_available else mx.cpu)
-mx.eval(mx.array([1, 2]) + 1)
-mlx_report = {'metal_available': metal_available, 'mlx_evaluation': metal_available,
-              'cpu_evaluation': not metal_available}
+mlx_report = {'metal_available': metal_available, 'mlx_evaluation': False, 'cpu_evaluation': False}
+if metal_available:
+    mx.set_default_device(mx.gpu)
+    mx.eval(mx.array([1, 2]) + 1)
+    mlx_report['mlx_evaluation'] = True
+else:
+    # The shipped Metal wheel also needs a GPU for its CPU array allocator.
+    mlx_report['evaluation_skipped_reason'] = 'no_metal_device'
 '''
 
 
@@ -411,7 +424,7 @@ def main() -> None:
     payload.add_argument('--build', default=BUILD)
     payload.add_argument('--keep-workspace', action='store_true')
     payload.add_argument('--allow-no-metal', action='store_true',
-                         help='Permit CPU import validation on CI hosts without Metal; does not validate GPU inference')
+                         help='Permit import-only validation on CI hosts without Metal; does not validate inference')
     package = commands.add_parser('package', help='Package a precompiled, signed standalone App')
     package.add_argument('--app', type=Path, required=True)
     package.add_argument('--output', type=Path, default=ROOT / 'dist/release')

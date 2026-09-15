@@ -168,23 +168,27 @@ def test_native_repair_removes_build_rpath_and_retains_portable_rpath(tmp_path):
 
 
 @pytest.mark.parametrize('metal_available,allow_no_metal', [(True, False), (True, True), (False, True)])
-def test_mlx_validation_reports_the_device_actually_evaluated(metal_available, allow_no_metal):
+def test_mlx_validation_reports_only_actual_gpu_evaluation(metal_available, allow_no_metal):
     evaluated = []
     selected = []
-    mx = SimpleNamespace(metal=SimpleNamespace(is_available=lambda: metal_available),
+    mx = SimpleNamespace(metal=SimpleNamespace(is_available=lambda: True),
+                         is_available=lambda device: metal_available,
                          gpu='gpu', cpu='cpu', set_default_device=selected.append,
                          array=lambda values: sum(values), eval=evaluated.append)
     namespace = {'mx': mx, 'allow_no_metal': allow_no_metal}
     exec(builder().MLX_VALIDATION, namespace)
-    assert selected == ['gpu' if metal_available else 'cpu']
-    assert evaluated == [4]
-    assert namespace['mlx_report'] == {'metal_available': metal_available,
-                                       'mlx_evaluation': metal_available,
-                                       'cpu_evaluation': not metal_available}
+    assert selected == (['gpu'] if metal_available else [])
+    assert evaluated == ([4] if metal_available else [])
+    expected = {'metal_available': metal_available, 'mlx_evaluation': metal_available,
+                'cpu_evaluation': False}
+    if not metal_available:
+        expected['evaluation_skipped_reason'] = 'no_metal_device'
+    assert namespace['mlx_report'] == expected
 
 
 def test_mlx_validation_requires_metal_without_explicit_ci_opt_in():
-    mx = SimpleNamespace(metal=SimpleNamespace(is_available=lambda: False))
+    mx = SimpleNamespace(metal=SimpleNamespace(is_available=lambda: True),
+                         gpu='gpu', is_available=lambda device: False)
     with pytest.raises(RuntimeError, match='--allow-no-metal'):
         exec(builder().MLX_VALIDATION, {'mx': mx, 'allow_no_metal': False})
 
@@ -198,3 +202,15 @@ def test_payload_cli_accepts_explicit_no_metal_opt_in(monkeypatch, extra, expect
                                     '--python-home', '/python', *extra])
     module.main()
     assert received[0].allow_no_metal is expected
+
+
+@pytest.mark.parametrize('text_mode', [True, False])
+def test_failed_builder_command_exposes_captured_diagnostics_and_preserves_failure(capsys, text_mode):
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        builder().run([sys.executable, '-c',
+                       'import sys; print("child output"); print("child failure", file=sys.stderr); sys.exit(7)'],
+                      capture_output=True, text=text_mode)
+    assert raised.value.returncode == 7
+    expected = 'child failure\n' if text_mode else b'child failure\n'
+    assert raised.value.stderr == expected
+    assert capsys.readouterr().err == 'child output\nchild failure\n'
