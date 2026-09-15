@@ -9,6 +9,7 @@ import AppKit
     private var syncing = false
     private let localizedViews = NativeLocalizedViews()
     private var errorMessage = ""
+    let shortcuts = SubtitleShortcutSettingsView()
     private let enabled = NSButton(checkboxWithTitle: "显示翻译字幕", target: nil, action: nil)
     private let preview = NSButton(checkboxWithTitle: "预览字幕样式（仅在未传译时可用）", target: nil, action: nil)
     private let font = NSPopUpButton()
@@ -36,13 +37,14 @@ import AppKit
     }
     func apply(preferences: SubtitlePreferences) {
         self.preferences = preferences.normalized()
-        if window != nil { sync() }
+        if window?.isVisible == true { sync() }
     }
     func refreshLocalization() {
         guard let window, let content = window.contentView else { return }
         window.title = NativeLocalization.text("字幕设置")
-        localizedViews.capture(content, excluding: [errorLabel]); localizedViews.apply()
+        localizedViews.capture(content, excluding: [errorLabel, shortcuts]); localizedViews.apply()
         errorLabel.stringValue = NativeLocalization.render(errorMessage)
+        shortcuts.refreshLocalization()
     }
     private func showError(_ value: String) { errorMessage = value; errorLabel.stringValue = NativeLocalization.render(value) }
     func close() { window?.close(); preview.state = .off; onPreview?(false) }
@@ -115,6 +117,9 @@ import AppKit
         let refresh = NSButton(title: "刷新显示器", target: self, action: #selector(refreshDisplays))
         refresh.bezelStyle = .rounded
         body.addArrangedSubview(row([reset, refresh]))
+        let divider = NSBox(); divider.boxType = .separator
+        body.addArrangedSubview(divider); divider.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+        body.addArrangedSubview(shortcuts); shortcuts.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         for control in [enabled, shadow, font, displays, position, color, shadowColor, colorHex, shadowHex] as [NSControl] {
             control.target = self; control.action = #selector(changed(_:))
         }

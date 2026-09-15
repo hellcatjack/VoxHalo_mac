@@ -15,6 +15,8 @@ private final class ConsoleDocumentView: NSView {
     private var subtitlePreferences = SubtitlePreferences.load()
     private let subtitleOverlay = SubtitleOverlayController()
     private lazy var subtitleSettings = SubtitleSettingsController(preferences: subtitlePreferences)
+    private let subtitleHotKeys = SubtitleHotKeyController()
+    private var subtitleSaveTimer: Timer?
     private var polling = false
     private var choosingFolder = false
     private var operation: String?
@@ -94,9 +96,13 @@ private final class ConsoleDocumentView: NSView {
         subtitleOverlay.apply(preferences: subtitlePreferences)
         subtitleSettings.onChange = { [weak self] value in
             guard let self else { return }
+            self.subtitleSaveTimer?.invalidate(); self.subtitleSaveTimer = nil
             self.subtitlePreferences = value; self.subtitleOverlay.apply(preferences: value); self.render()
         }
         subtitleSettings.onPreview = { [weak self] value in self?.subtitleOverlay.setPreview(value) }
+        subtitleSettings.shortcuts.onChange = { [weak self] value in self?.subtitleHotKeys.configure(value); self?.render() }
+        subtitleHotKeys.onAction = { [weak self] action in self?.performSubtitleShortcut(action) }
+        subtitleHotKeys.onStatusChange = { [weak self] in self?.updateSubtitleShortcutStatus() }
         session.onChange = { [weak self] in self?.render() }
         reloadDevices(); showWindow(); refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor [weak self] in self?.refresh() } }
@@ -485,6 +491,7 @@ private final class ConsoleDocumentView: NSView {
         let installed = desktopReady && client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
         let busy = maintenanceWindowShown || !desktopReady || operation != nil || snapshot?.busy == true || choosingFolder
         let sessionBusy = session.isActive
+        subtitleHotKeys.setActive(!quitRequested && (session.phase == .running || session.phase == .stopping))
         subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, active: !quitRequested && (session.phase == .running || session.phase == .stopping))
         subtitleSettings.setSessionActive(sessionBusy)
         subtitleMenu.state = subtitlePreferences.enabled ? .on : .off
@@ -520,6 +527,7 @@ private final class ConsoleDocumentView: NSView {
         addressLabel.stringValue = NativeLocalization.render(addressLabel.stringValue)
         if lastQR != snapshot?.listener_url { lastQR = snapshot?.listener_url; updateQR(lastQR) }
         let error = lastError ?? session.lastError ?? snapshot?.service_error ?? session.ttsWarning
+            ?? (subtitleHotKeys.failures.isEmpty ? nil : "部分字幕快捷键不可用，请在字幕设置中更换按键。")
         detailLabel.stringValue = error.map { String(NativeLocalization.render($0).prefix(300)) } ?? "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。"
         detailLabel.stringValue = NativeLocalization.render(detailLabel.stringValue)
         detailLabel.textColor = error == nil ? .secondaryLabelColor : .systemRed; detailLabel.toolTip = error.map { NativeLocalization.render($0) }
@@ -541,13 +549,29 @@ private final class ConsoleDocumentView: NSView {
 
     @objc private func showSubtitleSettings() { guard desktopReady else { showWindow(); return }; subtitleSettings.show() }
     @objc private func toggleSubtitles() {
+        performSubtitleShortcut(.toggle)
+    }
+    private func updateSubtitleShortcutStatus() {
+        subtitleSettings.shortcuts.setStatus(failures: subtitleHotKeys.failures,
+            active: !subtitleHotKeys.registeredActions.isEmpty)
+    }
+    private func performSubtitleShortcut(_ action: SubtitleShortcutAction) {
         guard desktopReady else { return }
-        var selected = subtitlePreferences; selected.enabled.toggle()
-        do {
-            try selected.save(); subtitlePreferences = selected
-            subtitleSettings.apply(preferences: selected); subtitleOverlay.apply(preferences: selected)
-        } catch { lastError = error.localizedDescription }
+        let selected = subtitleOverlay.adjustedPreferences(for: action)
+        guard selected != subtitlePreferences else { return }
+        subtitlePreferences = selected
+        subtitleSettings.apply(preferences: selected); subtitleOverlay.apply(preferences: selected)
+        subtitleSaveTimer?.invalidate()
+        if action.repeats {
+            subtitleSaveTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.saveSubtitlePosition() }
+            }
+        } else { saveSubtitlePosition() }
         render()
+    }
+    private func saveSubtitlePosition() {
+        subtitleSaveTimer?.invalidate(); subtitleSaveTimer = nil
+        do { try subtitlePreferences.save() } catch { lastError = error.localizedDescription }
     }
 
     @objc private func startService() { begin(capture: false) }
@@ -677,6 +701,7 @@ private final class ConsoleDocumentView: NSView {
         if choosingFolder { return .terminateCancel }
         if canTerminate { return .terminateNow }
         quitRequested = true; lastError = nil
+        subtitleHotKeys.setActive(false); saveSubtitlePosition()
         subtitleSettings.close(); subtitleOverlay.close()
         stop(allServices: true)
         return .terminateLater

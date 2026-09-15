@@ -58,10 +58,11 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
         resources.mkdir()
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-O', '-target', 'arm64-apple-macosx14.0',
                         '-framework', 'AppKit', '-framework', 'AVFoundation', '-framework', 'ScreenCaptureKit',
-                        '-framework', 'CoreAudio', '-framework', 'CoreImage',
+                        '-framework', 'CoreAudio', '-framework', 'CoreImage', '-framework', 'Carbon',
                         *[str(SOURCES/name) for name in ('NativeLocalization.swift', 'NativeLocalizedViews.swift', 'ServiceClient.swift', 'NativePreferences.swift',
                            'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift',
-                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleOverlay.swift', 'SubtitleSettings.swift', 'NativeSession.swift',
+                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleShortcuts.swift', 'SubtitleHotKeys.swift',
+                           'SubtitleOverlay.swift', 'SubtitleShortcutSettings.swift', 'SubtitleSettings.swift', 'NativeSession.swift',
                            'DesktopInstallation.swift', 'InstallationWindow.swift', 'main.swift')],
                         '-o', str(executable_dir/'VoxBridgeConsole')], check=True)
         iconset = staging/'AppIcon.iconset'

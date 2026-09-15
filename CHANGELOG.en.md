@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## Unreleased · Presentation subtitle shortcuts
+
+- Control subtitles during interpretation with Control + Shift + Command and S, ↑, ↓, 9 or 0: show/hide, tap/hold movement, and top/bottom placement without taking presentation focus.
+- Add eight-language shortcut settings with enable/disable, final-key customization, reset, conflict warnings and keyboard-layout-aware labels. Release global keys when interpretation stops.
+- Save subtitle position and preserve the current spoken caption and non-audio pagination clock when hiding or moving. Audio capture, model settings and TTS scheduling are unchanged.
+- See [subtitle shortcuts](docs/en/SUBTITLE-SHORTCUTS.md). These changes are not included in the existing 1.8.0 download.
+
 ## 1.8.0 · build 22 · 2026-09-15
 
 - Add standalone DMG/ZIP distribution with a prebuilt relocatable Python/AI runtime and an eight-language native first-run installer. End users do not need developer tools.

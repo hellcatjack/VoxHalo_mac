@@ -64,7 +64,7 @@ Interface language is independent, follows system/browser preferences by default
 
 - **Follow videos, classes and online meetings.** Capture the audio playing on your Mac. Translation-only mode suppresses source playback during interpretation and sends translated speech to your headphones or speakers.
 - **Translate live speech.** Select the default input or a specific microphone/audio interface, then continuously recognize and translate incoming speech.
-- **Read while you listen.** Desktop subtitles follow actual local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock.
+- **Read while you listen.** Desktop subtitles follow actual local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock. The current source adds [global subtitle shortcuts for presentations](docs/en/SUBTITLE-SHORTCUTS.md).
 - **Invite listeners on the same network.** The App detects your LAN IP and provides an address and QR code. Phones and tablets can scan it to hear the shared translation stream.
 - **Run interpretation entirely from the App.** Native controls handle devices, direction, start and stop. The browser monitor displays text and status; closing it does not interrupt interpretation.
 

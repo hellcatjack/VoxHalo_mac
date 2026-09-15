@@ -1160,6 +1160,146 @@
       "it": "Acquisire l’audio di sistema per riconoscimento e traduzione locali, escludendo la voce dell’app.",
       "pt": "Capturar o áudio do sistema para reconhecimento e tradução locais, excluindo a voz deste aplicativo.",
       "hi": "सिस्टम ऑडियो लेकर इसी डिवाइस पर पहचान और अनुवाद करें; इस ऐप का वाचन शामिल नहीं होगा।"
+    },
+    "显示／隐藏字幕": {
+      "zh": "显示／隐藏字幕",
+      "en": "Show / hide subtitles",
+      "ja": "字幕を表示／非表示",
+      "fr": "Afficher / masquer les sous-titres",
+      "es": "Mostrar / ocultar subtítulos",
+      "it": "Mostra / nascondi sottotitoli",
+      "pt": "Mostrar / ocultar legendas",
+      "hi": "उपशीर्षक दिखाएँ / छिपाएँ"
+    },
+    "字幕向上移动": {
+      "zh": "字幕向上移动",
+      "en": "Move subtitles up",
+      "ja": "字幕を上に移動",
+      "fr": "Monter les sous-titres",
+      "es": "Subir subtítulos",
+      "it": "Sposta i sottotitoli in alto",
+      "pt": "Mover legendas para cima",
+      "hi": "उपशीर्षक ऊपर करें"
+    },
+    "字幕向下移动": {
+      "zh": "字幕向下移动",
+      "en": "Move subtitles down",
+      "ja": "字幕を下に移動",
+      "fr": "Descendre les sous-titres",
+      "es": "Bajar subtítulos",
+      "it": "Sposta i sottotitoli in basso",
+      "pt": "Mover legendas para baixo",
+      "hi": "उपशीर्षक नीचे करें"
+    },
+    "字幕移至顶部": {
+      "zh": "字幕移至顶部",
+      "en": "Place subtitles at top",
+      "ja": "字幕を画面上端に配置",
+      "fr": "Placer les sous-titres en haut",
+      "es": "Colocar subtítulos arriba",
+      "it": "Posiziona i sottotitoli in alto",
+      "pt": "Colocar legendas no topo",
+      "hi": "उपशीर्षक सबसे ऊपर रखें"
+    },
+    "字幕移至底部": {
+      "zh": "字幕移至底部",
+      "en": "Place subtitles at bottom",
+      "ja": "字幕を画面下端に配置",
+      "fr": "Placer les sous-titres en bas",
+      "es": "Colocar subtítulos abajo",
+      "it": "Posiziona i sottotitoli in basso",
+      "pt": "Colocar legendas na base",
+      "hi": "उपशीर्षक सबसे नीचे रखें"
+    },
+    "传译时启用全局快捷键": {
+      "zh": "传译时启用全局快捷键",
+      "en": "Enable global shortcuts during interpretation",
+      "ja": "通訳中にグローバルショートカットを有効にする",
+      "fr": "Activer les raccourcis globaux pendant l’interprétation",
+      "es": "Activar atajos globales durante la interpretación",
+      "it": "Attiva scorciatoie globali durante l’interpretazione",
+      "pt": "Ativar atalhos globais durante a interpretação",
+      "hi": "अनुवाद के दौरान ग्लोबल शॉर्टकट चालू करें"
+    },
+    "固定使用 Control + Shift + Command；可修改末尾按键。短按移动 8 点，长按连续移动。": {
+      "zh": "固定使用 Control + Shift + Command；可修改末尾按键。短按移动 8 点，长按连续移动。",
+      "en": "Hold Control + Shift + Command; customize the final key. Tap to move 8 points, hold to move continuously.",
+      "ja": "Control + Shift + Command を押したまま使用します。最後のキーを変更できます。短押しで 8 ポイント、長押しで連続移動します。",
+      "fr": "Maintenez Control + Shift + Command ; la dernière touche est personnalisable. Appuyez pour déplacer de 8 points, maintenez pour un déplacement continu.",
+      "es": "Mantén Control + Shift + Command; puedes cambiar la última tecla. Pulsa para mover 8 puntos o mantén para mover continuamente.",
+      "it": "Tieni premuti Control + Shift + Command; puoi cambiare l’ultimo tasto. Premi per spostare di 8 punti, tieni premuto per uno spostamento continuo.",
+      "pt": "Mantenha Control + Shift + Command; personalize a última tecla. Toque para mover 8 pontos ou mantenha para mover continuamente.",
+      "hi": "Control + Shift + Command दबाकर रखें; अंतिम कुंजी बदल सकते हैं। एक बार दबाने पर 8 पॉइंट खिसकाएँ, दबाए रखने पर लगातार खिसकाएँ।"
+    },
+    "恢复默认快捷键": {
+      "zh": "恢复默认快捷键",
+      "en": "Restore default shortcuts",
+      "ja": "既定のショートカットに戻す",
+      "fr": "Rétablir les raccourcis par défaut",
+      "es": "Restaurar atajos predeterminados",
+      "it": "Ripristina scorciatoie predefinite",
+      "pt": "Restaurar atalhos padrão",
+      "hi": "डिफ़ॉल्ट शॉर्टकट बहाल करें"
+    },
+    "快捷键不可用或已被占用：{0}。请更换按键，或关闭占用程序后重新开始传译。": {
+      "zh": "快捷键不可用或已被占用：{0}。请更换按键，或关闭占用程序后重新开始传译。",
+      "en": "Shortcuts unavailable or in use: {0}. Choose different keys, or close the other app and restart interpretation.",
+      "ja": "ショートカットが使用できないか、他で使用されています：{0}。別のキーを選ぶか、使用中のアプリを閉じて通訳を再開してください。",
+      "fr": "Raccourcis indisponibles ou déjà utilisés : {0}. Choisissez d’autres touches ou fermez l’autre application, puis relancez l’interprétation.",
+      "es": "Atajos no disponibles o en uso: {0}. Elige otras teclas o cierra la otra aplicación y reinicia la interpretación.",
+      "it": "Scorciatoie non disponibili o in uso: {0}. Scegli altri tasti oppure chiudi l’altra app e riavvia l’interpretazione.",
+      "pt": "Atalhos indisponíveis ou em uso: {0}. Escolha outras teclas ou feche o outro app e reinicie a interpretação.",
+      "hi": "शॉर्टकट उपलब्ध नहीं हैं या उपयोग में हैं: {0}। दूसरी कुंजियाँ चुनें या दूसरे ऐप को बंद करके अनुवाद फिर शुरू करें।"
+    },
+    "全局快捷键已关闭": {
+      "zh": "全局快捷键已关闭",
+      "en": "Global shortcuts are off",
+      "ja": "グローバルショートカットはオフです",
+      "fr": "Les raccourcis globaux sont désactivés",
+      "es": "Los atajos globales están desactivados",
+      "it": "Scorciatoie globali disattivate",
+      "pt": "Atalhos globais desativados",
+      "hi": "ग्लोबल शॉर्टकट बंद हैं"
+    },
+    "快捷键已生效 · 不影响放映和朗读": {
+      "zh": "快捷键已生效 · 不影响放映和朗读",
+      "en": "Shortcuts active · Presentation and speech continue",
+      "ja": "ショートカット有効 · スライドショーと読み上げを継続",
+      "fr": "Raccourcis actifs · Présentation et lecture continuent",
+      "es": "Atajos activos · La presentación y la voz continúan",
+      "it": "Scorciatoie attive · Presentazione e lettura continuano",
+      "pt": "Atalhos ativos · Apresentação e leitura continuam",
+      "hi": "शॉर्टकट चालू हैं · प्रस्तुति और वाचन जारी हैं"
+    },
+    "开始传译后生效；停止传译后释放快捷键。": {
+      "zh": "开始传译后生效；停止传译后释放快捷键。",
+      "en": "Active during interpretation; released when interpretation stops.",
+      "ja": "通訳開始時に有効になり、停止時に解除されます。",
+      "fr": "Actifs pendant l’interprétation ; libérés à son arrêt.",
+      "es": "Activos durante la interpretación; se liberan al detenerla.",
+      "it": "Attive durante l’interpretazione; rilasciate quando si interrompe.",
+      "pt": "Ativos durante a interpretação; liberados ao parar.",
+      "hi": "अनुवाद के दौरान चालू रहते हैं; अनुवाद रुकने पर मुक्त हो जाते हैं।"
+    },
+    "该按键已用于另一个字幕操作。": {
+      "zh": "该按键已用于另一个字幕操作。",
+      "en": "That key is assigned to another subtitle action.",
+      "ja": "そのキーは別の字幕操作に割り当てられています。",
+      "fr": "Cette touche est affectée à une autre action de sous-titres.",
+      "es": "Esa tecla está asignada a otra acción de subtítulos.",
+      "it": "Questo tasto è assegnato a un’altra azione dei sottotitoli.",
+      "pt": "Essa tecla está atribuída a outra ação de legendas.",
+      "hi": "यह कुंजी किसी अन्य उपशीर्षक क्रिया के लिए तय है।"
+    },
+    "部分字幕快捷键不可用，请在字幕设置中更换按键。": {
+      "zh": "部分字幕快捷键不可用，请在字幕设置中更换按键。",
+      "en": "Some subtitle shortcuts are unavailable. Change them in Subtitle Settings.",
+      "ja": "一部の字幕ショートカットが使用できません。字幕設定でキーを変更してください。",
+      "fr": "Certains raccourcis sont indisponibles. Modifiez-les dans les réglages des sous-titres.",
+      "es": "Algunos atajos no están disponibles. Cámbialos en los ajustes de subtítulos.",
+      "it": "Alcune scorciatoie non sono disponibili. Modificale nelle impostazioni dei sottotitoli.",
+      "pt": "Alguns atalhos estão indisponíveis. Altere-os nas configurações de legendas.",
+      "hi": "कुछ उपशीर्षक शॉर्टकट उपलब्ध नहीं हैं। उपशीर्षक सेटिंग में उन्हें बदलें।"
     }
   }
 }

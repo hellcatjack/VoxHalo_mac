@@ -51,14 +51,21 @@ import CoreText
         let overlay = SubtitleOverlayController()
         var large = SubtitlePreferences(); large.fontSize = 144; large.widthFraction = 0.25; large.shadowEnabled = false
         overlay.apply(preferences: large)
-        let long = "第一段完整译文。第二段重复语句。第三段中文测试。第四段完成显示。"
+        let long = String(repeating: "第一段完整译文。第二段重复语句。第三段中文测试。第四段完成显示。", count: 8)
         let expected = SubtitleTextLayout.layout(text: long, preferences: large, screen: NSScreen.screens[0].frame)!.pages
-        assert(expected.count > 1 && expected[0] != expected[1])
+        assert(expected.count > 2 && expected[0] != expected[1])
         overlay.setLiveText(long, identity: .init(sentenceID: "one", revision: 1), active: true)
         overlay.panel.orderOut(nil)
         assert(overlay.textView.accessibilityValue() as? String == expected[0])
         try await Task.sleep(nanoseconds: UInt64((SubtitleTextLayout.readingSeconds(expected[0]) + 0.15) * 1_000_000_000))
         assert(overlay.textView.accessibilityValue() as? String == expected[1])
+        overlay.apply(preferences: overlay.adjustedPreferences(for: .up))
+        assert(overlay.textView.accessibilityValue() as? String == expected[1], "moving must not reset a long caption to page one")
+        overlay.apply(preferences: overlay.adjustedPreferences(for: .toggle))
+        assert(!overlay.panel.isVisible)
+        try await Task.sleep(nanoseconds: UInt64((SubtitleTextLayout.readingSeconds(expected[1]) + 0.15) * 1_000_000_000))
+        overlay.apply(preferences: overlay.adjustedPreferences(for: .toggle))
+        assert(overlay.textView.accessibilityValue() as? String == expected[2], "hidden captions must retain their page clock and resume the current page")
         overlay.setLiveText(long, identity: .init(sentenceID: "two", revision: 1), active: true)
         overlay.panel.orderOut(nil)
         assert(overlay.textView.accessibilityValue() as? String == expected[0], "a repeated sentence must restart on page one")

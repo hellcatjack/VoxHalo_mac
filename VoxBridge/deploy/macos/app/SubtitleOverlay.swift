@@ -196,6 +196,16 @@ extension NSColor {
     func apply(preferences: SubtitlePreferences) {
         self.preferences = preferences.normalized(); render()
     }
+    func adjustedPreferences(for action: SubtitleShortcutAction) -> SubtitlePreferences {
+        guard let screen = SubtitleDisplays.selected(preferences.screenID) else {
+            return preferences.adjusted(for: action, screenHeight: 0, captionHeight: 0)
+        }
+        // Calculate from the current caption even when hidden; moving a hidden
+        // subtitle must not restore an old frame or disturb playback identity.
+        let layout = SubtitleTextLayout.layout(text: liveText, preferences: preferences,
+            screen: screen.frame, fitCompleteText: synchronized && !preview)
+        return preferences.adjusted(for: action, screenHeight: Double(screen.frame.height), captionHeight: Double(layout?.frame.height ?? 0))
+    }
     func setLiveText(_ text: String, identity: CompletedSubtitleState.Identity?, synchronized: Bool = false, active: Bool) {
         guard text != liveText || identity != self.identity || synchronized != self.synchronized || active != self.active else { return }
         liveText = text; self.identity = identity; self.synchronized = synchronized; self.active = active
@@ -216,9 +226,24 @@ extension NSColor {
     }
     private func render() {
         let text = preview ? NativeLocalization.text("字幕样式预览") + "\n" + NativeLocalization.text("这是翻译字幕的显示效果。") : (active ? liveText : "")
-        guard (preferences.enabled || preview), !text.isEmpty, let screen = SubtitleDisplays.selected(preferences.screenID) else { hide(); return }
+        guard !text.isEmpty, let screen = SubtitleDisplays.selected(preferences.screenID) else { hide(); return }
         let key = LayoutKey(text: text, identity: identity, synchronized: synchronized, preferences: preferences, screen: screen.frame)
         guard lastLayout != key else { return }
+        if let previous = lastLayout, previous.text == key.text, previous.identity == key.identity,
+           previous.synchronized == key.synchronized, previous.screen == key.screen {
+            var appearance = previous.preferences
+            appearance.enabled = preferences.enabled
+            appearance.horizontalPosition = preferences.horizontalPosition
+            appearance.verticalPosition = preferences.verticalPosition
+            if appearance == preferences {
+                // Visibility/position are presentation-only. Preserve the current
+                // page and its deadline, including while the window is hidden.
+                let frame = SubtitlePreferences.frame(in: screen.frame, size: panel.frame.size,
+                    horizontal: preferences.horizontalPosition, vertical: preferences.verticalPosition)
+                if panel.frame != frame { panel.setFrame(frame, display: false) }
+                lastLayout = key; updateVisibility(); return
+            }
+        }
         lastLayout = key
         generation = UUID(); let run = generation
         pageTask?.cancel(); pageTask = nil
@@ -227,7 +252,7 @@ extension NSColor {
         if panel.frame != frame { panel.setFrame(frame, display: false) }
         textView.frame = CGRect(origin: .zero, size: frame.size)
         textView.apply(text: pages.first ?? "", preferences: style)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        updateVisibility()
         if pages.count > 1 && (!synchronized || preview) {
             pageTask = Task { [weak self] in
                 for index in 1..<pages.count {
@@ -238,5 +263,10 @@ extension NSColor {
                 }
             }
         }
+    }
+    private func updateVisibility() {
+        if preferences.enabled || preview {
+            if !panel.isVisible { panel.orderFrontRegardless() }
+        } else if panel.isVisible { panel.orderOut(nil) }
     }
 }
