@@ -1,6 +1,10 @@
 import AppKit
 import CoreImage
 
+private final class ConsoleDocumentView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: NSWindow!
     private var statusItem: NSStatusItem!
@@ -78,6 +82,7 @@ import CoreImage
     private func button(_ title: String, _ action: Selector) -> NSButton {
         let value = NSButton(title: title, target: self, action: action)
         value.bezelStyle = .rounded; value.controlSize = .large
+        value.setContentCompressionResistancePriority(.required, for: .horizontal)
         return value
     }
 
@@ -91,133 +96,211 @@ import CoreImage
         return stack
     }
 
+    /// Native grouped surfaces keep controls aligned without reserving empty columns.
+    private func surface(_ body: NSStackView, inset: CGFloat = 14) -> NSBox {
+        let box = NSBox(); box.boxType = .custom
+        box.borderWidth = 0.5; box.cornerRadius = 12
+        box.fillColor = .controlBackgroundColor; box.borderColor = .separatorColor
+        box.contentViewMargins = .zero
+        let host = box.contentView!
+        body.translatesAutoresizingMaskIntoConstraints = false; host.addSubview(body)
+        NSLayoutConstraint.activate([
+            body.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: inset),
+            body.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -inset),
+            body.topAnchor.constraint(equalTo: host.topAnchor, constant: inset),
+            body.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -inset)
+        ])
+        return box
+    }
+
+    private func iconButton(_ title: String, symbol: String, action: Selector) -> NSButton {
+        let value = button("", action)
+        value.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        value.imagePosition = .imageOnly; value.controlSize = .regular
+        value.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        value.toolTip = title; value.setAccessibilityLabel(title)
+        value.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        return value
+    }
+
+    private func caption(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 11, weight: .medium); label.textColor = .secondaryLabelColor
+        return label
+    }
+
     private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 800),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 680),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "同声传译"; window.isReleasedWhenClosed = false; window.delegate = self
-        window.minSize = NSSize(width: 760, height: 680); window.center()
-        let content = vertical([], spacing: 14); content.translatesAutoresizingMaskIntoConstraints = false
+        window.minSize = NSSize(width: 740, height: 560)
+        window.backgroundColor = .windowBackgroundColor
+        let content = vertical([], spacing: 12); content.translatesAutoresizingMaskIntoConstraints = false
         let scroll = NSScrollView(frame: window.contentView!.bounds)
-        scroll.autoresizingMask = [.width, .height]; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
-        let document = NSView(); document.translatesAutoresizingMaskIntoConstraints = false
+        scroll.autoresizingMask = [.width, .height]; scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true; scroll.drawsBackground = false
+        let document = ConsoleDocumentView(); document.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = document; window.contentView!.addSubview(scroll); document.addSubview(content)
+        let minimumDocumentHeight = document.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor)
         NSLayoutConstraint.activate([
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 26),
-            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -26),
-            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -20)
+            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
+            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
+            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 18),
+            content.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -18)
         ])
+        func append(_ view: NSView) {
+            content.addArrangedSubview(view)
+            view.setContentHuggingPriority(.defaultHigh, for: .vertical)
+            view.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        }
+        func field(_ label: String, _ control: NSView) -> NSStackView {
+            let column = vertical([caption(label), control], spacing: 5)
+            control.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+            return column
+        }
         let title = NSTextField(labelWithString: "同声传译")
-        title.font = .systemFont(ofSize: 25, weight: .bold)
+        title.font = .systemFont(ofSize: 20, weight: .semibold)
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版"
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
         let versionLabel = NSTextField(labelWithString: "\(appVersion)（build \(buildNumber)）")
-        versionLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        versionLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         versionLabel.textColor = .secondaryLabelColor; versionLabel.isSelectable = true
         versionLabel.setAccessibilityLabel("应用版本")
-        let heading = row([title, versionLabel], spacing: 12)
-        heading.alignment = .firstBaseline
+        let heading = row([title, versionLabel], spacing: 10); heading.alignment = .firstBaseline
         let subtitle = NSTextField(wrappingLabelWithString: "独立采集 · 本机识别与翻译 · 本机及局域网朗读")
-        subtitle.textColor = .secondaryLabelColor
-        content.addArrangedSubview(vertical([heading, subtitle], spacing: 4))
-        subtitle.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        subtitle.font = .systemFont(ofSize: 11); subtitle.textColor = .secondaryLabelColor
+        let identity = vertical([heading, subtitle], spacing: 4)
+        subtitle.widthAnchor.constraint(equalTo: identity.widthAnchor).isActive = true
         interfacePopup.addItem(withTitle: "Auto"); interfacePopup.lastItem?.representedObject = "auto"
         for (code, name) in zip(NativeLocalization.codes, NativeLocalization.autonyms) {
             interfacePopup.addItem(withTitle: name); interfacePopup.lastItem?.representedObject = code
         }
         interfacePopup.select(interfacePopup.itemArray.first { $0.representedObject as? String == NativeLocalization.preference() })
         interfacePopup.target = self; interfacePopup.action = #selector(interfaceLanguageChanged)
-        interfacePopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
-        content.addArrangedSubview(row([NSTextField(labelWithString: "界面语言"), interfacePopup]))
-        stateLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
-        content.addArrangedSubview(row([spinner, stateLabel]))
-        modelLabel.font = .systemFont(ofSize: 12); modelLabel.textColor = .secondaryLabelColor
-        content.addArrangedSubview(modelLabel)
+        let interface = field("界面语言", interfacePopup)
+        interface.widthAnchor.constraint(equalToConstant: 190).isActive = true
+        let header = row([identity, NSView(), interface], spacing: 18); header.alignment = .centerY
+        identity.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        append(header)
 
-        startButton = button("启动服务", #selector(startService))
-        stopButton = button("停止服务", #selector(stopService))
+        stateLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
+        spinner.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        let state = row([stateLabel, spinner], spacing: 6); state.alignment = .centerY
+        modelLabel.font = .systemFont(ofSize: 10); modelLabel.textColor = .secondaryLabelColor
+        modelLabel.lineBreakMode = .byTruncatingTail
+        let status = vertical([state, modelLabel], spacing: 4)
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        modelLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        modelLabel.widthAnchor.constraint(equalTo: status.widthAnchor).isActive = true
+        startButton = iconButton("启动服务", symbol: "power", action: #selector(startService))
+        stopButton = iconButton("停止服务", symbol: "stop.circle", action: #selector(stopService))
         captureButton = button("开始传译", #selector(startInterpretation)); captureButton.keyEquivalent = "\r"
         endButton = button("结束传译", #selector(endInterpretation))
-        content.addArrangedSubview(row([startButton, stopButton, captureButton, endButton]))
-        separator(in: content)
+        let actions = row([startButton, stopButton, captureButton, endButton], spacing: 7)
+        actions.setContentHuggingPriority(.required, for: .horizontal)
+        let statusRow = row([status, NSView(), actions], spacing: 12); statusRow.alignment = .centerY
+        append(statusRow)
 
-        let inputs = NSTextField(labelWithString: "输入来源")
-        let outputs = NSTextField(labelWithString: "朗读输出")
         inputPopup.setAccessibilityLabel("输入来源"); outputPopup.setAccessibilityLabel("朗读输出")
         inputPopup.target = self; inputPopup.action = #selector(saveSelections)
         outputPopup.target = self; outputPopup.action = #selector(saveSelections)
-        let deviceRow = row([vertical([inputs, inputPopup]), vertical([outputs, outputPopup])], spacing: 18)
-        deviceRow.distribution = .fillEqually; content.addArrangedSubview(deviceRow)
-        deviceRow.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        for popup in [inputPopup, outputPopup] { popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 295).isActive = true }
-
         for language in NativeLanguage.all {
             sourcePopup.addItem(withTitle: language.name)
             sourcePopup.lastItem?.representedObject = language.code
         }
         sourcePopup.selectItem(withTitle: preferences.languagePair.sourceName)
         refreshTargetLanguages(preferred: preferences.languagePair.target.code)
-        sourcePopup.setAccessibilityLabel("识别语言")
-        targetPopup.setAccessibilityLabel("翻译及朗读语言")
+        sourcePopup.setAccessibilityLabel("识别语言"); targetPopup.setAccessibilityLabel("翻译及朗读语言")
         sourcePopup.target = self; sourcePopup.action = #selector(sourceLanguageChanged)
         targetPopup.target = self; targetPopup.action = #selector(saveSelections)
         for popup in [sourcePopup, targetPopup] {
             popup.toolTip = "开始前选择语言；结束传译后可切换，无需重新加载 ASR 或翻译模型。"
-            popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
         }
-        devicesButton = button("刷新设备", #selector(reloadDevices))
-        meter.levelIndicatorStyle = .continuousCapacity; meter.minValue = 0; meter.maxValue = 1
-        meter.warningValue = 0.75; meter.criticalValue = 0.95
-        meter.widthAnchor.constraint(equalToConstant: 110).isActive = true
-        content.addArrangedSubview(row([NSTextField(labelWithString: "识别"), sourcePopup, NSTextField(labelWithString: "→ 译音"), targetPopup]))
-        content.addArrangedSubview(row([devicesButton, meter]))
+        for popup in [inputPopup, outputPopup, sourcePopup, targetPopup] {
+            popup.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            popup.cell?.lineBreakMode = .byTruncatingTail
+        }
+        let left = vertical([field("输入来源", inputPopup), field("识别语言", sourcePopup)], spacing: 12)
+        let right = vertical([field("朗读输出", outputPopup), field("翻译及朗读语言", targetPopup)], spacing: 12)
+        for column in [left, right] {
+            for child in column.arrangedSubviews { child.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true }
+        }
+        let devices = row([left, right], spacing: 20); devices.distribution = .fillEqually
         termsField.placeholderString = "ASR 提示词，以空格或逗号分隔（可选）"
         termsField.stringValue = preferences.contextTerms.joined(separator: "，")
         termsField.setAccessibilityLabel("ASR 提示词"); termsField.target = self; termsField.action = #selector(saveSelections)
-        content.addArrangedSubview(termsField); termsField.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        termsField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        devicesButton = iconButton("刷新设备", symbol: "arrow.clockwise", action: #selector(reloadDevices))
+        meter.levelIndicatorStyle = .continuousCapacity; meter.minValue = 0; meter.maxValue = 1
+        meter.warningValue = 0.75; meter.criticalValue = 0.95
+        meter.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        meter.setAccessibilityLabel("输入来源")
+        let terms = row([termsField, meter, devicesButton], spacing: 10); terms.alignment = .centerY
         let hint = NSTextField(wrappingLabelWithString: "“只听译音”在传译时关闭原声输出，结束后恢复。系统采集会排除本 App 的朗读。")
-        hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor; content.addArrangedSubview(hint)
-        hint.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        hint.font = .systemFont(ofSize: 10); hint.textColor = .secondaryLabelColor
+        let configuration = vertical([devices, terms, hint], spacing: 12)
+        for view in [devices, terms, hint] { view.widthAnchor.constraint(equalTo: configuration.widthAnchor).isActive = true }
+        append(surface(configuration))
 
-        sessionLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        ttsLabel.font = .systemFont(ofSize: 12); ttsLabel.textColor = .secondaryLabelColor
-        content.addArrangedSubview(vertical([sessionLabel, ttsLabel], spacing: 5))
+        sessionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        ttsLabel.font = .systemFont(ofSize: 11); ttsLabel.textColor = .secondaryLabelColor
+        sessionLabel.lineBreakMode = .byTruncatingTail; ttsLabel.lineBreakMode = .byTruncatingTail
+        let transcript = vertical([sessionLabel, ttsLabel], spacing: 5)
+        for label in [sessionLabel, ttsLabel] { label.widthAnchor.constraint(equalTo: transcript.widthAnchor).isActive = true }
         for label in [sourceLabel, translationLabel] {
-            label.font = .systemFont(ofSize: 15); label.isSelectable = true; label.maximumNumberOfLines = 2
-            label.lineBreakMode = .byTruncatingTail; content.addArrangedSubview(label)
-            label.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-            label.heightAnchor.constraint(greaterThanOrEqualToConstant: 35).isActive = true
+            label.font = .systemFont(ofSize: 15); label.isSelectable = true; label.maximumNumberOfLines = 3
+            label.lineBreakMode = .byTruncatingTail
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
-        translationLabel.textColor = .systemBlue
-        separator(in: content)
+        sourceLabel.textColor = .secondaryLabelColor
+        translationLabel.font = .systemFont(ofSize: 16, weight: .medium); translationLabel.textColor = .labelColor
+        let speech = row([sourceLabel, translationLabel], spacing: 24)
+        speech.distribution = .fillEqually; speech.alignment = .top
+        speech.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
+        speech.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        transcript.addArrangedSubview(speech)
+        transcript.setCustomSpacing(12, after: ttsLabel)
+        speech.widthAnchor.constraint(equalTo: transcript.widthAnchor).isActive = true
+        let transcriptSurface = surface(transcript)
+        append(transcriptSurface)
+        transcriptSurface.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        transcript.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
 
-        addressLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular); addressLabel.isSelectable = true
-        pageButton = button("打开监控页", #selector(openOperator))
-        listenerButton = button("听众朗读页", #selector(openListener))
-        copyButton = button("复制地址", #selector(copyListener))
-        let lanTitle = NSTextField(labelWithString: "局域网听众入口")
-        lanTitle.font = .systemFont(ofSize: 12, weight: .semibold)
+        addressLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular); addressLabel.isSelectable = true
+        addressLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        pageButton = button("打开监控页", #selector(openOperator)); pageButton.controlSize = .regular
+        listenerButton = button("听众朗读页", #selector(openListener)); listenerButton.controlSize = .regular
+        copyButton = iconButton("复制地址", symbol: "doc.on.doc", action: #selector(copyListener))
+        let links = row([pageButton, listenerButton, copyButton], spacing: 8)
+        let lanInfo = vertical([caption("局域网听众入口"), addressLabel, links], spacing: 6)
+        addressLabel.widthAnchor.constraint(equalTo: lanInfo.widthAnchor).isActive = true
         qrView.imageScaling = .scaleProportionallyUpOrDown
-        qrView.widthAnchor.constraint(equalToConstant: 84).isActive = true
-        qrView.heightAnchor.constraint(equalToConstant: 84).isActive = true
-        let lan = row([vertical([lanTitle, addressLabel, row([pageButton, listenerButton, copyButton])]), qrView], spacing: 20)
-        content.addArrangedSubview(lan)
-        detailLabel.font = .systemFont(ofSize: 11); detailLabel.maximumNumberOfLines = 3
-        content.addArrangedSubview(detailLabel)
-        detailLabel.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        folderButton = button("选择服务文件夹…", #selector(chooseFolder))
-        content.addArrangedSubview(row([button("查看日志", #selector(openLogs)), button("字幕设置…", #selector(showSubtitleSettings)), folderButton]))
-        refreshInterfaceText()
+        qrView.widthAnchor.constraint(equalToConstant: 76).isActive = true
+        qrView.heightAnchor.constraint(equalToConstant: 76).isActive = true
+        let lan = row([lanInfo, NSView(), qrView], spacing: 16); lan.alignment = .centerY
+        append(lan)
+
+        detailLabel.font = .systemFont(ofSize: 10); detailLabel.maximumNumberOfLines = 3
+        detailLabel.textColor = .secondaryLabelColor
+        folderButton = iconButton("选择服务文件夹…", symbol: "folder", action: #selector(chooseFolder))
+        let utilities = row([button("字幕设置…", #selector(showSubtitleSettings)),
+                             iconButton("查看日志", symbol: "doc.text.magnifyingglass", action: #selector(openLogs)), folderButton], spacing: 7)
+        utilities.setContentHuggingPriority(.required, for: .horizontal)
+        let footer = row([detailLabel, NSView(), utilities], spacing: 16); footer.alignment = .centerY
+        detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        append(footer)
+        refreshInterfaceText(); render()
         content.layoutSubtreeIfNeeded()
-        let desired = content.fittingSize.height + 44
-        let available = (NSScreen.main?.visibleFrame.height ?? 950) - 40
-        window.setContentSize(NSSize(width: 920, height: min(max(710, desired), available)))
+        let desired = content.fittingSize.height + 36
+        let available = (NSScreen.main?.visibleFrame.height ?? 950) - 50
+        window.setContentSize(NSSize(width: 820, height: min(desired, available)))
+        minimumDocumentHeight.isActive = true
         window.contentView?.layoutSubtreeIfNeeded()
-        scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
+        scroll.contentView.scroll(to: .zero)
         scroll.reflectScrolledClipView(scroll.contentView)
-        render()
+        window.center(); render()
     }
 
     @objc private func interfaceLanguageChanged() {
@@ -368,6 +451,7 @@ import CoreImage
         stateLabel.stringValue = NativeLocalization.render(stateLabel.stringValue)
         stateLabel.textColor = ready && !busy ? .systemGreen : .labelColor
         modelLabel.stringValue = "Qwen ASR · \(serviceText("app"))   HY-MT · \(serviceText("translation"))   Kokoro · \(NativeLocalization.text("本机 CPU"))"
+        modelLabel.toolTip = modelLabel.stringValue
         if busy || session.phase == .starting || session.phase == .stopping { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
         startButton.isEnabled = installed && snapshot != nil && !busy && !ready && !sessionBusy
         stopButton.isEnabled = installed && (running || sessionBusy || startTask != nil) && stopTask == nil && !choosingFolder

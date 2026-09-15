@@ -4,7 +4,7 @@
 
 Local speech interpretation between eight languages for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
 
-**App:** 1.7.0, build 20 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App:** 1.7.1, build 21 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
 The App is named **同声传译** in Chinese. The App, monitor and listener pages offer eight interface languages, follow system/browser preferences by default, and remember manual choices. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 

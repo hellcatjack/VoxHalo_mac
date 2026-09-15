@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.7.1 · build 21 · 2026-09-15
+
+- Refine the native main window with a compact header/status area, equal input/output columns, source and translation side by side, and a right-aligned LAN QR code.
+- Use system typography, appearance-aware colors and subtle grouping. Auxiliary actions use system icons with localized tooltips and accessibility names. Initial height fits the content; additional window height goes to the transcript area.
+- Preserve all eight interface languages, device selection, service actions and interpretation/speech behavior. Keep primary action titles intact in narrower windows.
+- Validation: 96 locale/window-size/content layout combinations passed across light and dark appearances; the full suite passed 1,163 tests, with 32 skipped for optional environment requirements. Verified local installation, signature and saved settings; no audio endurance run was started for this UI change.
+
 ## 1.7.0 · build 20 · 2026-09-15
 
 - Add eight offline interface languages to the App, menus, subtitle settings, monitor, listener and optional sign-in pages. Follow system/browser preferences by default and remember manual choices.

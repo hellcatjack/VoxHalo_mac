@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/INSTALLATION.md) · [README](../../README.md) · [Models](MODELS.md)
 
-These instructions match the repository's `setup.sh` and App 1.7.0/build 20. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
+These instructions match the repository's `setup.sh` and App 1.7.1/build 21. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
 
 ## 1. Check your Mac
 

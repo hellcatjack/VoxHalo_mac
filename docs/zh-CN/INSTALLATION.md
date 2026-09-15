@@ -2,7 +2,7 @@
 
 [English](../en/INSTALLATION.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [模型说明](MODELS.md)
 
-本文与仓库的 `setup.sh` 及 App 1.7.0/build 20 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
+本文与仓库的 `setup.sh` 及 App 1.7.1/build 21 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
 
 ## 1. 检查 Mac 配置
 
