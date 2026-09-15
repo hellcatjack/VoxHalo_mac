@@ -18,9 +18,22 @@ jobs:
       - name: Check native Apple Silicon runner
         run: test "$(uname -m)" = arm64
       - name: Build portable runtime, App, ZIP and DMG
+        id: package
+        shell: bash
         env:
           VOXHALO_CI_ALLOW_NO_METAL: '1'
-        run: ./scripts/bootstrap_release.sh
+        run: |
+          set -o pipefail
+          ./scripts/bootstrap_release.sh 2>&1 | tee desktop-build.log
+      - name: Report build failure
+        if: failure() && steps.package.outcome == 'failure'
+        shell: python3 {0}
+        run: |
+          from pathlib import Path
+          log = Path('desktop-build.log')
+          detail = '\n'.join(log.read_text(errors='replace').splitlines()[-70:])[-20000:] if log.exists() else 'Build did not create a log.'
+          detail = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::error title=Desktop build diagnostic::{detail}')
       - name: Verify release contracts
         shell: bash
         run: |
