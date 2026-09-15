@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,9 +15,26 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / 'deploy/macos/app'
 APP_NAME = '同声传译.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
+APP_VERSION = '1.8.0'
+APP_BUILD = '22'
 
 
-def build(destination: Path, desktop_link: bool):
+def release_metadata(directory: Path) -> dict:
+    """Refuse mismatched/incomplete distribution payloads before compiling an App."""
+    metadata = json.loads((directory / 'release.json').read_text())
+    if metadata.get('version') != APP_VERSION or str(metadata.get('build')) != APP_BUILD:
+        raise ValueError('Release payload version does not match the native App.')
+    with (directory / 'runtime.tar.gz').open('rb') as stream:
+        checksum = hashlib.file_digest(stream, 'sha256').hexdigest()
+    if metadata.get('runtime_sha256') != checksum:
+        raise ValueError('Release runtime SHA-256 does not match.')
+    if not (directory / 'licenses/HY-MT-LICENSE.txt').is_file():
+        raise ValueError('The bundled HY-MT license is required for first-run review.')
+    return metadata
+
+
+def build(destination: Path, desktop_link: bool, release_payload: Path | None = None):
+    metadata = release_metadata(release_payload) if release_payload else None
     destination = destination.expanduser().absolute()
     if destination.suffix != '.app':
         raise ValueError('目标路径必须以 .app 结尾。')
@@ -43,7 +61,8 @@ def build(destination: Path, desktop_link: bool):
                         '-framework', 'CoreAudio', '-framework', 'CoreImage',
                         *[str(SOURCES/name) for name in ('NativeLocalization.swift', 'NativeLocalizedViews.swift', 'ServiceClient.swift', 'NativePreferences.swift',
                            'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift',
-                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleOverlay.swift', 'SubtitleSettings.swift', 'NativeSession.swift', 'main.swift')],
+                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleOverlay.swift', 'SubtitleSettings.swift', 'NativeSession.swift',
+                           'DesktopInstallation.swift', 'InstallationWindow.swift', 'main.swift')],
                         '-o', str(executable_dir/'VoxBridgeConsole')], check=True)
         iconset = staging/'AppIcon.iconset'
         icon_builder = staging/'make-icon'
@@ -52,7 +71,7 @@ def build(destination: Path, desktop_link: bool):
         subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'AppIcon.icns')], check=True)
         shutil.copy2(ROOT/'voxbridge/language_catalog.json', resources/'language_catalog.json')
         (resources/'ui_locales').mkdir()
-        for catalog in ('native.json', 'native-errors.json'):
+        for catalog in ('native.json', 'native-errors.json', 'installer.json'):
             shutil.copy2(ROOT/'voxbridge/ui_locales'/catalog, resources/'ui_locales'/catalog)
         translations = json.loads((resources/'ui_locales/native.json').read_text())['messages']
         for locale in ('zh', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'):
@@ -66,19 +85,24 @@ def build(destination: Path, desktop_link: bool):
             }
             (localized/'InfoPlist.strings').write_text('\n'.join(
                 f'{json.dumps(key)} = {json.dumps(value, ensure_ascii=False)};' for key, value in strings.items()) + '\n')
-        (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
+        if release_payload:
+            for name in ('runtime.tar.gz', 'release.json'):
+                shutil.copy2(release_payload / name, resources / name)
+            shutil.copytree(release_payload / 'licenses', resources / 'licenses')
+        else:
+            (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
             'CFBundleName': '同声传译',
             'CFBundleDisplayName': '同声传译',
             'CFBundleExecutable': 'VoxBridgeConsole',
             'CFBundlePackageType': 'APPL',
-            'CFBundleShortVersionString': '1.7.1',
-            'CFBundleVersion': '21',
+            'CFBundleShortVersionString': APP_VERSION,
+            'CFBundleVersion': APP_BUILD,
             'CFBundleDevelopmentRegion': 'en',
             'CFBundleLocalizations': ['zh-Hans', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'],
             'CFBundleIconFile': 'AppIcon',
-            'LSMinimumSystemVersion': '14.0',
+            'LSMinimumSystemVersion': '14.2' if metadata else '14.0',
             'LSMultipleInstancesProhibited': True,
             'NSHighResolutionCapable': True,
             'NSPrincipalClass': 'NSApplication',
@@ -107,15 +131,17 @@ def build(destination: Path, desktop_link: bool):
         else:
             link.symlink_to(destination, target_is_directory=True)
     print(f'已安装：{destination}')
-    print(f'本地模型与服务：{ROOT}')
+    print('首次打开后在 App 内安装模型。' if metadata else f'本地模型与服务：{ROOT}')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--destination', type=Path, default=Path('/Applications')/APP_NAME)
     parser.add_argument('--desktop-link', action='store_true')
+    parser.add_argument('--release-payload', type=Path,
+                        help='Verified standalone runtime.tar.gz, release.json and licenses directory')
     args = parser.parse_args()
-    build(args.destination, args.desktop_link)
+    build(args.destination, args.desktop_link, args.release_payload)
 
 
 if __name__ == '__main__':

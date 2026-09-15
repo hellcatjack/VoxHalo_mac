@@ -24,6 +24,10 @@ private final class ConsoleDocumentView: NSView {
     private var canTerminate = false
     private var lastError: String?
     private var timer: Timer?
+    private var desktopInstallation: DesktopInstallation?
+    private var installationWindow: InstallationWindow?
+    private var maintenanceWindowShown = false
+    private var desktopReady: Bool { desktopInstallation?.isReady ?? true }
     private let stateLabel = NSTextField(labelWithString: "正在检查服务…")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let modelLabel = NSTextField(labelWithString: "Qwen ASR · HY-MT · Kokoro")
@@ -59,7 +63,34 @@ private final class ConsoleDocumentView: NSView {
     private var subtitleMenu: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        loadInstallation(); buildMenu(); buildWindow()
+        desktopInstallation = DesktopInstallation.bundled()
+        buildMenu()
+        if let installation = desktopInstallation {
+            installationWindow = InstallationWindow(installation: installation)
+            installationWindow?.onLanguageChange = { [weak self] in self?.refreshInstallationMenu() }
+            installationWindow?.onWillStart = { [weak self] completion in self?.validateModelMaintenance(completion) }
+            installationWindow?.onClosed = { [weak self] in
+                guard let self else { return }
+                if !installation.isRunning { self.maintenanceWindowShown = false; self.render() }
+            }
+            installation.onActivityChange = { [weak self] in self?.render() }
+            installation.onReady = { [weak self] in
+                guard let self, !self.quitRequested else { return }
+                self.installationWindow?.close()
+                if self.window == nil { self.launchConsole() }
+                else { self.loadInstallation(); self.showWindow(); self.refresh(); self.render() }
+            }
+            if !installation.isReady {
+                startMenu.isEnabled = false; stopMenu.isEnabled = false; captureMenu.isEnabled = false
+                refreshInstallationMenu(); showWindow(); return
+            }
+        }
+        launchConsole()
+    }
+
+    private func launchConsole() {
+        guard desktopReady, window == nil else { return }
+        loadInstallation(); buildWindow()
         subtitleOverlay.apply(preferences: subtitlePreferences)
         subtitleSettings.onChange = { [weak self] value in
             guard let self else { return }
@@ -71,7 +102,17 @@ private final class ConsoleDocumentView: NSView {
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor in self?.refresh() } }
     }
 
+    private func refreshInstallationMenu() {
+        if let menu = NSApp.mainMenu { localizedViews.capture(menu) }
+        if let menu = statusItem.menu { localizedViews.capture(menu) }
+        localizedViews.apply()
+    }
+
     private func loadInstallation() {
+        if let installation = desktopInstallation {
+            client = installation.serviceRoot.map { ServiceClient(root: $0) }
+            return
+        }
         let saved = UserDefaults.standard.string(forKey: "serviceRoot")
         let resource = Bundle.main.url(forResource: "installation", withExtension: "json")
         let data = resource.flatMap { try? Data(contentsOf: $0) }
@@ -284,7 +325,9 @@ private final class ConsoleDocumentView: NSView {
 
         detailLabel.font = .systemFont(ofSize: 10); detailLabel.maximumNumberOfLines = 3
         detailLabel.textColor = .secondaryLabelColor
-        folderButton = iconButton("选择服务文件夹…", symbol: "folder", action: #selector(chooseFolder))
+        folderButton = desktopInstallation == nil
+            ? iconButton("选择服务文件夹…", symbol: "folder", action: #selector(chooseFolder))
+            : iconButton("检查或修复模型", symbol: "shippingbox", action: #selector(manageModels))
         let utilities = row([button("字幕设置…", #selector(showSubtitleSettings)),
                              iconButton("查看日志", symbol: "doc.text.magnifyingglass", action: #selector(openLogs)), folderButton], spacing: 7)
         utilities.setContentHuggingPriority(.required, for: .horizontal)
@@ -421,6 +464,7 @@ private final class ConsoleDocumentView: NSView {
     }
 
     private func refresh() {
+        guard desktopReady else { return }
         guard operation == nil, !polling, !choosingFolder else { return }
         guard let client, client.isInstalled else {
             lastError = "未找到本机安装。请选择包含 macos.sh 的 VoxBridge 文件夹。"; render(); return
@@ -438,8 +482,8 @@ private final class ConsoleDocumentView: NSView {
     private func render() {
         guard startButton != nil else { return }
         if displayedLocale != NativeLocalization.locale { refreshInterfaceText() }
-        let installed = client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
-        let busy = operation != nil || snapshot?.busy == true || choosingFolder
+        let installed = desktopReady && client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
+        let busy = maintenanceWindowShown || !desktopReady || operation != nil || snapshot?.busy == true || choosingFolder
         let sessionBusy = session.isActive
         subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, active: !quitRequested && (session.phase == .running || session.phase == .stopping))
         subtitleSettings.setSessionActive(sessionBusy)
@@ -454,7 +498,7 @@ private final class ConsoleDocumentView: NSView {
         modelLabel.toolTip = modelLabel.stringValue
         if busy || session.phase == .starting || session.phase == .stopping { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
         startButton.isEnabled = installed && snapshot != nil && !busy && !ready && !sessionBusy
-        stopButton.isEnabled = installed && (running || sessionBusy || startTask != nil) && stopTask == nil && !choosingFolder
+        stopButton.isEnabled = client?.isInstalled == true && (running || sessionBusy || startTask != nil) && stopTask == nil && !choosingFolder
         captureButton.isEnabled = installed && snapshot != nil && !busy && !sessionBusy
         endButton.isEnabled = (session.phase == .running || session.phase == .starting) && stopTask == nil
         for popup in [inputPopup, outputPopup, sourcePopup, targetPopup] { popup.isEnabled = !busy && !sessionBusy }
@@ -495,8 +539,9 @@ private final class ConsoleDocumentView: NSView {
         return NativeLocalization.text(value.ready ? "已就绪" : value.pid == nil ? "已停止" : "加载中")
     }
 
-    @objc private func showSubtitleSettings() { subtitleSettings.show() }
+    @objc private func showSubtitleSettings() { guard desktopReady else { showWindow(); return }; subtitleSettings.show() }
     @objc private func toggleSubtitles() {
+        guard desktopReady else { return }
         var selected = subtitlePreferences; selected.enabled.toggle()
         do {
             try selected.save(); subtitlePreferences = selected
@@ -508,6 +553,7 @@ private final class ConsoleDocumentView: NSView {
     @objc private func startService() { begin(capture: false) }
     @objc private func startInterpretation() { begin(capture: true) }
     private func begin(capture: Bool) {
+        guard desktopReady && !maintenanceWindowShown else { installationWindow?.show(); return }
         guard startTask == nil, stopTask == nil, operation == nil, !session.isActive, !choosingFolder, let client else { return }
         let selected: NativePreferences
         do { selected = try selectedPreferences(); try selected.save(); preferences = selected }
@@ -554,8 +600,11 @@ private final class ConsoleDocumentView: NSView {
         }
     }
 
-    @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc private func openOperator() { openWeb("http://127.0.0.1:8024") }
+    @objc private func showWindow() {
+        if !desktopReady { installationWindow?.show(); return }
+        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc private func openOperator() { guard desktopReady else { return }; openWeb("http://127.0.0.1:8024") }
     @objc private func openListener() { if let address = snapshot?.listener_url { openWeb(address) } }
     private func openWeb(_ address: String) { if let url = URL(string: address) { NSWorkspace.shared.open(url) } }
     @objc private func copyListener() {
@@ -565,6 +614,7 @@ private final class ConsoleDocumentView: NSView {
     @objc private func openLogs() { if let client { NSWorkspace.shared.open(client.root.appendingPathComponent("logs", isDirectory: true)) } }
 
     @objc private func chooseFolder() {
+        guard desktopInstallation == nil else { return }
         guard operation == nil, !choosingFolder, snapshot?.hasProcess != true, !session.isActive,
               snapshot != nil || client?.isInstalled != true else { return }
         choosingFolder = true; let originalClient = client; render()
@@ -591,8 +641,39 @@ private final class ConsoleDocumentView: NSView {
         }
     }
 
+    @objc private func manageModels() {
+        guard let installation = desktopInstallation, !session.isActive, operation == nil,
+              snapshot != nil, snapshot?.hasProcess != true, !choosingFolder, !installation.isRunning else { return }
+        maintenanceWindowShown = true; render(); installationWindow?.show()
+    }
+
+    private func validateModelMaintenance(_ completion: @escaping (Bool) -> Void) {
+        guard !session.isActive, operation == nil, startTask == nil, stopTask == nil, !choosingFolder else { completion(false); return }
+        // First-run mode has never loaded a ServiceClient or started a backend.
+        guard window != nil else { completion(true); return }
+        guard maintenanceWindowShown, let client else { completion(false); return }
+        client.snapshot { [weak self] result in
+            guard let self else { completion(false); return }
+            switch result {
+            case .success(let value):
+                self.snapshot = value
+                completion(self.maintenanceWindowShown && !value.hasProcess && !value.busy &&
+                    !self.session.isActive && self.operation == nil && self.startTask == nil && self.stopTask == nil)
+            case .failure: completion(false)
+            }
+            self.render()
+        }
+    }
+
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let installation = desktopInstallation, !installation.isReady {
+            guard installation.isRunning else { return .terminateNow }
+            quitRequested = true
+            installation.onSettled = { NSApp.reply(toApplicationShouldTerminate: true) }
+            installation.cancel()
+            return .terminateLater
+        }
         if choosingFolder { return .terminateCancel }
         if canTerminate { return .terminateNow }
         quitRequested = true; lastError = nil

@@ -10,9 +10,9 @@ We want people to express themselves in the language they know and understand vo
 
 Today, VoxHalo runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**Current App: 1.7.1 · build 21** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**Current App: 1.8.0 · build 22** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
 
-[Installation](docs/en/INSTALLATION.md) · [Models](docs/en/MODELS.md) · [Language validation](docs/en/EIGHT-LANGUAGES.md) · [Changelog](CHANGELOG.en.md) · [Report an issue](https://github.com/hellcatjack/VoxHalo_mac/issues)
+[Download App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [Graphical installation](docs/en/QUICKSTART.md) · [Models](docs/en/MODELS.md) · [Language validation](docs/en/EIGHT-LANGUAGES.md) · [Changelog](CHANGELOG.en.md) · [Report an issue](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
 ## The App
 
@@ -82,7 +82,7 @@ Speech supports continuous playback and automatic catch-up. Chinese synthesis fa
 
 Recognition and translation coordinate GPU execution; TTS uses two CPU threads. Acceleration currently uses the **Metal GPU**, without Apple Neural Engine deployment. Translation is served by a local llama.cpp process, with no OpenAI or other cloud inference service required.
 
-Installation downloads approximately **4.58 GB** of models and runtime assets, plus Python dependencies. The Chinese speed repair creates an additional model of about **344 MB**. Exact versions, prompts, voices, checksums and licenses are documented in the [model guide](docs/en/MODELS.md).
+Installation downloads approximately **4.61 GB** of models and prebuilt speech components; the desktop App already includes its main Python/AI runtime. The Chinese speed repair creates an additional model of about **344 MB**. Exact versions, prompts, voices, checksums and licenses are documented in the [model guide](docs/en/MODELS.md).
 
 ## Minimum Mac configuration
 
@@ -91,49 +91,26 @@ Installation downloads approximately **4.58 GB** of models and runtime assets, p
 | Item | Requirement or recommendation |
 |---|---|
 | Processor | Apple Silicon M1 or later, native `arm64`; the installer does not support Intel Macs or Rosetta/x86 environments |
-| Memory | At least 16 GB recommended for trials; 24 GB or more for regular use; 8 GB is unvalidated and not recommended |
+| Memory | Desktop installer requires 16 GB; 24 GB or more for regular use; sustained real-time performance at 16 GB needs validation |
 | macOS | 14.2+ for the complete feature set; older OS versions and M-series machines need their own validation |
 | Storage | Reserve 20 GB for models, dependencies, download caches and temporary files |
-| Build tools | Xcode Command Line Tools with an SDK exposing macOS 14.2 audio APIs |
+| Build tools | None for the desktop release; Xcode Command Line Tools only for source builds |
 | Network | Internet for initial installation; inference can run offline; online videos and LAN listeners need their respective network connections |
 
 Earlier M-series Macs, 16 GB configurations and macOS 14/15 have not completed the project's full installation and endurance validation. Successful model loading does not guarantee sustained real-time performance. See [compatibility evidence](docs/en/INSTALLATION.md#compatibility-evidence) for tested environments and check commands.
 
-## Installation
+## Installation — no Terminal required
 
-### 1. Install Apple command-line tools
+1. Download **VoxHalo-1.8.0-macOS-arm64.dmg** from [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest). Choose the desktop asset, not “Source code”.
+2. Open the DMG and drag **同声传译.app** into **Applications**.
+3. Open the App, review the model licenses, and install the models in its first-run window. Progress, cancellation and retry are built in; completed verified downloads are reused.
+4. Choose your input, output and language direction, then click **Start interpreting**. Allow the required macOS audio permission when prompted.
 
-Run in Terminal and wait for the system installation to finish:
+**The desktop App includes its Python/AI runtime.** No Xcode, Homebrew, Docker, separate Python or cloud API key is required. Models and prebuilt speech components download once into **~/Library/Application Support/VoxHalo/**; after installation, interpretation works offline. Copying the App to another Mac starts a fresh local setup there.
 
-```sh
-xcode-select --install
-```
+This release is **ad-hoc signed, without Apple Developer ID notarization**. macOS may require you to allow this App through **System Settings → Privacy & Security → Open Anyway** after its first blocked launch. See the [complete installation steps and troubleshooting](docs/en/QUICKSTART.md) and [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable your Mac's general security protections.
 
-### 2. Get the project and run setup
-
-Choose a permanent location:
-
-```sh
-mkdir -p "$HOME/Projects"
-cd "$HOME/Projects"
-git clone https://github.com/hellcatjack/VoxHalo_mac.git
-cd VoxHalo_mac
-./setup.sh
-```
-
-The installer prepares Python, pinned dependencies, models and the native App, and verifies model files. No preinstalled Homebrew, Docker, virtual audio device or separate Python is required. Installation does not start recording.
-
-### 3. Open the App
-
-```sh
-open "$HOME/Applications/同声传译.app"
-```
-
-Allow the audio access requested by macOS. Translation-only playback requires system-audio capture; microphone input requires microphone permission.
-
-**Keep the complete project directory at its installed location.** The App uses its environments and models; copying only the `.app` to another Mac is insufficient. Distribution currently uses source installation and local builds with an ad-hoc signature, without Developer ID notarization.
-
-See the [complete installation guide](docs/en/INSTALLATION.md) for verification, permissions, custom destinations, updates, migration and uninstallation.
+Developers can continue using `./setup.sh` and the [source installation guide](docs/en/INSTALLATION.md). Existing source installations remain independent of the managed desktop runtime.
 
 ## Start your first interpretation session
 
@@ -184,7 +161,8 @@ LAN features make monitoring text and translated audio available to devices that
 
 | Guide | Contents |
 |---|---|
-| [Installation and troubleshooting](docs/en/INSTALLATION.md) | Setup, permissions, maintenance, updates, migration and removal |
+| [Desktop installation](docs/en/QUICKSTART.md) | Download, graphical model setup, permissions, updates and removal |
+| [Source installation](docs/en/INSTALLATION.md) | Developer setup, verification and maintenance |
 | [Models and licenses](docs/en/MODELS.md) | Models, quantization, voices, prompts and third-party licenses |
 | [Interface languages](docs/en/INTERFACE-LANGUAGES.md) | Eight-language interfaces and automatic/manual selection |
 | [Eight-language validation](docs/en/EIGHT-LANGUAGES.md) | Tested capabilities, scope and limitations |

@@ -1,0 +1,435 @@
+{
+  "version": 1,
+  "messages": {
+    "准备本机模型": {
+      "zh": "准备本机模型",
+      "en": "Prepare local models",
+      "ja": "ローカルモデルの準備",
+      "fr": "Préparer les modèles locaux",
+      "es": "Preparar modelos locales",
+      "it": "Prepara i modelli locali",
+      "pt": "Preparar modelos locais",
+      "hi": "स्थानीय मॉडल तैयार करें"
+    },
+    "安装本机模型": {
+      "zh": "安装本机模型",
+      "en": "Install local models",
+      "ja": "ローカルモデルをインストール",
+      "fr": "Installer les modèles locaux",
+      "es": "Instalar modelos locales",
+      "it": "Installa i modelli locali",
+      "pt": "Instalar modelos locais",
+      "hi": "स्थानीय मॉडल इंस्टॉल करें"
+    },
+    "下载约 {0} 模型，安装后可离线传译。": {
+      "zh": "下载约 {0} 模型，安装后可离线传译。",
+      "en": "Download about {0} of models for offline interpretation.",
+      "ja": "約 {0} のモデルをダウンロードすると、オフラインで通訳できます。",
+      "fr": "Téléchargez environ {0} de modèles pour interpréter hors ligne.",
+      "es": "Descargue unos {0} de modelos para interpretar sin conexión.",
+      "it": "Scarica circa {0} di modelli per interpretare offline.",
+      "pt": "Baixe cerca de {0} de modelos para interpretar offline.",
+      "hi": "ऑफ़लाइन अनुवाद के लिए लगभग {0} मॉडल डाउनलोड करें।"
+    },
+    "需要 Apple Silicon、macOS 14.2+、16 GB 内存和至少 20 GB 可用磁盘空间。": {
+      "zh": "需要 Apple Silicon、macOS 14.2+、16 GB 内存和至少 20 GB 可用磁盘空间。",
+      "en": "Requires Apple Silicon, macOS 14.2+, 16 GB memory and at least 20 GB free disk space.",
+      "ja": "Apple Silicon、macOS 14.2 以降、16 GB メモリ、20 GB 以上の空き容量が必要です。",
+      "fr": "Apple Silicon, macOS 14.2+, 16 Go de mémoire et au moins 20 Go d’espace libre requis.",
+      "es": "Requiere Apple Silicon, macOS 14.2+, 16 GB de memoria y al menos 20 GB de espacio libre.",
+      "it": "Richiede Apple Silicon, macOS 14.2+, 16 GB di memoria e almeno 20 GB di spazio libero.",
+      "pt": "Requer Apple Silicon, macOS 14.2+, 16 GB de memória e pelo menos 20 GB livres em disco.",
+      "hi": "Apple Silicon, macOS 14.2+, 16 GB मेमोरी और कम से कम 20 GB खाली डिस्क स्थान आवश्यक है।"
+    },
+    "安装仅在下载时需要联网。之后的识别、翻译和朗读均在本机运行。": {
+      "zh": "安装仅在下载时需要联网。之后的识别、翻译和朗读均在本机运行。",
+      "en": "Internet is needed only for installation downloads. Recognition, translation and speech then run locally.",
+      "ja": "インストール時のダウンロードにのみインターネットが必要です。その後の認識・翻訳・読み上げは本機で実行されます。",
+      "fr": "Internet est nécessaire uniquement au téléchargement. La reconnaissance, la traduction et la lecture s’exécutent ensuite localement.",
+      "es": "Solo se necesita Internet para las descargas de instalación. Después, el reconocimiento, la traducción y la voz funcionan localmente.",
+      "it": "Internet serve solo per scaricare i file di installazione. Poi riconoscimento, traduzione e voce funzionano localmente.",
+      "pt": "A internet é necessária apenas para baixar a instalação. Depois, reconhecimento, tradução e fala funcionam localmente.",
+      "hi": "इंटरनेट केवल इंस्टॉलेशन डाउनलोड के लिए चाहिए। उसके बाद पहचान, अनुवाद और वाचन स्थानीय रूप से चलते हैं।"
+    },
+    "HY-MT 许可证": {
+      "zh": "HY-MT 许可证",
+      "en": "HY-MT license",
+      "ja": "HY-MT ライセンス",
+      "fr": "Licence HY-MT",
+      "es": "Licencia HY-MT",
+      "it": "Licenza HY-MT",
+      "pt": "Licença HY-MT",
+      "hi": "HY-MT लाइसेंस"
+    },
+    "全部许可证": {
+      "zh": "全部许可证",
+      "en": "All licenses",
+      "ja": "すべてのライセンス",
+      "fr": "Toutes les licences",
+      "es": "Todas las licencias",
+      "it": "Tutte le licenze",
+      "pt": "Todas as licenças",
+      "hi": "सभी लाइसेंस"
+    },
+    "我已阅读并接受所包含模型与组件的许可证。": {
+      "zh": "我已阅读并接受所包含模型与组件的许可证。",
+      "en": "I have read and accept the licenses for the included models and components.",
+      "ja": "含まれるモデルとコンポーネントのライセンスを読み、同意します。",
+      "fr": "J’ai lu et j’accepte les licences des modèles et composants inclus.",
+      "es": "He leído y acepto las licencias de los modelos y componentes incluidos.",
+      "it": "Ho letto e accetto le licenze dei modelli e dei componenti inclusi.",
+      "pt": "Li e aceito as licenças dos modelos e componentes incluídos.",
+      "hi": "मैंने शामिल मॉडल और घटकों के लाइसेंस पढ़े हैं और उन्हें स्वीकार करता/करती हूँ।"
+    },
+    "我确认符合 HY-MT 地区许可要求：不在欧盟、英国或韩国使用本模型。": {
+      "zh": "我确认符合 HY-MT 地区许可要求：不在欧盟、英国或韩国使用本模型。",
+      "en": "I confirm HY-MT territory eligibility: I will not use this model in the European Union, United Kingdom or South Korea.",
+      "ja": "HY-MT の地域ライセンス要件を満たし、欧州連合・英国・韓国では本モデルを使用しないことを確認します。",
+      "fr": "Je confirme respecter les conditions territoriales de HY-MT : je n’utiliserai pas ce modèle dans l’Union européenne, au Royaume-Uni ou en Corée du Sud.",
+      "es": "Confirmo que cumplo los requisitos territoriales de HY-MT: no usaré este modelo en la Unión Europea, el Reino Unido ni Corea del Sur.",
+      "it": "Confermo di rispettare i requisiti territoriali di HY-MT: non userò questo modello nell’Unione europea, nel Regno Unito o in Corea del Sud.",
+      "pt": "Confirmo que cumpro os requisitos territoriais do HY-MT: não usarei este modelo na União Europeia, no Reino Unido ou na Coreia do Sul.",
+      "hi": "मैं HY-MT की क्षेत्रीय पात्रता की पुष्टि करता/करती हूँ: इस मॉडल का उपयोग यूरोपीय संघ, यूनाइटेड किंगडम या दक्षिण कोरिया में नहीं करूँगा/करूँगी।"
+    },
+    "安装状态": {
+      "zh": "安装状态",
+      "en": "Installation status",
+      "ja": "インストール状況",
+      "fr": "État de l’installation",
+      "es": "Estado de instalación",
+      "it": "Stato dell’installazione",
+      "pt": "Estado da instalação",
+      "hi": "इंस्टॉलेशन स्थिति"
+    },
+    "安装进度": {
+      "zh": "安装进度",
+      "en": "Installation progress",
+      "ja": "インストールの進捗",
+      "fr": "Progression de l’installation",
+      "es": "Progreso de instalación",
+      "it": "Avanzamento dell’installazione",
+      "pt": "Progresso da instalação",
+      "hi": "इंस्टॉलेशन प्रगति"
+    },
+    "同意并安装": {
+      "zh": "同意并安装",
+      "en": "Accept and install",
+      "ja": "同意してインストール",
+      "fr": "Accepter et installer",
+      "es": "Aceptar e instalar",
+      "it": "Accetta e installa",
+      "pt": "Aceitar e instalar",
+      "hi": "स्वीकार कर इंस्टॉल करें"
+    },
+    "取消安装": {
+      "zh": "取消安装",
+      "en": "Cancel installation",
+      "ja": "インストールを中止",
+      "fr": "Annuler l’installation",
+      "es": "Cancelar instalación",
+      "it": "Annulla installazione",
+      "pt": "Cancelar instalação",
+      "hi": "इंस्टॉलेशन रद्द करें"
+    },
+    "重试安装": {
+      "zh": "重试安装",
+      "en": "Retry installation",
+      "ja": "再試行",
+      "fr": "Réessayer",
+      "es": "Reintentar instalación",
+      "it": "Riprova installazione",
+      "pt": "Tentar novamente",
+      "hi": "इंस्टॉलेशन पुनः आज़माएँ"
+    },
+    "安装详情": {
+      "zh": "安装详情",
+      "en": "Installation details",
+      "ja": "インストール詳細",
+      "fr": "Détails de l’installation",
+      "es": "Detalles de instalación",
+      "it": "Dettagli installazione",
+      "pt": "Detalhes da instalação",
+      "hi": "इंस्टॉलेशन विवरण"
+    },
+    "收起详情": {
+      "zh": "收起详情",
+      "en": "Hide details",
+      "ja": "詳細を隠す",
+      "fr": "Masquer les détails",
+      "es": "Ocultar detalles",
+      "it": "Nascondi dettagli",
+      "pt": "Ocultar detalhes",
+      "hi": "विवरण छिपाएँ"
+    },
+    "显示本机数据": {
+      "zh": "显示本机数据",
+      "en": "Show local data",
+      "ja": "本機のデータを表示",
+      "fr": "Afficher les données locales",
+      "es": "Mostrar datos locales",
+      "it": "Mostra dati locali",
+      "pt": "Mostrar dados locais",
+      "hi": "स्थानीय डेटा दिखाएँ"
+    },
+    "打开安装日志": {
+      "zh": "打开安装日志",
+      "en": "Open installation log",
+      "ja": "インストールログを開く",
+      "fr": "Ouvrir le journal",
+      "es": "Abrir registro de instalación",
+      "it": "Apri registro installazione",
+      "pt": "Abrir log da instalação",
+      "hi": "इंस्टॉलेशन लॉग खोलें"
+    },
+    "首次使用需要安装本机模型。": {
+      "zh": "首次使用需要安装本机模型。",
+      "en": "Install the local models before first use.",
+      "ja": "初回使用前にローカルモデルをインストールしてください。",
+      "fr": "Installez les modèles locaux avant la première utilisation.",
+      "es": "Instale los modelos locales antes del primer uso.",
+      "it": "Installa i modelli locali prima del primo utilizzo.",
+      "pt": "Instale os modelos locais antes do primeiro uso.",
+      "hi": "पहली बार उपयोग से पहले स्थानीय मॉडल इंस्टॉल करें।"
+    },
+    "本机模型已就绪。": {
+      "zh": "本机模型已就绪。",
+      "en": "Local models are ready.",
+      "ja": "ローカルモデルの準備ができました。",
+      "fr": "Les modèles locaux sont prêts.",
+      "es": "Los modelos locales están listos.",
+      "it": "I modelli locali sono pronti.",
+      "pt": "Os modelos locais estão prontos.",
+      "hi": "स्थानीय मॉडल तैयार हैं।"
+    },
+    "正在检查安装条件…": {
+      "zh": "正在检查安装条件…",
+      "en": "Checking installation requirements…",
+      "ja": "インストール要件を確認中…",
+      "fr": "Vérification des conditions d’installation…",
+      "es": "Comprobando requisitos de instalación…",
+      "it": "Verifica dei requisiti di installazione…",
+      "pt": "Verificando requisitos de instalação…",
+      "hi": "इंस्टॉलेशन की आवश्यकताएँ जाँची जा रही हैं…"
+    },
+    "正在下载本机模型…": {
+      "zh": "正在下载本机模型…",
+      "en": "Downloading local models…",
+      "ja": "ローカルモデルをダウンロード中…",
+      "fr": "Téléchargement des modèles locaux…",
+      "es": "Descargando modelos locales…",
+      "it": "Download dei modelli locali…",
+      "pt": "Baixando modelos locais…",
+      "hi": "स्थानीय मॉडल डाउनलोड हो रहे हैं…"
+    },
+    "正在校验下载文件…": {
+      "zh": "正在校验下载文件…",
+      "en": "Verifying downloaded files…",
+      "ja": "ダウンロードしたファイルを検証中…",
+      "fr": "Vérification des fichiers téléchargés…",
+      "es": "Verificando archivos descargados…",
+      "it": "Verifica dei file scaricati…",
+      "pt": "Verificando arquivos baixados…",
+      "hi": "डाउनलोड की गई फ़ाइलें सत्यापित हो रही हैं…"
+    },
+    "正在准备本机运行环境…": {
+      "zh": "正在准备本机运行环境…",
+      "en": "Preparing the local runtime…",
+      "ja": "ローカル実行環境を準備中…",
+      "fr": "Préparation de l’environnement local…",
+      "es": "Preparando el entorno local…",
+      "it": "Preparazione dell’ambiente locale…",
+      "pt": "Preparando o ambiente local…",
+      "hi": "स्थानीय रनटाइम तैयार हो रहा है…"
+    },
+    "正在取消安装…": {
+      "zh": "正在取消安装…",
+      "en": "Cancelling installation…",
+      "ja": "インストールを中止中…",
+      "fr": "Annulation de l’installation…",
+      "es": "Cancelando instalación…",
+      "it": "Annullamento dell’installazione…",
+      "pt": "Cancelando instalação…",
+      "hi": "इंस्टॉलेशन रद्द हो रहा है…"
+    },
+    "下载中断后可重试，已下载的数据会保留。": {
+      "zh": "下载中断后可重试，已下载的数据会保留。",
+      "en": "Retry after an interruption; downloaded data is retained.",
+      "ja": "ダウンロードが中断しても再試行できます。取得済みのデータは保持されます。",
+      "fr": "Réessayez après une interruption ; les données téléchargées sont conservées.",
+      "es": "Puede reintentar tras una interrupción; los datos descargados se conservan.",
+      "it": "Puoi riprovare dopo un’interruzione; i dati scaricati vengono conservati.",
+      "pt": "Tente novamente após uma interrupção; os dados baixados são mantidos.",
+      "hi": "रुकावट के बाद पुनः आज़माएँ; डाउनलोड किया गया डेटा सुरक्षित रहता है।"
+    },
+    "安装已取消。已下载的文件会保留，可稍后继续。": {
+      "zh": "安装已取消。已下载的文件会保留，可稍后继续。",
+      "en": "Installation cancelled. Downloaded files are retained so you can continue later.",
+      "ja": "インストールを中止しました。取得済みファイルは保持され、後で再開できます。",
+      "fr": "Installation annulée. Les fichiers téléchargés sont conservés pour reprendre plus tard.",
+      "es": "Instalación cancelada. Los archivos descargados se conservan para continuar más tarde.",
+      "it": "Installazione annullata. I file scaricati restano disponibili per continuare più tardi.",
+      "pt": "Instalação cancelada. Os arquivos baixados são mantidos para continuar depois.",
+      "hi": "इंस्टॉलेशन रद्द हुआ। डाउनलोड की गई फ़ाइलें रखी गई हैं ताकि बाद में जारी रख सकें।"
+    },
+    "安装未完成。请查看安装详情后重试。": {
+      "zh": "安装未完成。请查看安装详情后重试。",
+      "en": "Installation did not complete. Check the details and retry.",
+      "ja": "インストールが完了しませんでした。詳細を確認して再試行してください。",
+      "fr": "L’installation n’a pas abouti. Consultez les détails et réessayez.",
+      "es": "La instalación no se completó. Revise los detalles y reintente.",
+      "it": "Installazione non completata. Consulta i dettagli e riprova.",
+      "pt": "A instalação não foi concluída. Veja os detalhes e tente novamente.",
+      "hi": "इंस्टॉलेशन पूरा नहीं हुआ। विवरण देखें और पुनः आज़माएँ।"
+    },
+    "安装包元数据无效，请重新下载 App。": {
+      "zh": "安装包元数据无效，请重新下载 App。",
+      "en": "The installation metadata is invalid. Download the App again.",
+      "ja": "インストール情報が無効です。App を再ダウンロードしてください。",
+      "fr": "Les métadonnées d’installation sont invalides. Téléchargez à nouveau l’App.",
+      "es": "Los metadatos de instalación no son válidos. Descargue la App de nuevo.",
+      "it": "I metadati di installazione non sono validi. Scarica di nuovo l’App.",
+      "pt": "Os metadados de instalação são inválidos. Baixe o App novamente.",
+      "hi": "इंस्टॉलेशन मेटाडेटा अमान्य है। App फिर से डाउनलोड करें।"
+    },
+    "安装包包含不安全路径，请重新下载 App。": {
+      "zh": "安装包包含不安全路径，请重新下载 App。",
+      "en": "The installation archive contains an unsafe path. Download the App again.",
+      "ja": "インストールアーカイブに安全でないパスが含まれます。App を再ダウンロードしてください。",
+      "fr": "L’archive contient un chemin non sécurisé. Téléchargez à nouveau l’App.",
+      "es": "El archivo de instalación contiene una ruta insegura. Descargue la App de nuevo.",
+      "it": "L’archivio contiene un percorso non sicuro. Scarica di nuovo l’App.",
+      "pt": "O pacote contém um caminho inseguro. Baixe o App novamente.",
+      "hi": "इंस्टॉलेशन संग्रह में असुरक्षित पथ है। App फिर से डाउनलोड करें।"
+    },
+    "安装包校验失败，请重新下载 App。": {
+      "zh": "安装包校验失败，请重新下载 App。",
+      "en": "The installation archive failed verification. Download the App again.",
+      "ja": "インストールアーカイブの検証に失敗しました。App を再ダウンロードしてください。",
+      "fr": "La vérification de l’archive a échoué. Téléchargez à nouveau l’App.",
+      "es": "La verificación del archivo de instalación falló. Descargue la App de nuevo.",
+      "it": "La verifica dell’archivio è fallita. Scarica di nuovo l’App.",
+      "pt": "A verificação do pacote falhou. Baixe o App novamente.",
+      "hi": "इंस्टॉलेशन संग्रह का सत्यापन विफल हुआ। App फिर से डाउनलोड करें।"
+    },
+    "安装包解压失败，请重试。": {
+      "zh": "安装包解压失败，请重试。",
+      "en": "The installation archive could not be unpacked. Please retry.",
+      "ja": "インストールアーカイブを展開できませんでした。再試行してください。",
+      "fr": "Impossible de décompresser l’archive. Réessayez.",
+      "es": "No se pudo extraer el archivo de instalación. Reintente.",
+      "it": "Impossibile estrarre l’archivio. Riprova.",
+      "pt": "Não foi possível extrair o pacote. Tente novamente.",
+      "hi": "इंस्टॉलेशन संग्रह नहीं खोला जा सका। पुनः आज़माएँ।"
+    },
+    "安装结果校验失败，请重试。": {
+      "zh": "安装结果校验失败，请重试。",
+      "en": "The installation result failed verification. Please retry.",
+      "ja": "インストール結果の検証に失敗しました。再試行してください。",
+      "fr": "La vérification du résultat a échoué. Réessayez.",
+      "es": "La verificación de la instalación falló. Reintente.",
+      "it": "La verifica dell’installazione è fallita. Riprova.",
+      "pt": "A verificação da instalação falhou. Tente novamente.",
+      "hi": "इंस्टॉलेशन परिणाम का सत्यापन विफल हुआ। पुनः आज़माएँ।"
+    },
+    "无法写入安装目录。请检查磁盘权限。": {
+      "zh": "无法写入安装目录。请检查磁盘权限。",
+      "en": "Cannot write to the installation folder. Check disk permissions.",
+      "ja": "インストール先に書き込めません。ディスクのアクセス権を確認してください。",
+      "fr": "Impossible d’écrire dans le dossier d’installation. Vérifiez les autorisations.",
+      "es": "No se puede escribir en la carpeta de instalación. Compruebe los permisos.",
+      "it": "Impossibile scrivere nella cartella di installazione. Controlla i permessi.",
+      "pt": "Não é possível gravar na pasta de instalação. Verifique as permissões.",
+      "hi": "इंस्टॉलेशन फ़ोल्डर में नहीं लिखा जा सकता। डिस्क अनुमतियाँ जाँचें।"
+    },
+    "另一个安装任务正在运行。请等待其结束后重试。": {
+      "zh": "另一个安装任务正在运行。请等待其结束后重试。",
+      "en": "Another installation is running. Wait for it to finish, then retry.",
+      "ja": "別のインストールが実行中です。終了後に再試行してください。",
+      "fr": "Une autre installation est en cours. Attendez sa fin, puis réessayez.",
+      "es": "Hay otra instalación en curso. Espere a que termine y reintente.",
+      "it": "Un’altra installazione è in corso. Attendi che finisca e riprova.",
+      "pt": "Outra instalação está em andamento. Aguarde o término e tente novamente.",
+      "hi": "दूसरा इंस्टॉलेशन चल रहा है। उसके पूरा होने पर पुनः आज़माएँ।"
+    },
+    "磁盘空间不足。请至少腾出 20 GB 后重试。": {
+      "zh": "磁盘空间不足。请至少腾出 20 GB 后重试。",
+      "en": "Not enough disk space. Free at least 20 GB and retry.",
+      "ja": "ディスクの空き容量が不足しています。20 GB 以上を確保して再試行してください。",
+      "fr": "Espace disque insuffisant. Libérez au moins 20 Go et réessayez.",
+      "es": "Espacio insuficiente. Libere al menos 20 GB y reintente.",
+      "it": "Spazio su disco insufficiente. Libera almeno 20 GB e riprova.",
+      "pt": "Espaço em disco insuficiente. Libere pelo menos 20 GB e tente novamente.",
+      "hi": "डिस्क स्थान पर्याप्त नहीं है। कम से कम 20 GB खाली करके पुनः आज़माएँ।"
+    },
+    "请阅读模型许可证，并确认您符合 HY-MT 的使用地区要求。": {
+      "zh": "请阅读模型许可证，并确认您符合 HY-MT 的使用地区要求。",
+      "en": "Read the model licenses and confirm that you meet HY-MT territory requirements.",
+      "ja": "モデルのライセンスを読み、HY-MT の地域要件を満たすことを確認してください。",
+      "fr": "Lisez les licences et confirmez respecter les conditions territoriales de HY-MT.",
+      "es": "Lea las licencias y confirme que cumple los requisitos territoriales de HY-MT.",
+      "it": "Leggi le licenze e conferma di rispettare i requisiti territoriali di HY-MT.",
+      "pt": "Leia as licenças e confirme que cumpre os requisitos territoriais do HY-MT.",
+      "hi": "मॉडल लाइसेंस पढ़ें और HY-MT की क्षेत्रीय आवश्यकताओं की पात्रता की पुष्टि करें।"
+    },
+    "需要 Apple Silicon Mac、macOS 14.2 或更新版本以及至少 16 GB 内存。": {
+      "zh": "需要 Apple Silicon Mac、macOS 14.2 或更新版本以及至少 16 GB 内存。",
+      "en": "Requires an Apple Silicon Mac, macOS 14.2 or later and at least 16 GB memory.",
+      "ja": "Apple Silicon Mac、macOS 14.2 以降、16 GB 以上のメモリが必要です。",
+      "fr": "Un Mac Apple Silicon, macOS 14.2 ou ultérieur et au moins 16 Go de mémoire sont requis.",
+      "es": "Requiere un Mac Apple Silicon, macOS 14.2 o posterior y al menos 16 GB de memoria.",
+      "it": "Richiede un Mac Apple Silicon, macOS 14.2 o successivo e almeno 16 GB di memoria.",
+      "pt": "Requer Mac Apple Silicon, macOS 14.2 ou posterior e pelo menos 16 GB de memória.",
+      "hi": "Apple Silicon Mac, macOS 14.2 या नया संस्करण और कम से कम 16 GB मेमोरी आवश्यक है।"
+    },
+    "保留损坏文件并重新下载": {
+      "zh": "保留损坏文件并重新下载",
+      "en": "Keep damaged files and redownload",
+      "ja": "破損ファイルを保持して再取得",
+      "fr": "Conserver et retélécharger",
+      "es": "Conservar y descargar de nuevo",
+      "it": "Conserva i file e riscarica",
+      "pt": "Manter arquivos e baixar novamente",
+      "hi": "क्षतिग्रस्त फ़ाइलें रखकर फिर डाउनलोड करें"
+    },
+    "检查模型": {
+      "zh": "检查模型",
+      "en": "Verify models",
+      "ja": "モデルを検証",
+      "fr": "Vérifier les modèles",
+      "es": "Verificar modelos",
+      "it": "Verifica modelli",
+      "pt": "Verificar modelos",
+      "hi": "मॉडल सत्यापित करें"
+    },
+    "检查或修复模型": {
+      "zh": "检查或修复模型",
+      "en": "Verify or repair models",
+      "ja": "モデルの検証・修復",
+      "fr": "Vérifier ou réparer les modèles",
+      "es": "Verificar o reparar modelos",
+      "it": "Verifica o ripara modelli",
+      "pt": "Verificar ou reparar modelos",
+      "hi": "मॉडल सत्यापित या सुधारें"
+    },
+    "正在检查服务状态…": {
+      "zh": "正在检查服务状态…",
+      "en": "Checking service status…",
+      "ja": "サービス状態を確認中…",
+      "fr": "Vérification des services…",
+      "es": "Comprobando los servicios…",
+      "it": "Verifica dei servizi…",
+      "pt": "Verificando os serviços…",
+      "hi": "सेवाओं की स्थिति जाँची जा रही है…"
+    },
+    "请先结束传译并停止服务，再检查模型。": {
+      "zh": "请先结束传译并停止服务，再检查模型。",
+      "en": "End interpretation and stop services before verifying models.",
+      "ja": "通訳とサービスを停止してからモデルを検証してください。",
+      "fr": "Arrêtez l’interprétation et les services avant de vérifier les modèles.",
+      "es": "Finalice la interpretación y detenga los servicios antes de verificar los modelos.",
+      "it": "Termina l’interpretazione e arresta i servizi prima di verificare i modelli.",
+      "pt": "Encerre a interpretação e pare os serviços antes de verificar os modelos.",
+      "hi": "मॉडल सत्यापित करने से पहले अनुवाद और सेवाएँ बंद करें।"
+    }
+  }
+}

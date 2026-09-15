@@ -94,6 +94,7 @@ class KokoroOnnxSynthesizer:
     ) -> Any:
         import onnxruntime as ort
         from kokoro_onnx import Kokoro
+        from .espeak_paths import espeak_config
 
         options = ort.SessionOptions()
         options.intra_op_num_threads = cpu_threads
@@ -117,6 +118,7 @@ class KokoroOnnxSynthesizer:
             session,
             str(voices_path),
             vocab_config=str(vocab_config) if vocab_config is not None else None,
+            espeak_config=espeak_config(),
         )
 
     def _create_chinese_g2p(self) -> Any:

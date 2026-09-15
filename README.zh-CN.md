@@ -10,9 +10,9 @@
 
 目前，VoxHalo 在 **Apple Silicon Mac** 上独立运行，支持 **8 种语言、56 个互译方向**，将语音识别、翻译、译音朗读与同步字幕连接成一套完整系统。全语言覆盖是项目的长期目标；我们会在识别、翻译、朗读和本机运行表现经过验证后，逐步开放更多语言。
 
-**当前 App：1.7.1 · build 21** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
+**当前 App：1.8.0 · build 22** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
 
-[安装指南](docs/zh-CN/INSTALLATION.md) · [模型说明](docs/zh-CN/MODELS.md) · [语言验证](docs/zh-CN/EIGHT-LANGUAGES.md) · [版本记录](CHANGELOG.md) · [反馈问题](https://github.com/hellcatjack/VoxHalo_mac/issues)
+[下载 App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [图形安装指南](docs/zh-CN/QUICKSTART.md) · [模型说明](docs/zh-CN/MODELS.md) · [语言验证](docs/zh-CN/EIGHT-LANGUAGES.md) · [版本记录](CHANGELOG.md) · [反馈问题](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
 ## App 界面
 
@@ -82,7 +82,7 @@
 
 识别与翻译协调使用 GPU，TTS 使用两个 CPU 线程。当前加速路径为 **Metal GPU**，未使用 Apple Neural Engine。翻译接口由本地 llama.cpp 提供，无需 OpenAI 或其他云端推理服务。
 
-安装器下载约 **4.58 GB** 模型及运行资源，另需 Python 依赖；中文语速修复会生成约 **344 MB** 的额外模型文件。具体版本、提示词、音色、校验值与许可证见[模型说明](docs/zh-CN/MODELS.md)。
+安装器下载约 **4.61 GB** 模型及预编译语音组件；桌面版已内置主要 Python／AI 运行环境；中文语速修复会生成约 **344 MB** 的额外模型文件。具体版本、提示词、音色、校验值与许可证见[模型说明](docs/zh-CN/MODELS.md)。
 
 ## 最低 Mac 配置
 
@@ -91,49 +91,26 @@
 | 项目 | 要求或建议 |
 |---|---|
 | 芯片 | Apple Silicon M1 或更新，原生 `arm64`；安装器不支持 Intel Mac 或 Rosetta/x86 环境 |
-| 内存 | 建议至少 16 GB 试用；日常使用建议 24 GB 或以上；8 GB 未验证且不建议 |
+| 内存 | 桌面安装器要求至少 16 GB；日常使用建议 24 GB 或以上；16 GB 持续实时表现仍需验证 |
 | 系统 | 完整功能需要 macOS 14.2+；较旧系统与 M 系列机型仍需实机验证 |
 | 存储 | 预留 20 GB，容纳模型、依赖、下载缓存和临时文件 |
-| 构建工具 | Xcode Command Line Tools，SDK 需包含 macOS 14.2 音频 API |
+| 构建工具 | 下载桌面版无需构建工具；仅源码构建需要 Xcode Command Line Tools |
 | 网络 | 首次安装需联网；本地推理可离线；在线视频和局域网听众仍需相应网络 |
 
 较早的 M 系列、16 GB 配置和 macOS 14/15 尚未完成项目的整套安装与长时间验收。模型能加载不代表一定能持续跟上实时语音。兼容性依据、已测环境和检查命令见[详细安装指南](docs/zh-CN/INSTALLATION.md#兼容性依据)。
 
-## 安装
+## 安装：无需终端命令
 
-### 1. 安装 Apple 命令行工具
+1. 从 [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) 下载 **VoxHalo-1.8.0-macOS-arm64.dmg**，请选择桌面安装包，而非“Source code”。
+2. 打开 DMG，把**同声传译.app** 拖入**应用程序**。
+3. 打开 App，在首次安装窗口阅读模型许可并安装模型。支持进度显示、取消和重试，已完成且校验通过的下载会复用。
+4. 选择输入、输出及翻译方向，点击**开始传译**，并按提示授予所需音频权限。
 
-在“终端”执行，并等待系统安装完成：
+**桌面版内置 Python 和主要 AI 运行环境**，无需 Xcode、Homebrew、Docker、单独安装 Python 或云端 API 密钥。模型和预编译语音组件首次下载到 **~/Library/Application Support/VoxHalo/**，之后可离线同传。把 App 复制到另一台 Mac 后，会在那台 Mac 上独立完成首次安装。
 
-```sh
-xcode-select --install
-```
+本版采用 **ad-hoc 签名，尚未通过 Apple Developer ID 公证**。macOS 首次拦截时，可能需要在**系统设置 → 隐私与安全性 → 仍要打开**中允许这一个 App。详见[完整图形安装指南](docs/zh-CN/QUICKSTART.md)和 [Apple 官方说明](https://support.apple.com/zh-cn/102445)，无需关闭整台 Mac 的安全保护。
 
-### 2. 获取项目并运行安装器
-
-选择一个会长期保留的目录：
-
-```sh
-mkdir -p "$HOME/Projects"
-cd "$HOME/Projects"
-git clone https://github.com/hellcatjack/VoxHalo_mac.git
-cd VoxHalo_mac
-./setup.sh
-```
-
-安装器自动准备 Python、固定版本依赖、模型与本机 App，并校验模型文件。无需预装 Homebrew、Docker、虚拟声卡或独立 Python；安装不会自动开始录音。
-
-### 3. 打开 App
-
-```sh
-open "$HOME/Applications/同声传译.app"
-```
-
-按 macOS 提示允许所需的音频访问。如果使用“只听译音”，需要系统音频采集能力；麦克风输入需要麦克风权限。
-
-**请保留整个项目目录及其位置。** App 会使用目录中的环境和模型，只复制 `.app` 到另一台 Mac 不足以迁移系统。当前采用源码安装与本机构建，App 使用临时签名，未经 Developer ID 公证。
-
-安装校验、权限处理、指定安装路径、更新、迁移与卸载步骤见[完整安装指南](docs/zh-CN/INSTALLATION.md)。
+开发者仍可使用 `./setup.sh` 和[源码安装指南](docs/zh-CN/INSTALLATION.md)。已有源码安装与桌面版的托管运行目录互相独立。
 
 ## 开始第一次传译
 

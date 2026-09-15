@@ -2,6 +2,15 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.8.0 · build 22 · 2026-09-15
+
+- Add standalone DMG/ZIP distribution with a prebuilt relocatable Python/AI runtime and an eight-language native first-run installer. End users do not need developer tools.
+- Download checksum-pinned models and speech components with progress, cancellation, resume, retry and explicit corruption repair that preserves backups. Check the actual installed runtime before enabling interpretation.
+- Store shared assets and separate runtime versions under the user's Application Support folder. Model maintenance excludes active interpretation; existing source installations remain supported.
+- Add repeatable packaging and GitHub Actions release publication, with SHA256SUMS and bilingual graphical installation guides. This release uses ad-hoc signing and has no Developer ID notarization.
+- Handle eSpeak’s native data-path length limit with a private short-path copy when needed; preserve dictionary bytes and verify actual phonemization during installation.
+- Preserve the verified models, prompts, audio ownership, language directions, caption timing and speech-rate settings.
+
 ## 1.7.1 · build 21 · 2026-09-15
 
 - Refine the native main window with a compact header/status area, equal input/output columns, source and translation side by side, and a right-aligned LAN QR code.

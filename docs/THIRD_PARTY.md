@@ -19,7 +19,7 @@
 | ONNX Runtime | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)，MIT |
 | uv / 托管 Python | [astral-sh/uv](https://github.com/astral-sh/uv)、[python-build-standalone](https://github.com/astral-sh/python-build-standalone)，保留所下载发行包的各自许可 |
 | hls.js | 随源码保留于 `VoxBridge/voxbridge/tts/vendor/`，许可文件同目录 |
-| FFmpeg / eSpeak NG / Misaki | 由固定运行依赖提供，许可与第三方通知见各安装包；不内嵌进已提交的 App 二进制 |
+| FFmpeg / eSpeak NG / Misaki | 桌面版首次安装从固定 PyPI 来源下载 FFmpeg/eSpeak NG 预编译 wheel，并按 SHA-256 校验；它们不内嵌于发行 App。各组件保留独立许可，不能用 Python 包装层的许可替代底层二进制许可 |
 
 旧版 VoxHalo 原生字幕客户端是本 App 字幕窗设计的参考；它的源代码保留在本仓库历史及备份分支。本次没有上传测试视频、测试录音、用户字幕记录或本机运行凭据。
 
