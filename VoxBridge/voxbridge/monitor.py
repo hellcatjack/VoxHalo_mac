@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from collections import OrderedDict
 from copy import deepcopy
+from voxbridge.languages import pair_for_direction
 
 
 class MonitorState:
@@ -15,15 +16,23 @@ class MonitorState:
     def reset(self) -> None:
         self.rows: OrderedDict[str, dict] = OrderedDict()
         self.session = {'status': 'idle', 'direction': 'zh2en', 'last_error': ''}
+        self._set_direction('zh2en')
         self.tentative = ''
         self.version += 1
         self.updated_at_ms = int(time.time() * 1000)
+
+    def _set_direction(self, direction: str) -> None:
+        pair = pair_for_direction(direction)
+        self.session.update(direction=pair.direction, source_name=pair.source.name,
+                            target_name=pair.target.name, source_language=pair.source.code,
+                            target_language=pair.target.code)
 
     def observe(self, event: dict) -> None:
         kind = event.get('type')
         if kind == 'started':
             self.reset()
-            self.session.update(status='running', direction=event.get('translation_direction', 'zh2en'))
+            self.session.update(status='running')
+            self._set_direction(event.get('translation_direction', 'zh2en'))
         elif kind == 'ready':
             self.session['status'] = 'ready'
         elif kind == 'sentence_reset':
@@ -59,7 +68,7 @@ class MonitorState:
         elif kind == 'error':
             self.session.update(status='error', last_error=str(event.get('message', ''))[:1000])
         elif kind == 'translation_direction':
-            self.session['direction'] = event.get('translation_direction', 'zh2en')
+            self._set_direction(event.get('translation_direction', 'zh2en'))
         else:
             return
         self.version += 1
@@ -79,5 +88,5 @@ MONITOR_HTML = '''<!doctype html>
 const rows=document.getElementById('rows'), nodes=new Map();let version=-1, failed=false;
 const names={idle:'等待 App 开始',ready:'已连接 · 等待采集',running:'正在识别和翻译',stopped:'已停止采集',disconnected:'App 已断开',error:'需要处理'};
 function set(id,text){const n=document.getElementById(id);if(n.textContent!==text)n.textContent=text}
-async function poll(){try{const res=await fetch('/api/monitor/state',{cache:'no-store'});if(!res.ok)throw Error('服务暂不可用');const d=await res.json(),s=d.session,t=d.tts;set('session',names[s.status]||s.status);set('tts',`朗读队列 ${t.queue_depth} · 待输出 ${(t.translated_audio_backlog_ms/1000).toFixed(1)} 秒${t.translated_audio_backlog_estimated?'（估算）':''} · ${t.tts_effective_speed.toFixed(2)}×`);set('listeners',`音频连接 ${t.listener_count}`);set('error',s.last_error||t.last_error||'');set('sourceLabel',s.direction==='en2zh'?'英文原文':'中文原文');set('targetLabel',s.direction==='en2zh'?'中文译文':'英文译文');if(d.version!==version||failed){version=d.version;const items=[...d.rows];if(d.tentative)items.push({id:'__tail',source:d.tentative,translation:''});const keep=new Set(items.map(x=>x.id));for(const[id,n]of nodes)if(!keep.has(id)){n.remove();nodes.delete(id)}for(const r of items){let n=nodes.get(r.id);if(!n){n=document.createElement('div');n.className='row';n.append(document.createElement('div'),document.createElement('div'));nodes.set(r.id,n);rows.append(n)}n.classList.toggle('tail',r.id==='__tail');if(n.children[0].textContent!==r.source)n.children[0].textContent=r.source;if(n.children[1].textContent!==r.translation)n.children[1].textContent=r.translation;rows.append(n)}if(document.getElementById('follow').checked)window.scrollTo({top:document.body.scrollHeight,behavior:'instant'})}failed=false}catch(e){failed=true;set('session','监控连接已断开');set('error','无法连接本机服务；页面会自动重连。请在 App 中查看运行状态。')}finally{setTimeout(poll,1000)}}poll();
+async function poll(){try{const res=await fetch('/api/monitor/state',{cache:'no-store'});if(!res.ok)throw Error('服务暂不可用');const d=await res.json(),s=d.session,t=d.tts;set('session',names[s.status]||s.status);set('tts',`朗读队列 ${t.queue_depth} · 待输出 ${(t.translated_audio_backlog_ms/1000).toFixed(1)} 秒${t.translated_audio_backlog_estimated?'（估算）':''} · ${t.tts_effective_speed.toFixed(2)}×`);set('listeners',`音频连接 ${t.listener_count}`);set('error',s.last_error||t.last_error||'');set('sourceLabel',`${s.source_name}原文`);set('targetLabel',`${s.target_name}译文`);if(d.version!==version||failed){version=d.version;const items=[...d.rows];if(d.tentative)items.push({id:'__tail',source:d.tentative,translation:''});const keep=new Set(items.map(x=>x.id));for(const[id,n]of nodes)if(!keep.has(id)){n.remove();nodes.delete(id)}for(const r of items){let n=nodes.get(r.id);if(!n){n=document.createElement('div');n.className='row';n.append(document.createElement('div'),document.createElement('div'));nodes.set(r.id,n);rows.append(n)}n.classList.toggle('tail',r.id==='__tail');if(n.children[0].textContent!==r.source)n.children[0].textContent=r.source;if(n.children[1].textContent!==r.translation)n.children[1].textContent=r.translation;rows.append(n)}if(document.getElementById('follow').checked)window.scrollTo({top:document.body.scrollHeight,behavior:'instant'})}failed=false}catch(e){failed=true;set('session','监控连接已断开');set('error','无法连接本机服务；页面会自动重连。请在 App 中查看运行状态。')}finally{setTimeout(poll,1000)}}poll();
 </script></body></html>'''

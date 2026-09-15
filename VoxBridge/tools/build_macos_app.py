@@ -50,6 +50,7 @@ def build(destination: Path, desktop_link: bool):
         subprocess.run(['xcrun', 'swiftc', str(SOURCES/'make-icon.swift'), '-o', str(icon_builder)], check=True)
         subprocess.run([str(icon_builder), str(iconset)], check=True)
         subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'AppIcon.icns')], check=True)
+        shutil.copy2(ROOT/'voxbridge/language_catalog.json', resources/'language_catalog.json')
         (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
@@ -57,8 +58,8 @@ def build(destination: Path, desktop_link: bool):
             'CFBundleDisplayName': '同声传译',
             'CFBundleExecutable': 'VoxBridgeConsole',
             'CFBundlePackageType': 'APPL',
-            'CFBundleShortVersionString': '1.5.2',
-            'CFBundleVersion': '17',
+            'CFBundleShortVersionString': '1.6.0',
+            'CFBundleVersion': '18',
             'CFBundleIconFile': 'AppIcon',
             'LSMinimumSystemVersion': '14.0',
             'LSMultipleInstancesProhibited': True,

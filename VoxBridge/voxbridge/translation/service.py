@@ -24,7 +24,7 @@ from typing import Callable
 from voxbridge.interpretation.contracts import TranslationRequest
 from voxbridge.languages import translation_pair
 from .language_checks import (_has_cjk, _has_latin, _is_chinese_label, _is_english_label,
-                              _text_matches_source_language, _translation_needs_target_language_retry)
+                              _text_matches_source_language, _translation_needs_target_language_retry, _script_matches)
 
 logger = logging.getLogger("voxbridge.cli.demo_streaming_ws")
 
@@ -72,7 +72,7 @@ class TranslationService:
         if not src:
             return ""
         effective_source_language = str(source_language or "")
-        if not _text_matches_source_language(src, effective_source_language):
+        if pair.direction in {'zh2en', 'en2zh'} and not _text_matches_source_language(src, effective_source_language):
             if _has_cjk(src):
                 effective_source_language = self.zh_label
             elif _has_latin(src):
@@ -92,6 +92,11 @@ class TranslationService:
                 src_chars=len(src),
                 src_hash8=_hash8(src),
             )
+
+        def needs_target_retry(text: str) -> bool:
+            if pair.direction in {'zh2en', 'en2zh'}:
+                return _translation_needs_target_language_retry(text, target_language)
+            return bool(text.strip()) and not _script_matches(text, pair.target.code)
 
         t0 = time.monotonic()
         try:
@@ -119,10 +124,7 @@ class TranslationService:
             enforce_target_language = bool(
                 getattr(self.backend, "enforce_target_language_output", False)
             )
-            if enforce_target_language and _translation_needs_target_language_retry(
-                out,
-                target_language,
-            ):
+            if enforce_target_language and needs_target_retry(out):
                 self.trace(
                     "translation_target_language_mismatch",
                     seq=int(seq_hint or 0),
@@ -144,8 +146,8 @@ class TranslationService:
                 # The Chinese heuristic cannot distinguish every Latin name
                 # from an untranslated sentence. Keep the best retry instead
                 # of silently deleting a valid name and its spoken audio.
-                if (_is_english_label(target_language)
-                        and _translation_needs_target_language_retry(out, target_language)):
+                if ((pair.direction not in {'zh2en', 'en2zh'} or pair.target.code != 'zh')
+                        and needs_target_retry(out)):
                     self.trace(
                         "translation_target_language_rejected",
                         seq=int(seq_hint or 0),

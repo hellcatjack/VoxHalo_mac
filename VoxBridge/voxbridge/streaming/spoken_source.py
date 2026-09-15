@@ -1,12 +1,20 @@
 """Recover added source text without replaying an already released utterance."""
 from __future__ import annotations
 
-import re
+import regex
 from collections.abc import Sequence
 
 
+_CJK_SCRIPTS = r"[\p{Han}\p{scx=Hiragana}\p{scx=Katakana}]"
+_WORD_CHAR = r"[[\p{L}\p{M}\p{N}]--[\p{Han}\p{scx=Hiragana}\p{scx=Katakana}]]"
+_TOKEN_PATTERN = regex.compile(
+    rf"(?=[\p{{L}}\p{{M}}\p{{N}}]){_CJK_SCRIPTS}\p{{M}}*|{_WORD_CHAR}+(?:['’]{_WORD_CHAR}+)*",
+    regex.VERSION1,
+)
+
+
 def _tokens(text: str):
-    return list(re.finditer(r"[\u3400-\u9fff]|[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)*", text))
+    return list(_TOKEN_PATTERN.finditer(text))
 
 
 def after_spoken_prefix(text: str, prefix: str) -> str | None:

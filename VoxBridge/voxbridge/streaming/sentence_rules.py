@@ -16,16 +16,17 @@
 # Extracted into reusable modules in 2026; see the repository change history.
 """Verified source-text boundaries; no model, transport or mutable session state."""
 import re
+import regex
 from typing import Any, List, Optional, Sequence, Tuple
 from voxbridge.translation.language_checks import _has_cjk, _has_latin
 from .semantic_units import repair_semantic_units, open_conditional
 
 SENTENCE_BOUNDARY_PATTERN = re.compile(
-    r"[。！？!?…]+[\"'”’)\]）】》]*|\.+[\"'”’)\]）】》]*(?=\s|$|[\u3400-\u9fff])"
+    r"[。！？!?…।॥]+[\"'”’)\]）】》」』]*|\.+[\"'”’)\]）】》」』]*(?=\s|$|[\u3400-\u9fff])"
 )
 
 
-SOFT_CLAUSE_BOUNDARY_PATTERN = re.compile(r"[,，;；:：][\"'”’)\]）】》]*")
+SOFT_CLAUSE_BOUNDARY_PATTERN = re.compile(r"[,，;；:：][\"'”’)\]）】》」』]*")
 
 
 SENTENCE_CLOSER_CHARS = "\"'”’)]）】》"
@@ -142,8 +143,8 @@ def _text_ends_with_sentence_terminator(text: str) -> bool:
     src = str(text or "").strip()
     if not src:
         return False
-    src = re.sub(r"[\"'”’)\]）】》\s]+$", "", src).strip()
-    return bool(re.search(r"[。！？!?….]$", src))
+    src = re.sub(r"[\"'”’)\]）】》」』\s]+$", "", src).strip()
+    return bool(re.search(r"[。！？!?….।॥]$", src))
 
 
 def _is_abbreviation_period_boundary(text: str, start: int, end: int) -> bool:
@@ -281,7 +282,7 @@ def _is_short_english_slice_fragment(
     # Periods in very short English partials are often ASR boundary guesses
     # rather than reliable sentence endings. Keep questions and exclamations
     # eligible because they are stronger end-of-sentence signals.
-    if not re.search(r"\.[\"'”’)\]）】》]*$", src):
+    if not re.search(r"\.[\"'”’)\]）】》」』]*$", src):
         return False
     return _is_short_english_sentence_for_early_commit(
         src,
@@ -303,7 +304,7 @@ def _strip_short_english_fragment_period(
         min_chars=int(min_chars),
     ):
         return src
-    return re.sub(r"\.[\"'”’)\]）】》]*$", "", src).strip()
+    return re.sub(r"\.[\"'”’)\]）】》」』]*$", "", src).strip()
 
 
 def _qwen_cjk_endpoint_defer_reason(text: str, previous_text: str = "") -> str:
@@ -341,7 +342,7 @@ def _join_segments(segments: List[str]) -> str:
         if not out:
             out = cur
             continue
-        need_space = bool(re.match(r"[A-Za-z0-9]", out[-1])) and bool(re.match(r"[A-Za-z0-9]", cur[:1]))
+        need_space = bool(regex.search(r"[\p{Latin}\p{Devanagari}0-9]\p{M}*$", out)) and bool(regex.match(r"[\p{Latin}\p{Devanagari}0-9]", cur[:1]))
         out = f"{out} {cur}" if need_space else f"{out}{cur}"
     return out
 

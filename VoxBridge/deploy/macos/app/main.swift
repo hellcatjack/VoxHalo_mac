@@ -30,7 +30,8 @@ import CoreImage
     private let addressLabel = NSTextField(wrappingLabelWithString: "正在获取局域网地址…")
     private let inputPopup = NSPopUpButton()
     private let outputPopup = NSPopUpButton()
-    private let directionPopup = NSPopUpButton()
+    private let sourcePopup = NSPopUpButton()
+    private let targetPopup = NSPopUpButton()
     private let termsField = NSTextField(string: "")
     private let meter = NSLevelIndicator()
     private let qrView = NSImageView()
@@ -136,18 +137,25 @@ import CoreImage
         deviceRow.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         for popup in [inputPopup, outputPopup] { popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 295).isActive = true }
 
-        for direction in NativeTranslationDirection.allCases {
-            directionPopup.addItem(withTitle: direction.title)
-            directionPopup.lastItem?.representedObject = direction.rawValue
+        for language in NativeLanguage.all {
+            sourcePopup.addItem(withTitle: language.name)
+            sourcePopup.lastItem?.representedObject = language.code
         }
-        directionPopup.selectItem(withTitle: preferences.languagePair.title)
-        directionPopup.toolTip = "开始前选择方向；结束传译后可切换，无需重新加载模型。"
-        directionPopup.setAccessibilityLabel("翻译方向"); directionPopup.target = self; directionPopup.action = #selector(saveSelections)
+        sourcePopup.selectItem(withTitle: preferences.languagePair.sourceName)
+        refreshTargetLanguages(preferred: preferences.languagePair.target.code)
+        sourcePopup.setAccessibilityLabel("识别语言")
+        targetPopup.setAccessibilityLabel("翻译及朗读语言")
+        sourcePopup.target = self; sourcePopup.action = #selector(sourceLanguageChanged)
+        targetPopup.target = self; targetPopup.action = #selector(saveSelections)
+        for popup in [sourcePopup, targetPopup] {
+            popup.toolTip = "开始前选择语言；结束传译后可切换，无需重新加载 ASR 或翻译模型。"
+            popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 100).isActive = true
+        }
         devicesButton = button("刷新设备", #selector(reloadDevices))
         meter.levelIndicatorStyle = .continuousCapacity; meter.minValue = 0; meter.maxValue = 1
         meter.warningValue = 0.75; meter.criticalValue = 0.95
         meter.widthAnchor.constraint(equalToConstant: 110).isActive = true
-        content.addArrangedSubview(row([directionPopup, devicesButton, NSTextField(labelWithString: "输入电平"), meter]))
+        content.addArrangedSubview(row([NSTextField(labelWithString: "识别"), sourcePopup, NSTextField(labelWithString: "→ 译音"), targetPopup, devicesButton, meter]))
         termsField.placeholderString = "ASR 提示词，以空格或逗号分隔（可选）"
         termsField.stringValue = preferences.contextTerms.joined(separator: "，")
         termsField.setAccessibilityLabel("ASR 提示词"); termsField.target = self; termsField.action = #selector(saveSelections)
@@ -250,9 +258,31 @@ import CoreImage
         var value = NativePreferences()
         value.inputUID = inputPopup.selectedItem?.representedObject as? String ?? "system"
         value.outputUID = outputPopup.selectedItem?.representedObject as? String ?? "default"
-        value.direction = directionPopup.selectedItem?.representedObject as? String ?? "zh2en"
+        let source = sourcePopup.selectedItem?.representedObject as? String ?? "zh"
+        let target = targetPopup.selectedItem?.representedObject as? String ?? "en"
+        value.direction = "\(source)2\(target)"
         value.contextTerms = termsField.stringValue.components(separatedBy: CharacterSet(charactersIn: ",，;；\n"))
         return try value.validated()
+    }
+
+    private func refreshTargetLanguages(preferred: String) {
+        let source = sourcePopup.selectedItem?.representedObject as? String ?? "zh"
+        targetPopup.removeAllItems()
+        for language in NativeLanguage.all where language.code != source {
+            targetPopup.addItem(withTitle: language.name)
+            targetPopup.lastItem?.representedObject = language.code
+        }
+        let choice = targetPopup.itemArray.first { $0.representedObject as? String == preferred }
+            ?? targetPopup.itemArray.first { $0.representedObject as? String == preferences.languagePair.source.code }
+            ?? targetPopup.itemArray.first
+        if let choice { targetPopup.select(choice) }
+    }
+
+    @objc private func sourceLanguageChanged() {
+        guard !session.isActive else { return }
+        let previousTarget = targetPopup.selectedItem?.representedObject as? String ?? "en"
+        refreshTargetLanguages(preferred: previousTarget)
+        saveSelections()
     }
 
     @objc private func saveSelections() {
@@ -296,7 +326,7 @@ import CoreImage
         stopButton.isEnabled = installed && (running || sessionBusy || startTask != nil) && stopTask == nil && !choosingFolder
         captureButton.isEnabled = installed && snapshot != nil && !busy && !sessionBusy
         endButton.isEnabled = (session.phase == .running || session.phase == .starting) && stopTask == nil
-        for popup in [inputPopup, outputPopup, directionPopup] { popup.isEnabled = !busy && !sessionBusy }
+        for popup in [inputPopup, outputPopup, sourcePopup, targetPopup] { popup.isEnabled = !busy && !sessionBusy }
         termsField.isEnabled = !busy && !sessionBusy; devicesButton.isEnabled = !busy && !sessionBusy
         pageButton.isEnabled = ready; listenerButton.isEnabled = ready && snapshot?.listener_url != nil
         copyButton.isEnabled = snapshot?.listener_url != nil

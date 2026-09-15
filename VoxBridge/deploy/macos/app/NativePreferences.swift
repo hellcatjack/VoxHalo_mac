@@ -1,11 +1,54 @@
 import Foundation
 
-enum NativeTranslationDirection: String, CaseIterable {
-    case zh2en, en2zh
-    var sourceLanguage: String { self == .zh2en ? "Chinese" : "English" }
-    var targetLanguage: String { self == .zh2en ? "English" : "Chinese" }
-    var sourceName: String { self == .zh2en ? "中文" : "英文" }
-    var targetName: String { self == .zh2en ? "英文" : "中文" }
+struct NativeLanguage: Decodable, Hashable {
+    let code: String
+    let name: String
+    let asrLabel: String
+    let ttsLabel: String
+    enum CodingKeys: String, CodingKey {
+        case code, name
+        case asrLabel = "asr_label", ttsLabel = "tts_label"
+    }
+    static let all: [NativeLanguage] = {
+        struct Catalog: Decodable { let version: Int; let languages: [NativeLanguage] }
+        // Command-line checks use the same source resource as the built App.
+        let sourceURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("voxbridge/language_catalog.json")
+        let url = Bundle.main.url(forResource: "language_catalog", withExtension: "json") ?? sourceURL
+        do {
+            let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: url))
+            guard catalog.version == 1, catalog.languages.count == 8,
+                  Set(catalog.languages.map(\.code)).count == catalog.languages.count else {
+                fatalError("语言目录格式无效，请重新安装 App。")
+            }
+            return catalog.languages
+        } catch { fatalError("无法加载语言目录，请重新安装 App：\(error)") }
+    }()
+}
+
+struct NativeTranslationDirection: RawRepresentable, CaseIterable, Hashable {
+    let source: NativeLanguage
+    let target: NativeLanguage
+    var rawValue: String { "\(source.code)2\(target.code)" }
+    init?(rawValue: String) {
+        let codes = rawValue.components(separatedBy: "2")
+        guard codes.count == 2, codes[0] != codes[1],
+              let source = NativeLanguage.all.first(where: { $0.code == codes[0] }),
+              let target = NativeLanguage.all.first(where: { $0.code == codes[1] }) else { return nil }
+        self.source = source; self.target = target
+    }
+    static let zh2en = NativeTranslationDirection(rawValue: "zh2en")!
+    static let en2zh = NativeTranslationDirection(rawValue: "en2zh")!
+    static var allCases: [NativeTranslationDirection] {
+        NativeLanguage.all.flatMap { source in
+            NativeLanguage.all.compactMap { NativeTranslationDirection(rawValue: "\(source.code)2\($0.code)") }
+        }
+    }
+    var sourceLanguage: String { source.asrLabel }
+    var targetLanguage: String { target.ttsLabel }
+    var sourceName: String { source.name }
+    var targetName: String { target.name }
     var title: String { "\(sourceName) → \(targetName)" }
 
     func validateStarted(_ event: [String: Any]) throws {

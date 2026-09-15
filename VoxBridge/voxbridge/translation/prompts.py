@@ -46,6 +46,12 @@ def _build_translation_prompt(
 ) -> str:
     source = str(source_language or "Chinese")
     target = str(target_language or "English")
+    direction = str(translation_direction or "").strip().lower()
+    legacy_pair = (direction in {"zh2en", "en2zh", "zh->en", "en->zh", "chinese->english", "english->chinese", "中文->英文", "英文->中文"}
+                   or (_is_chinese_label(source) and _is_english_label(target))
+                   or (_is_english_label(source) and _is_chinese_label(target)))
+    if not legacy_pair:
+        return recovery_translation_prompt(text, target, source_language=source)
     hint = terminology_hint(text, target)
     if hint and not strict_target_language:
         # The documented short template avoids term lists interacting with the

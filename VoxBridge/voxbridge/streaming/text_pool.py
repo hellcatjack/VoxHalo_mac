@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import regex
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -9,8 +10,8 @@ from typing import Dict, List
 def _join_without_overlap(prev_text: str, new_text: str) -> str:
     prev = str(prev_text or "")
     nxt = str(new_text or "")
-    need_space = bool(re.match(r"[A-Za-z0-9]", prev[-1:])) and bool(
-        re.match(r"[A-Za-z0-9]", nxt[:1])
+    need_space = bool(regex.search(r"[\p{Latin}\p{Devanagari}0-9]\p{M}*$", prev)) and bool(
+        regex.match(r"[\p{Latin}\p{Devanagari}0-9]", nxt[:1])
     )
     return f"{prev} {nxt}" if need_space else f"{prev}{nxt}"
 
@@ -48,7 +49,7 @@ def trim_prefix_overlap(
     if not ref or not cand:
         return cand, 0
 
-    ref = re.sub(r"[\\s。！？!?…，,、；;：:]+$", "", ref).strip()
+    ref = re.sub(r"[\\s。！？!?…।॥，,、；;：:]+$", "", ref).strip()
     if not ref:
         return cand, 0
 

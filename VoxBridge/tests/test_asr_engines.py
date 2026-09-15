@@ -9,7 +9,7 @@ def test_default_qwen_does_not_load_or_advertise_xl():
     registry = ASREngineRegistry(model, zipformer_factory=lambda: calls.append(1))
     assert registry.get().asr is model
     assert [row["id"] for row in registry.describe()] == ["qwen3-asr"]
-    assert registry.describe()[0]["languages"] == ["Chinese", "English"]
+    assert registry.describe()[0]["languages"] == ["Chinese", "English", "Japanese", "French", "Spanish", "Italian", "Portuguese", "Hindi"]
     assert calls == []
 
 

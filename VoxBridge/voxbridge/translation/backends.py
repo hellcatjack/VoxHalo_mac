@@ -300,7 +300,8 @@ class OpenAIAPITranslator:
                 quality_retried = True
                 logger.warning("translation output retry reason=%s source_chars=%d output_chars=%d",
                                issue, len(src), len(out))
-                messages = [{"role": "user", "content": recovery_translation_prompt(src, target)}]
+                messages = [{"role": "user", "content": recovery_translation_prompt(src, target,
+                            source_language=None if translation_direction in {'zh2en', 'en2zh'} else source)}]
                 max_tokens = int(self.max_new_tokens)
                 continue
             if finish_reason != "length":

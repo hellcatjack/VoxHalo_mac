@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import re
+import regex
 
 
 def translation_output_issue(source: str, output: str) -> str:
     # This deliberately generous threshold is a recovery signal, not a length
     # limit: preserve normal translations and ask the model again for outliers.
-    source_units = len(re.findall(r"[\u3400-\u9fff]|[A-Za-z0-9]+(?:['’][A-Za-z]+)*", source))
-    output_units = len(re.findall(r"[\u3400-\u9fff]|[A-Za-z0-9]+(?:['’][A-Za-z]+)*", output))
+    units = r"[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{M}\p{N}]+(?:['’][\p{L}\p{M}]+)*"
+    source_units = len(regex.findall(units, source))
+    output_units = len(regex.findall(units, output))
     if output_units > max(180, source_units * 12):
         return "extreme_expansion"
     # A talk about translation may legitimately contain these exact instructions.
@@ -31,9 +33,13 @@ def translation_output_issue(source: str, output: str) -> str:
     return ""
 
 
-def recovery_translation_prompt(source: str, target_language: str) -> str:
+def recovery_translation_prompt(source: str, target_language: str, *, source_language: str | None = None) -> str:
     # HY-MT's documented plain translation template avoids repeating the long
     # policy that caused the first response to explain the instructions.
+    if source_language is not None:
+        from voxbridge.translation.language_checks import _is_chinese_label
+        if not _is_chinese_label(source_language) and not _is_chinese_label(target_language):
+            return f"Translate the following segment into {target_language}, without additional explanation.\n\n{source}"
     return (
         f"将以下文本翻译为{target_language}，注意只需要输出翻译后的结果，不要额外解释：\n\n"
         f"{source}"

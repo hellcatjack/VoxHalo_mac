@@ -37,6 +37,7 @@ import threading
 import tempfile
 import time
 import re
+import regex
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -130,11 +131,11 @@ from voxbridge.streaming.sentence_rules import (
     _translation_unit_size
 )
 from voxbridge.interpretation.translation_queue import run_translation_queue
-from voxbridge.interpretation.transcript import ChineseEnglishTextPolicy, SourceTextPolicy
+from voxbridge.interpretation.transcript import ChineseEnglishTextPolicy, SourceTextPolicy, source_text_policy as make_source_text_policy
 from voxbridge.tts.output import SharedSpeechOutput, SpeechOutput
 from voxbridge.translation.service import TranslationService
 from voxbridge.interpretation.contracts import TranslationRequest, TranslationRuntime
-from voxbridge.languages import legacy_direction, pair_for_direction
+from voxbridge.languages import normalize_direction, pair_for_direction, language_profile, language_capabilities
 
 SAMPLE_RATE = 16000
 logger = logging.getLogger(__name__)
@@ -317,7 +318,7 @@ def _normalize_asr_context_apply_mode(value: Any) -> str:
 
 
 def _compact_asr_compare_text(value: str) -> str:
-    return re.sub(r"[\W_]+", "", str(value or ""), flags=re.UNICODE).casefold()
+    return regex.sub(r"[^\p{L}\p{M}\p{N}]+", "", str(value or "")).casefold()
 
 
 def _remap_completed_cursor_after_resegmentation(
@@ -2118,6 +2119,12 @@ def _create_app(
         page_html = page_html.replace("__PUBLIC_LISTENER_CARD__", card)
         return HTMLResponse(page_html, headers={"Cache-Control": "no-store"})
 
+    @app.get("/api/languages")
+    async def languages(request: Request):
+        if not _request_is_authenticated(request):
+            raise HTTPException(status_code=401, detail="unauthorized")
+        return JSONResponse(language_capabilities(), headers={"Cache-Control": "no-store"})
+
     @app.get("/api/monitor/state")
     async def monitor_state(request: Request):
         if not _request_is_authenticated(request):
@@ -2916,20 +2923,45 @@ def _create_app(
         )
 
         def _normalize_translation_direction(raw: Any) -> str:
-            return legacy_direction(raw)
+            return normalize_direction(raw)
 
         def _resolve_direction_languages(direction: str) -> Tuple[str, str]:
             pair = pair_for_direction(_normalize_translation_direction(direction))
-            if pair.source.code == "en":
-                return en_label, zh_label
-            return zh_label, en_label
+            labels = {"zh": zh_label, "en": en_label}
+            return (labels.get(pair.source.code, pair.source.asr_label),
+                    labels.get(pair.target.code, pair.target.tts_label))
 
         def _canonical_tts_language(language: str) -> str:
             if _is_chinese_label(language):
                 return "Chinese"
             if _is_english_label(language):
                 return "English"
-            return str(language or "")
+            return language_profile(language).tts_label
+
+        def _source_policy_for(direction: str) -> SourceTextPolicy:
+            return make_source_text_policy(
+                pair_for_direction(direction).source.code,
+                target_cjk_chars=int(stable_clause_target_cjk_chars),
+                target_latin_words=int(stable_clause_target_latin_words),
+            )
+
+        def _split_source_sentences(text: str) -> Tuple[List[str], str]:
+            if pair_for_direction(translation_runtime.direction).source.code in {"zh", "en"}:
+                return _split_sentences_and_tail(text)
+            return source_text_policy.split(text)
+
+        def _source_short_english_sentence(text: str, **kwargs) -> bool:
+            return (pair_for_direction(translation_runtime.direction).source.code in {"zh", "en"}
+                    and _is_short_english_sentence_for_early_commit(text, **kwargs))
+
+        def _source_short_english_fragment(text: str, **kwargs) -> bool:
+            return (pair_for_direction(translation_runtime.direction).source.code in {"zh", "en"}
+                    and _is_short_english_slice_fragment(text, **kwargs))
+
+        def _source_strip_fragment_period(text: str, **kwargs) -> str:
+            if pair_for_direction(translation_runtime.direction).source.code in {"zh", "en"}:
+                return _strip_short_english_fragment_period(text, **kwargs)
+            return text
 
         initial_translation_direction = _normalize_translation_direction("zh2en")
         initial_translation_source, initial_translation_target = _resolve_direction_languages(initial_translation_direction)
@@ -4397,6 +4429,7 @@ def _create_app(
             clear_pending: bool,
             emit: bool,
         ) -> str:
+            nonlocal source_text_policy
             requested = _normalize_translation_direction(direction_raw)
             source_language, target_language = _resolve_direction_languages(requested)
             changed = (
@@ -4407,6 +4440,7 @@ def _create_app(
             translation_runtime.direction = requested
             translation_runtime.source_language = source_language
             translation_runtime.target_language = target_language
+            source_text_policy = _source_policy_for(requested)
 
             dropped = 0
             if clear_pending:
@@ -5082,7 +5116,7 @@ def _create_app(
                 return True
             if force:
                 return True
-            if engine_binding.id == "qwen3-asr" and translation_runtime.direction == "zh2en":
+            if engine_binding.id == "qwen3-asr" and pair_for_direction(translation_runtime.direction).source.code == "zh":
                 provisional = str(getattr(state, "_voxbridge_vad_provisional_text", "") or "")
                 if _qwen_cjk_endpoint_defer_reason(snapshot) or (
                     provisional
@@ -5090,6 +5124,10 @@ def _create_app(
                     == _normalize_sentence_for_duplicate_compare(provisional)
                 ):
                     return False
+            if pair_for_direction(translation_runtime.direction).source.code not in {"zh", "en"}:
+                completed, tail = source_text_policy.split(snapshot)
+                if completed and not tail:
+                    return True
             if bool(re.search(r"[。！？!?…]+[\"'”’)\]）】》]*$", snapshot)):
                 return True
             idle_ms = (time.monotonic() - float(last_text_advance_at)) * 1000.0
@@ -5188,7 +5226,7 @@ def _create_app(
                     else:
                         pending_miss_count = min(8, pending_miss_count + 1)
                         if pending_reason == "hard_cut":
-                            raw_completed, _ = _split_sentences_and_tail(raw)
+                            raw_completed, _ = _split_source_sentences(raw)
                             if pending_terminal and raw_completed:
                                 merged = f"{pending_terminal} {raw}".strip()
                                 pending_miss_count = 0
@@ -5256,7 +5294,7 @@ def _create_app(
                             )
                         else:
                             merged = raw
-                            completed_now, _ = _split_sentences_and_tail(raw)
+                            completed_now, _ = _split_source_sentences(raw)
                             should_drop_pending = bool(
                                 completed_now
                                 or pending_miss_count >= 2
@@ -5467,7 +5505,7 @@ def _create_app(
 
             seq_hint = int(seq or 0)
             language = str(getattr(state, "language", "") or "")
-            preview_completed, preview_tail = _split_sentences_and_tail(snapshot)
+            preview_completed, preview_tail = _split_source_sentences(snapshot)
             tail_preview = str(preview_tail or "").strip()
             tail_looks_complete = bool(re.search(r"[。！？!?…]+[\"'”’)\]）】》]*$", tail_preview))
             tail_meets_min_len = bool(
@@ -5698,7 +5736,7 @@ def _create_app(
                 reason == "vad_silence"
                 and not force_finalize
                 and engine_binding.id == "qwen3-asr"
-                and translation_runtime.direction == "zh2en"
+                and pair_for_direction(translation_runtime.direction).source.code == "zh"
             ):
                 defer_reason = _qwen_cjk_endpoint_defer_reason(
                     final_text,
@@ -5750,12 +5788,12 @@ def _create_app(
                 final_text,
                 force_finalize=bool(force_finalize),
             )
-            finalize_completed_preview, finalize_tail_preview = _split_sentences_and_tail(final_text)
+            finalize_completed_preview, finalize_tail_preview = _split_source_sentences(final_text)
             defer_short_english_slice_commit = bool(
                 str(reason or "") in {"vad_silence", "hard_cut", "punct_timeout_cut"}
                 and len(finalize_completed_preview) == 1
                 and not str(finalize_tail_preview or "").strip()
-                and _is_short_english_sentence_for_early_commit(
+                and _source_short_english_sentence(
                     str(finalize_completed_preview[0] or ""),
                     min_words=int(early_translation_min_english_words),
                     min_chars=int(early_translation_min_english_chars),
@@ -5814,7 +5852,7 @@ def _create_app(
             if not commit_tail_on_finalize:
                 pending_prefix = str(tentative_after_finalize or "").strip()
                 if not pending_prefix:
-                    _, pending_tail = _split_sentences_and_tail(final_text)
+                    _, pending_tail = _split_source_sentences(final_text)
                     pending_prefix = str(pending_tail or "").strip()
             if punct_cut_carry_text:
                 if pending_prefix:
@@ -5824,7 +5862,7 @@ def _create_app(
             pending_prefix_terminal_text = ""
             if finalize_completed_preview:
                 terminal_candidate = str(finalize_completed_preview[-1] or "").strip()
-                continuation_candidate = _strip_short_english_fragment_period(
+                continuation_candidate = _source_strip_fragment_period(
                     terminal_candidate,
                     min_words=int(early_translation_min_english_words),
                     min_chars=int(early_translation_min_english_chars),
@@ -6142,7 +6180,7 @@ def _create_app(
             qwen_scoped = (
                 qwen_submission_mode in {"shadow", "adaptive"}
                 and engine_binding.id == "qwen3-asr"
-                and translation_runtime.direction == "zh2en"
+                and pair_for_direction(translation_runtime.direction).source.code == "zh"
                 and (session_force_language or language) == "Chinese"
                 and stable_clause_target_cjk_chars > 0
             )
@@ -6452,7 +6490,7 @@ def _create_app(
                 early_translation_terminal_first_seen_ms = int(
                     getattr(subtitle_state, "early_holdback_first_seen_ms", 0) or 0
                 )
-                early_translation_short_english = _is_short_english_sentence_for_early_commit(
+                early_translation_short_english = _source_short_english_sentence(
                     candidate,
                     min_words=int(early_translation_min_english_words),
                     min_chars=int(early_translation_min_english_chars),
@@ -6564,7 +6602,7 @@ def _create_app(
             if bool(slice_commit) and not force_tail and int(ready_end) > int(effective_committed_count):
                 for idx in range(int(effective_committed_count), int(ready_end)):
                     candidate = str(completed[int(idx)] or "").strip()
-                    if not _is_short_english_slice_fragment(
+                    if not _source_short_english_fragment(
                         candidate,
                         min_words=int(early_translation_min_english_words),
                         min_chars=int(early_translation_min_english_chars),
@@ -7495,7 +7533,7 @@ def _create_app(
                 pending_segments = [str(seg or "").strip() for seg in completed[ready_end:]]
                 pending_segments = [seg for seg in pending_segments if seg]
                 if short_english_slice_fragment_held and pending_segments:
-                    pending_segments[0] = _strip_short_english_fragment_period(
+                    pending_segments[0] = _source_strip_fragment_period(
                         pending_segments[0],
                         min_words=int(early_translation_min_english_words),
                         min_chars=int(early_translation_min_english_chars),
@@ -8903,20 +8941,25 @@ def _create_app(
                             await _send_json({"type": "error", "message":
                                 "Stop capture before switching ASR engine"})
                             continue
-                        requested_force_language = session_force_language
-                        if "language" in payload:
-                            requested_force_language = _normalize_force_language(payload.get("language"))
-                        requested_translation_direction = _normalize_translation_direction(
-                            payload.get("translation_direction", translation_runtime.direction)
-                        )
-                        # Explicit direction is authoritative. Legacy language-only clients
-                        # retain their choice and receive a matching translation direction.
-                        if "translation_direction" in payload or "language" not in payload:
-                            requested_force_language = (
-                                "English" if requested_translation_direction == "en2zh" else "Chinese"
+                        try:
+                            requested_translation_direction = _normalize_translation_direction(
+                                payload.get("translation_direction", translation_runtime.direction)
                             )
-                        elif requested_force_language == "English":
-                            requested_translation_direction = "en2zh"
+                            # The pair owns ASR and TTS language. Old language-only clients
+                            # choose the current target, or Chinese/English if it would match.
+                            if "translation_direction" not in payload and "language" in payload:
+                                requested_language = _normalize_force_language(payload.get("language"))
+                                if requested_language:
+                                    source = language_profile(requested_language)
+                                    target = pair_for_direction(requested_translation_direction).target
+                                    if source == target:
+                                        target = language_profile("en" if source.code == "zh" else "zh")
+                                    requested_translation_direction = f"{source.code}2{target.code}"
+                            requested_pair = pair_for_direction(requested_translation_direction)
+                            requested_force_language = requested_pair.source.asr_label
+                        except ValueError as exc:
+                            await _send_json({"type": "error", "message": f"start failed: {exc}"})
+                            continue
                         if (native_console and capture_started and not finished):
                             await _send_json({"type": "error", "message":
                                 "Stop capture before starting another interpretation session"})
@@ -8927,13 +8970,17 @@ def _create_app(
                         try:
                             if requested_tts_enabled:
                                 _validated_tts_client_id(requested_tts_client_id)
+                            if tts_synthesizer is not None and translator is not None:
+                                validate = getattr(tts_synthesizer, "validate_language", None)
+                                if validate is not None:
+                                    await asyncio.to_thread(validate, requested_pair.target.tts_label)
                             if "asr_context_terms" in payload:
                                 requested_context_terms = normalize_session_context_terms(
                                     payload.get("asr_context_terms"),
                                     max_terms=asr_context_max_terms,
                                     max_chars=asr_context_max_chars,
                                 )
-                        except ValueError as exc:
+                        except (ValueError, TTSConfigurationError, TTSSynthesisError) as exc:
                             stats.last_error = f"start failed: {type(exc).__name__}"
                             _trace_event(
                                 "start_failed",
@@ -9076,6 +9123,7 @@ def _create_app(
                                 translation_runtime.source_language,
                                 translation_runtime.target_language,
                             ) = _resolve_direction_languages(requested_translation_direction)
+                            source_text_policy = _source_policy_for(requested_translation_direction)
                             stale_hls_backlog = await speech_output.discard_idle_backlog()
                             if stale_hls_backlog:
                                 _trace_event(
@@ -9169,7 +9217,11 @@ def _create_app(
                         continue
 
                     if msg_type == "set_translation_direction":
-                        requested_direction = _normalize_translation_direction(payload.get("translation_direction"))
+                        try:
+                            requested_direction = _normalize_translation_direction(payload.get("translation_direction"))
+                        except ValueError as exc:
+                            await _send_json({"type": "error", "message": str(exc)})
+                            continue
                         if ((native_console or engine_binding.id == "zipformer-xl") and capture_started and not finished
                                 and requested_direction != translation_runtime.direction):
                             await _send_json({"type": "error", "message":

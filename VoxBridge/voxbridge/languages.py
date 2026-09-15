@@ -1,5 +1,7 @@
-"""Validated language configuration; only verified directions are enabled."""
+"""Enabled language configuration shared with the native App resource."""
 from dataclasses import dataclass
+from importlib.resources import files
+import json
 
 
 @dataclass(frozen=True)
@@ -8,15 +10,16 @@ class LanguageProfile:
     name: str
     asr_label: str
     tts_label: str
+    script: str = 'latin'
 
 
-CHINESE = LanguageProfile('zh', '中文', 'Chinese', 'Chinese')
-ENGLISH = LanguageProfile('en', '英文', 'English', 'English')
-LANGUAGES = (CHINESE, ENGLISH)
-_ALIASES = {'zh': CHINESE, 'chinese': CHINESE, '中文': CHINESE,
-            'zh-cn': CHINESE, 'zh-hans': CHINESE, 'zh-hant': CHINESE,
-            'en': ENGLISH, 'english': ENGLISH, '英文': ENGLISH, '英语': ENGLISH,
-            'en-us': ENGLISH, 'en-gb': ENGLISH}
+_CATALOG = json.loads(files('voxbridge').joinpath('language_catalog.json').read_text())
+LANGUAGES = tuple(LanguageProfile(**{key: row[key] for key in
+                  ('code', 'name', 'asr_label', 'tts_label', 'script')})
+                  for row in _CATALOG['languages'])
+_ALIASES = {alias.lower(): profile for row, profile in zip(_CATALOG['languages'], LANGUAGES)
+            for alias in (profile.code, profile.name, profile.asr_label, *row['aliases'])}
+CHINESE, ENGLISH = LANGUAGES[:2]
 
 
 def language_profile(value: str) -> LanguageProfile:
@@ -50,8 +53,27 @@ def legacy_direction(value: object) -> str:
 
 
 def pair_for_direction(value: str) -> TranslationPair:
-    if value == 'zh2en':
-        return translation_pair('zh', 'en')
-    if value == 'en2zh':
-        return translation_pair('en', 'zh')
-    raise ValueError(f'unsupported direction: {value}')
+    parts = str(value).strip().lower().split('2')
+    if len(parts) != 2 or any(part not in {p.code for p in LANGUAGES} for part in parts):
+        raise ValueError(f'unsupported direction: {value}')
+    return translation_pair(*parts)
+
+
+def normalize_direction(value: object) -> str:
+    """Accept canonical pairs and known legacy spellings; reject unknown explicit input."""
+    raw = str(value or '').strip().lower()
+    if not raw:
+        return 'zh2en'
+    for separator in ('->', '→'):
+        if separator in raw:
+            parts = raw.split(separator)
+            if len(parts) == 2:
+                return translation_pair(*parts).direction
+    return pair_for_direction(raw).direction
+
+
+def language_capabilities() -> dict:
+    return {'version': 1, 'languages': [dict(code=p.code, name=p.name,
+            asr_label=p.asr_label, tts_label=p.tts_label, script=p.script) for p in LANGUAGES],
+            'directions': [translation_pair(a.code,b.code).direction for a in LANGUAGES
+                           for b in LANGUAGES if a != b]}

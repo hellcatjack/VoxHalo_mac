@@ -16,7 +16,7 @@ def test_language_pair_drives_both_asr_and_speech_without_direction_fallback():
     assert (pair.direction, pair.source.asr_label, pair.target.tts_label) == ('en2zh', 'English', 'Chinese')
     assert catalog.translation_pair('zh', 'en').direction == 'zh2en'
     with pytest.raises(ValueError):
-        catalog.translation_pair('ja', 'zh')
+        catalog.translation_pair('de', 'zh')
     with pytest.raises(ValueError):
         catalog.translation_pair('en', 'en')
     with pytest.raises((FrozenInstanceError, AttributeError)):
@@ -92,12 +92,12 @@ def test_speech_profile_preserves_whole_chinese_sentence_and_rejects_unready_lan
     assert policy.speech_policy('Chinese').split(text) == (text,)
     assert policy.speech_policy('English').split('Welcome to our gathering.') == ('Welcome to our gathering.',)
     with pytest.raises(ValueError):
-        policy.speech_policy('Japanese')
+        policy.speech_policy('German')
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('source,target,direction', [
-    ('Japanese', 'Hindi', 'ja2hi'),
+    ('German', 'Arabic', 'de2ar'),
     ('English', 'Chinese', 'zh2en'),
     ('English', 'English', 'en2en'),
 ])

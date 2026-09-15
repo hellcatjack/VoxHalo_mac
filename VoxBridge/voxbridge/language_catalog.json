@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "languages": [
+    {
+      "code": "zh",
+      "name": "中文",
+      "asr_label": "Chinese",
+      "tts_label": "Chinese",
+      "script": "han",
+      "aliases": [
+        "zh-cn",
+        "zh-hans",
+        "zh-hant",
+        "中文"
+      ]
+    },
+    {
+      "code": "en",
+      "name": "英文",
+      "asr_label": "English",
+      "tts_label": "English",
+      "script": "latin",
+      "aliases": [
+        "en-us",
+        "en-gb",
+        "英文",
+        "英语"
+      ]
+    },
+    {
+      "code": "ja",
+      "name": "日语",
+      "asr_label": "Japanese",
+      "tts_label": "Japanese",
+      "script": "japanese",
+      "aliases": [
+        "ja-jp",
+        "日本語",
+        "日语"
+      ]
+    },
+    {
+      "code": "fr",
+      "name": "法语",
+      "asr_label": "French",
+      "tts_label": "French",
+      "script": "latin",
+      "aliases": [
+        "fr-fr",
+        "français",
+        "法语"
+      ]
+    },
+    {
+      "code": "es",
+      "name": "西班牙语",
+      "asr_label": "Spanish",
+      "tts_label": "Spanish",
+      "script": "latin",
+      "aliases": [
+        "es-es",
+        "español",
+        "西班牙语"
+      ]
+    },
+    {
+      "code": "it",
+      "name": "意大利语",
+      "asr_label": "Italian",
+      "tts_label": "Italian",
+      "script": "latin",
+      "aliases": [
+        "it-it",
+        "italiano",
+        "意大利语"
+      ]
+    },
+    {
+      "code": "pt",
+      "name": "葡萄牙语",
+      "asr_label": "Portuguese",
+      "tts_label": "Portuguese",
+      "script": "latin",
+      "aliases": [
+        "pt-br",
+        "pt-pt",
+        "português",
+        "葡萄牙语"
+      ]
+    },
+    {
+      "code": "hi",
+      "name": "印地语",
+      "asr_label": "Hindi",
+      "tts_label": "Hindi",
+      "script": "devanagari",
+      "aliases": [
+        "hi-in",
+        "हिन्दी",
+        "हिंदी",
+        "印地语"
+      ]
+    }
+  ]
+}
