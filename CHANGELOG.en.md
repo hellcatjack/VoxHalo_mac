@@ -2,6 +2,11 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 2026-09-15 · Chinese speech-rate ceiling
+
+- Expand automatic Chinese speech to the user-selected 1.10–1.30 range, with 1.10, 1.18, 1.26 and 1.30 steps. Retain existing backlog thresholds and whole-sentence synthesis.
+- Preserve other-language rates and subtitle synchronization; compatible with App 1.6.1 build 19. Earlier 1.10–1.20 replay measurements remain historical validation.
+
 ## 2026-09-15 · English endpoints and Chinese speech rate
 
 - Let English terminal periods enter final recognition at a confirmed VAD endpoint without the extra unchanged-text fallback wait. Preserve abbreviation/initial/ellipsis handling, final recognition and speech-revision checks.

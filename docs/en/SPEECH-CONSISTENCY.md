@@ -36,7 +36,7 @@ Capture, translation and native playback remain independent of browser pages.
 
 English terminal periods now request final decoding at an already-confirmed VAD endpoint, without the additional unchanged-text fallback wait. Abbreviations, initials and ellipses retain the fallback. The 800 ms VAD threshold and final recognition checks remain in force; a period alone never authorizes speech. Streaming confirmation and the 3-second/1-second stability windows are unchanged. Continuous speech, unfinished clauses and unresolved revisions can still require more evidence.
 
-Chinese automatic synthesis now uses 1.10, 1.14, 1.18 and 1.20 absolute Kokoro speed according to backlog. Prepared audio retains the speed at which it was synthesized; displayed speed and duration estimates follow that value. Chinese whole-sentence synthesis, English and other-language automatic rates, and explicit fixed-speed mode are preserved. See the [controlled replay](VALIDATION-LATENCY-2026-09-15.md).
+Chinese automatic synthesis now uses 1.10, 1.18, 1.26 and 1.30 absolute Kokoro speed according to backlog. Prepared audio retains the speed at which it was synthesized; displayed speed and duration estimates follow that value. Chinese whole-sentence synthesis, English and other-language automatic rates, and explicit fixed-speed mode are preserved. The earlier [controlled replay](VALIDATION-LATENCY-2026-09-15.md) used the previous 1.10–1.20 range; its performance numbers do not measure the later 1.30 limit.
 
 ## Short English quotations
 

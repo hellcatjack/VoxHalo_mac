@@ -623,7 +623,7 @@ async def test_worker_applies_global_multiplier_as_absolute_kokoro_speed(tmp_pat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('chunked', [False, True])
-@pytest.mark.parametrize('backlog_ms,expected', [(0, 1.10), (7_000, 1.14), (16_000, 1.18), (40_000, 1.20)])
+@pytest.mark.parametrize('backlog_ms,expected', [(0, 1.10), (7_000, 1.18), (16_000, 1.26), (40_000, 1.30)])
 async def test_chinese_auto_speed_is_bounded_in_real_synthesis_and_status(tmp_path, chunked, backlog_ms, expected):
     synth = FakeSynthesizer(make_wav())
     encoder = FakeEncoder(tmp_path / 'stream')
@@ -657,8 +657,8 @@ async def test_prepared_chinese_audio_retains_bounded_speed_on_release(tmp_path,
         encoder.pending_audio_ms = 0
         await publisher.publish(item)
         await publisher.wait_idle()
-        assert [c[2] for c in synth.speed_calls] == pytest.approx([1.20])
-        assert publisher.status.tts_effective_speed == pytest.approx(1.20)
+        assert [c[2] for c in synth.speed_calls] == pytest.approx([1.30])
+        assert publisher.status.tts_effective_speed == pytest.approx(1.30)
     finally:
         await publisher.close()
 
