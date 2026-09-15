@@ -202,7 +202,7 @@ enum HLSPlaybackGap {
             // on every stop, so a failed transport cannot poison the next run.
             let socketConfiguration = URLSessionConfiguration.ephemeral
             let delegate = NativeWebSocketDelegate { [weak self] task, error in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.generation == run, self.socket === task,
                           self.phase == .running || self.phase == .starting else { return }
                     let message = error?.localizedDescription ?? "服务已关闭语音连接。"
@@ -277,7 +277,7 @@ enum HLSPlaybackGap {
             subtitleClock = Task { [weak self] in await self?.observeSubtitlePlayback(run: run) }
             maintenance = Task { [weak self] in await self?.maintain(run: run) }
             capture.onPCM = { [weak self] data in
-                DispatchQueue.main.async { self?.enqueue(data, run: run) }
+                DispatchQueue.main.async { [weak self] in self?.enqueue(data, run: run) }
             }
             capture.onLevel = { [weak self] value in
                 guard let self, self.generation == run else { return }
@@ -498,7 +498,7 @@ enum HLSPlaybackGap {
         playerObservation = item.observe(\.status, options: [.initial, .new]) { [weak self, weak audio] item, _ in
             let status = item.status
             let error = item.error?.localizedDescription
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self, weak audio] in
                 guard let self, self.generation == run else { return }
                 if status == .failed { self.fail("无法播放朗读：\(error ?? "未知错误")", run: run) }
                 if status == .readyToPlay && !self.playbackStarted {
@@ -585,7 +585,7 @@ enum HLSPlaybackGap {
                     // Do not trim the server playlist: AVPlayer needs continuous
                     // sequence numbers. Exact forward seeks are confined to silence.
                     audio.seek(to: CMTime(seconds: target.mediaTime, preferredTimescale: 24000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self, weak audio] finished in
-                        Task { @MainActor in
+                        Task { @MainActor [weak self, weak audio] in
                             guard let self, let audio, self.generation == run, self.player === audio,
                                   self.phase == .running || self.phase == .stopping else { return }
                             self.gapSeekInFlight = false

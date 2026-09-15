@@ -189,7 +189,7 @@ extension NSColor {
         panel.contentView = textView; textView.autoresizingMask = [.width, .height]
         observer = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                                           object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.render() }
+            Task { @MainActor [weak self] in self?.render() }
         }
     }
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; pageTask?.cancel() }

@@ -99,7 +99,7 @@ private final class ConsoleDocumentView: NSView {
         subtitleSettings.onPreview = { [weak self] value in self?.subtitleOverlay.setPreview(value) }
         session.onChange = { [weak self] in self?.render() }
         reloadDevices(); showWindow(); refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor in self?.refresh() } }
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor [weak self] in self?.refresh() } }
     }
 
     private func refreshInstallationMenu() {

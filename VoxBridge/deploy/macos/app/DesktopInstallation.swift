@@ -297,8 +297,8 @@ private final class DesktopInstallWorker: @unchecked Sendable {
         }
         state = .working; phase = "checking"; event = nil; message = "正在检查安装条件…"; needsRepair = false
         let running = DesktopInstallWorker(); worker = running
-        running.onLine = { [weak self] line in Task { @MainActor in self?.receive(line) } }
-        running.onPhase = { [weak self] phase in Task { @MainActor in
+        running.onLine = { [weak self] line in Task { @MainActor [weak self] in self?.receive(line) } }
+        running.onPhase = { [weak self] phase in Task { @MainActor [weak self] in
             guard let self, self.isRunning else { return }
             self.phase = phase; self.event = nil; self.onChange?()
         } }
@@ -306,7 +306,7 @@ private final class DesktopInstallWorker: @unchecked Sendable {
         let resources = self.resources, home = dataHome
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = Result { try running.install(resources: resources, dataHome: home, metadata: metadata, repairCorrupt: repairCorrupt) }
-            Task { @MainActor in self?.finished(result) }
+            Task { @MainActor [weak self] in self?.finished(result) }
         }
     }
     func cancel() {

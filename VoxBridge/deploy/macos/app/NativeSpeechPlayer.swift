@@ -143,7 +143,7 @@ enum NativeSpeechSchedule {
         engine = audio; node = player
         let run = generation
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio, queue: .main) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, self.generation == run else { return }
                 self.onFailure?("朗读输出设备配置已变化，请重新开始传译。")
             }
@@ -194,7 +194,7 @@ enum NativeSpeechSchedule {
             onPCMChunk?(chunk)
             #endif
             node.scheduleBuffer(buffer, at: AVAudioTime(sampleTime: start, atRate: 24000), options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.generation == run else { return }
                     self.pending.removeAll { $0.seq == chunk.seq }
                     self.completed.insert(chunk.seq)

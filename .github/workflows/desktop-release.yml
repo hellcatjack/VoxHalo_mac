@@ -17,6 +17,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Check native Apple Silicon runner
         run: test "$(uname -m)" = arm64
+      - name: Check native compiler compatibility
+        id: native
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 VoxBridge/tools/build_macos_app.py --destination dist/native-preflight/同声传译.app 2>&1 | tee desktop-native.log
       - name: Build portable runtime, App, ZIP and DMG
         id: package
         shell: bash
@@ -28,16 +34,6 @@ jobs:
         run: |
           set -o pipefail
           ./scripts/bootstrap_release.sh 2>&1 | tee desktop-build.log
-      - name: Report build failure
-        if: failure() && steps.package.outcome == 'failure'
-        shell: python3 {0}
-        run: |
-          from pathlib import Path
-          log = Path('desktop-build.log')
-          detail = '\n'.join(log.read_text(errors='replace').splitlines()[-70:])[-20000:] if log.exists() else 'Build did not create a log.'
-          for offset in range(0, len(detail), 3000):
-              part = detail[offset:offset + 3000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print(f'::error title=Desktop build diagnostic {offset // 3000 + 1}::{part}')
       - name: Verify release contracts
         id: contracts
         shell: bash
@@ -48,16 +44,21 @@ jobs:
           runtime/release-tools/uv pip install --python .venv/bin/python pytest==8.4.2
           cd VoxBridge
           ../.venv/bin/python -m pytest tests/test_desktop_bundle.py tests/test_desktop_packaging.py tests/test_desktop_installer.py tests/test_desktop_native.py -q 2>&1 | tee ../desktop-contracts.log
-      - name: Report contract failure
-        if: failure() && steps.contracts.outcome == 'failure'
+      - name: Report release failure
+        if: failure()
+        env:
+          FAILED_STAGE: ${{ steps.native.outcome == 'failure' && 'native' || steps.package.outcome == 'failure' && 'build' || 'contracts' }}
         shell: python3 {0}
         run: |
           from pathlib import Path
-          log = Path('desktop-contracts.log')
-          detail = log.read_text(errors='replace')[-18000:] if log.exists() else 'Test environment setup failed.'
+          import os, re
+          stage = os.environ['FAILED_STAGE']
+          log = Path(f'desktop-{stage}.log')
+          detail = log.read_text(errors='replace')[-18000:] if log.exists() else 'Release environment setup failed.'
+          detail = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', detail)
           for offset in range(0, len(detail), 3000):
               part = detail[offset:offset + 3000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print(f'::error title=Desktop test diagnostic {offset // 3000 + 1}::{part}')
+              print(f'::error title=Desktop {stage} diagnostic {offset // 3000 + 1}::{part}')
       - name: Save installable packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
