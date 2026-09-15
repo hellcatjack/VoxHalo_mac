@@ -17,11 +17,11 @@ import CoreMedia
                 guard !cancelled else { continuation.resume(throwing: CancellationError()); return }
                 self.continuation = continuation
                 request { [weak self] allowed in
-                    Task { @MainActor in self?.complete(allowed) }
+                    Task { @MainActor [weak self] in self?.complete(allowed) }
                 }
             }
         } onCancel: { [weak self] in
-            Task { @MainActor in self?.cancel() }
+            Task { @MainActor [weak self] in self?.cancel() }
         }
     }
 
@@ -328,7 +328,7 @@ enum MicrophoneReconfiguration {
         self.engine = engine
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
             // Never restart/tear down the engine on its internal notification queue.
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let self, self.generation == token, let engine = self.engine else { return }
                 do {
                     let available = try AudioDevices.inputs().contains { $0.uid == selected.uid }
