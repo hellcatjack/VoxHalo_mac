@@ -14,12 +14,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh api "repos/$GH_REPO/actions/jobs/104420121121/logs" > prior-build.log 2>&1 || true
+        run: gh api --allow-escape-sequences "repos/$GH_REPO/actions/jobs/104420121121/logs" > prior-build.log 2>&1 || true
       - name: Show failure tail
         shell: python3 {0}
         run: |
           from pathlib import Path
+          import re
           detail = '\n'.join(Path('prior-build.log').read_text(errors='replace').splitlines()[-45:])[-18000:]
+          detail = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', detail)
           for offset in range(0, len(detail), 2800):
               part = detail[offset:offset + 2800].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print(f'::warning title=Previous build {offset // 2800 + 1}::{part}')
