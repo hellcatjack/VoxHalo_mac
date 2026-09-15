@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/SPEECH-CONSISTENCY.md)
 
-Starting with App 1.6.1 (build 19), native interpretation distinguishes completed translation, permission to publish, and actual audio commitment. Translation and speech synthesis can start early. Chinese retains complete semantic units; pinned models, voices and automatic speed settings remain unchanged.
+Starting with App 1.6.1 (build 19), native interpretation distinguishes completed translation, permission to publish, and actual audio commitment. Translation and speech synthesis can start early. Chinese retains complete semantic units; pinned models and voices remain unchanged. Chinese automatic speed is bounded as described below.
 
 ## Publication rules
 
@@ -31,6 +31,12 @@ These conservative hints are not a full grammar parser or named-entity recognize
 - With native output explicitly disabled, the App can display the latest completed translation. This does not represent another LAN device's playback position.
 
 Capture, translation and native playback remain independent of browser pages.
+
+## English endpoints and Chinese automatic speed
+
+English terminal periods now request final decoding at an already-confirmed VAD endpoint, without the additional unchanged-text fallback wait. Abbreviations, initials and ellipses retain the fallback. The 800 ms VAD threshold and final recognition checks remain in force; a period alone never authorizes speech. Streaming confirmation and the 3-second/1-second stability windows are unchanged. Continuous speech, unfinished clauses and unresolved revisions can still require more evidence.
+
+Chinese automatic synthesis now uses 1.10, 1.14, 1.18 and 1.20 absolute Kokoro speed according to backlog. Prepared audio retains the speed at which it was synthesized; displayed speed and duration estimates follow that value. Chinese whole-sentence synthesis, English and other-language automatic rates, and explicit fixed-speed mode are preserved. See the [controlled replay](VALIDATION-LATENCY-2026-09-15.md).
 
 ## Short English quotations
 

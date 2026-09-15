@@ -112,6 +112,7 @@ from voxbridge.streaming.sentence_rules import (
     INITIALS_ABBREVIATION_PATTERN,
     MIN_CJK_SENTENCE_CHARS,
     _english_word_count,
+    english_period_endpoint,
     _find_first_boundary_after,
     _is_abbreviation_period_boundary,
     _is_short_english_sentence_for_early_commit,
@@ -5198,6 +5199,8 @@ def _create_app(
                 if completed and not tail:
                     return True
             if bool(re.search(r"[。！？!?…]+[\"'”’)\]）】》]*$", snapshot)):
+                return True
+            if translation_runtime.source_language == 'English' and english_period_endpoint(snapshot):
                 return True
             idle_ms = (time.monotonic() - float(last_text_advance_at)) * 1000.0
             min_idle_ms = max(float(text_stable_cut_ms), 1200.0)

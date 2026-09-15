@@ -47,7 +47,7 @@ Prompt construction is in [prompts.py](../../VoxBridge/voxbridge/translation/pro
 
 ## 3. Kokoro: translated speech
 
-Kokoro is a compact neural TTS model, not the translation language model. Both approximately 82M-parameter versions use `kokoro-onnx 0.5.0`, ONNX Runtime 1.30.0, two CPU threads, and a base speed of 1.05 with automatic catch-up. CPU synthesis leaves GPU capacity for ASR and translation.
+Kokoro is a compact neural TTS model, not the translation language model. Both approximately 82M-parameter versions use `kokoro-onnx 0.5.0`, ONNX Runtime 1.30.0, two CPU threads and automatic catch-up. English retains its 1.05 base speed; Chinese automatic synthesis uses an absolute range of 1.10–1.20 (steps 1.10, 1.14, 1.18, 1.20). Explicit fixed-speed mode remains configurable. CPU synthesis leaves GPU capacity for ASR and translation.
 
 | Output | Model | Voice | Segmentation |
 |---|---|---|---|

@@ -16,6 +16,51 @@ from test_tts_hls import FakeEncoder
 from types import SimpleNamespace
 
 
+@pytest.mark.parametrize('sentence', ['The sixth day.', 'The work is complete.', 'He said, “The work is complete.”'])
+def test_english_period_finalizes_at_confirmed_silence_without_extra_text_idle(tmp_path, sentence):
+    """An audible endpoint must reach final ASR before speech is committed."""
+    import json
+    from pathlib import Path
+    class ASR(_FakeASR):
+        def streaming_transcribe(self, wav, state):
+            state.audio_accum = np.concatenate((state.audio_accum, wav))
+            state.language, state.text = 'English', sentence
+            return state
+        def finish_streaming_transcribe(self, state):
+            self.finish_calls += 1
+            return state
+    asr = ASR()
+    asr.transcribe_text = sentence
+    asr.transcribe_language = 'English'
+    args = _args()
+    args.segment_final_redecode = True
+    args.vad_silence_sec = 0.8
+    args.vad_force_cut_sec = 1.8
+    args.vad_min_slice_sec = 0.5
+    args.vad_min_active_sec = 0.2
+    args.backend_cut_stable_sec = 10  # Endpoint punctuation must bypass this fallback.
+    args.final_redecode_on_stop = False
+    args.subtitle_trace_log = True
+    args.subtitle_trace_log_file = str(tmp_path / 'endpoint.jsonl')
+    with TestClient(_create_app(args, asr)).websocket_connect('/ws') as ws:
+        ws.receive_json()
+        ws.send_json({'type': 'start', 'translation_direction': 'en2zh'})
+        _receive_until_type(ws, 'started')
+        ws.send_bytes(np.full(6400, 20000, dtype='<i2').tobytes())
+        _receive_until_type(ws, 'partial')
+        time.sleep(.55)
+        ws.send_json({'type': 'audio_silence', 'duration_ms': 900, 'capture_sample_index': 20800})
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            rows = [json.loads(line) for line in Path(args.subtitle_trace_log_file).read_text().splitlines()]
+            if any(r.get('event') in {'segment_cut_deferred', 'segment_finalize_done'} for r in rows):
+                break
+            time.sleep(.01)
+        assert any(r.get('event') == 'segment_finalize_done' for r in rows)
+        assert asr.finish_calls == 1
+        assert len(asr.transcribe_calls) == 1
+
+
 def test_native_revision_replaces_queued_audio_and_preserves_sentence_order(monkeypatch, tmp_path):
     entered, unblock = threading.Event(), threading.Event()
     class ASR(_FastRevisionASR):

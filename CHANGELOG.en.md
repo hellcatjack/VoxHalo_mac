@@ -2,6 +2,12 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 2026-09-15 · English endpoints and Chinese speech rate
+
+- Let English terminal periods enter final recognition at a confirmed VAD endpoint without the extra unchanged-text fallback wait. Preserve abbreviation/initial/ellipsis handling, final recognition and speech-revision checks.
+- Limit automatic Chinese synthesis to 1.10–1.20, with intermediate 1.14 and 1.18 steps. Preserve whole-sentence synthesis, already-prepared audio and other-language rates.
+- Two 180-second replays of identical English audio reduced translation-to-PCM P90 from 5.79 to 4.27 seconds; median latency did not improve and some confirmation waits remain. See the [validation report](docs/en/VALIDATION-LATENCY-2026-09-15.md). This service update works with App 1.6.1 build 19.
+
 ## 2026-09-15 · English quotation speech fix
 
 - Keep a short quotation and its introduction in one synthesis when they fit the existing 18-word chunk budget, avoiding unnecessary comma, semicolon and colon cuts around quoted phrases.

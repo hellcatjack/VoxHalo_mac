@@ -1129,6 +1129,9 @@ class SharedHLSTTSPublisher:
         if self._auto_speed_enabled and not force_join_baseline:
             multiplier = select_global_tts_multiplier(backlog_ms)
         effective_speed = self._baseline_tts_speed * multiplier
+        if self._auto_speed_enabled:
+            effective_speed = speech_policy(key[2]).automatic_speed(self._baseline_tts_speed, multiplier)
+            multiplier = effective_speed / self._baseline_tts_speed
         if not math.isfinite(effective_speed) or not 0.5 <= effective_speed <= 2.0:
             logger.warning(
                 "shared HLS TTS speed fallback epoch=%s backlog_ms=%d multiplier=%.1f effective_speed=%.3f",

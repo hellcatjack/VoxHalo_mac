@@ -622,6 +622,67 @@ async def test_worker_applies_global_multiplier_as_absolute_kokoro_speed(tmp_pat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('chunked', [False, True])
+@pytest.mark.parametrize('backlog_ms,expected', [(0, 1.10), (7_000, 1.14), (16_000, 1.18), (40_000, 1.20)])
+async def test_chinese_auto_speed_is_bounded_in_real_synthesis_and_status(tmp_path, chunked, backlog_ms, expected):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / 'stream')
+    encoder.pending_audio_ms = backlog_ms
+    publisher = SharedHLSTTSPublisher(synthesizer=synth, encoder_factory=lambda root: encoder,
+        root_dir=tmp_path, chunked_synthesis=chunked)
+    item = TTSReadyItem('speed-zh', 1, 0, 'Chinese', '你好。')
+    try:
+        await publisher.touch_listener('speed-listener', 'owner')
+        await publisher.publish(item)
+        await publisher.wait_idle()
+        assert [c[2] for c in synth.speed_calls] == pytest.approx([expected])
+        assert publisher.status.tts_effective_speed == pytest.approx(expected)
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('chunked', [False, True])
+async def test_prepared_chinese_audio_retains_bounded_speed_on_release(tmp_path, chunked):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / 'stream')
+    encoder.pending_audio_ms = 40_000
+    publisher = SharedHLSTTSPublisher(synthesizer=synth, encoder_factory=lambda root: encoder,
+        root_dir=tmp_path, chunked_synthesis=chunked)
+    item = TTSReadyItem('prepared-speed-zh', 1, 0, 'Chinese', '准备好的整句保持原来的朗读速度。')
+    try:
+        await publisher.touch_listener('speed-listener', 'owner')
+        await publisher.prepare(item)
+        await wait_until(lambda: publisher.status.prepared_audio_count == 1)
+        encoder.pending_audio_ms = 0
+        await publisher.publish(item)
+        await publisher.wait_idle()
+        assert [c[2] for c in synth.speed_calls] == pytest.approx([1.20])
+        assert publisher.status.tts_effective_speed == pytest.approx(1.20)
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('chunked', [False, True])
+@pytest.mark.parametrize('language', ['Chinese', 'English'])
+async def test_fixed_speech_speed_remains_explicit_under_backlog(tmp_path, chunked, language):
+    synth = FakeSynthesizer(make_wav())
+    encoder = FakeEncoder(tmp_path / 'stream')
+    encoder.pending_audio_ms = 40_000
+    publisher = SharedHLSTTSPublisher(synthesizer=synth, encoder_factory=lambda root: encoder,
+        root_dir=tmp_path, chunked_synthesis=chunked, auto_speed_enabled=False, baseline_tts_speed=1.08)
+    try:
+        await publisher.touch_listener('fixed-listener', 'owner')
+        await publisher.publish(TTSReadyItem('fixed', 1, 0, language, '测试。' if language == 'Chinese' else 'Test.'))
+        await publisher.wait_idle()
+        assert [c[2] for c in synth.speed_calls] == pytest.approx([1.08])
+        assert publisher.status.tts_effective_speed == pytest.approx(1.08)
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
 async def test_release_reuses_speed_selected_when_audio_was_prepared(tmp_path):
     synth = FakeSynthesizer(make_wav(duration_ms=250))
     encoder = FakeEncoder(tmp_path / "stream")

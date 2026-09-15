@@ -147,6 +147,20 @@ def _text_ends_with_sentence_terminator(text: str) -> bool:
     return bool(re.search(r"[。！？!?….।॥]$", src))
 
 
+def english_period_endpoint(text: str) -> bool:
+    """A period can request final decoding after VAD, not authorize speech."""
+    core = str(text or '').rstrip().rstrip(SENTENCE_CLOSER_CHARS).rstrip()
+    if not core.endswith('.') or core.endswith('..'):
+        return False
+    token = core.rsplit(None, 1)[-1].lower().lstrip('"\'“‘([{')
+    if token in {'dr.', 'mr.', 'mrs.', 'ms.', 'prof.', 'rev.', 'st.', 'vs.', 'etc.',
+                 'e.g.', 'i.e.', 'sr.', 'jr.'}:
+        return False
+    if re.fullmatch(r'(?:[a-z]\.)+', token):
+        return False
+    return True
+
+
 def _is_abbreviation_period_boundary(text: str, start: int, end: int) -> bool:
     src = str(text or "")
     if not src:
