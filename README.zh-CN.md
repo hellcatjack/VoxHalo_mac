@@ -4,11 +4,13 @@
 
 在 Apple Silicon Mac 上独立运行的八语言语音传译系统，提供原生音频采集、译音朗读、与播放同步的字幕，以及局域网听众功能。
 
-**App 版本：**1.6.1，build 19 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App 版本：**1.7.0，build 20 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
-App 名称为 **同声传译**，当前界面为中文。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
+App 中文名称为 **同声传译**。App、监控页和听众页均提供八种界面语言，默认跟随系统或浏览器并记住手动选择。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
 
 ## 文档导航
+
+- [界面语言与切换方法](docs/zh-CN/INTERFACE-LANGUAGES.md)
 
 - [八语言验证与限制](docs/zh-CN/EIGHT-LANGUAGES.md)
 - [朗读与字幕版本一致性](docs/zh-CN/SPEECH-CONSISTENCY.md)
@@ -96,6 +98,8 @@ open "$HOME/Applications/同声传译.app"
 **请保留整个仓库及其安装路径。** App 会记录该路径，并使用其中的 `.venv`、`runtime` 和 `models`。只复制 `.app` 到另一台 Mac 无法完成迁移。App 使用本机临时签名，未经 Developer ID 公证；当前发布形式为源码与安装脚本，不是通用独立 DMG。
 
 ## 使用方法
+
+在 **界面语言 / Interface language** 中选择语言，或选择跟随系统。网页有独立的语言选择器。界面语言与识别、翻译、朗读语言分别设置；运行中切换界面语言不会中断业务。
 
 1. 在 App 中选择**输入来源**、**朗读输出**和**识别 → 译音**的源语言、目标语言。
 2. 可选填写少量 ASR 提示词，点击**开始传译**，按 macOS 提示允许音频权限。

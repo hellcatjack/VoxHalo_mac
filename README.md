@@ -4,11 +4,13 @@
 
 Local speech interpretation between eight languages for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
 
-**App:** 1.6.1, build 19 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App:** 1.7.0, build 20 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
-The App is named **同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
+The App is named **同声传译** in Chinese. The App, monitor and listener pages offer eight interface languages, follow system/browser preferences by default, and remember manual choices. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 
 ## Documentation
+
+- [Interface languages and switching](docs/en/INTERFACE-LANGUAGES.md)
 
 - [Detailed installation, updates, and troubleshooting](docs/en/INSTALLATION.md)
 - [Eight-language validation and limitations](docs/en/EIGHT-LANGUAGES.md)
@@ -96,6 +98,8 @@ No Homebrew, Docker, separately installed Python, virtual sound card, paid API, 
 **Keep the entire checkout at its installation path.** The App records that path and uses its `.venv`, `runtime`, and `models` directories. Copying only the `.app` to another Mac is insufficient. Builds use an ad-hoc local signature and are not Developer ID notarized. Distribution is source plus an installer, not a universal standalone DMG.
 
 ## Usage
+
+Choose **Interface language** in the App, or keep **Follow system**. Each browser has its own language selector. Interface language is independent of recognition, translation and speech; changing it during a session does not interrupt interpretation.
 
 1. Choose **输入来源** (input), **朗读输出** (output), and **识别 → 译音** (source → target) in the App.
 2. Optionally enter a few ASR context terms, then select **开始传译** (start interpretation). Allow the requested macOS audio permissions.

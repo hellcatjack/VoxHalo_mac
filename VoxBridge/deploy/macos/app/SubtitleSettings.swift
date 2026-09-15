@@ -7,6 +7,8 @@ import AppKit
     private var window: NSWindow?
     private var active = false
     private var syncing = false
+    private let localizedViews = NativeLocalizedViews()
+    private var errorMessage = ""
     private let enabled = NSButton(checkboxWithTitle: "显示翻译字幕", target: nil, action: nil)
     private let preview = NSButton(checkboxWithTitle: "预览字幕样式（仅在未传译时可用）", target: nil, action: nil)
     private let font = NSPopUpButton()
@@ -24,7 +26,7 @@ import AppKit
     init(preferences: SubtitlePreferences) { self.preferences = preferences.normalized(); super.init() }
     func show() {
         if window == nil { build() }
-        reloadDisplays(); sync()
+        reloadDisplays(); sync(); refreshLocalization()
         window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
     func setSessionActive(_ value: Bool) {
@@ -36,6 +38,13 @@ import AppKit
         self.preferences = preferences.normalized()
         if window != nil { sync() }
     }
+    func refreshLocalization() {
+        guard let window, let content = window.contentView else { return }
+        window.title = NativeLocalization.text("字幕设置")
+        localizedViews.capture(content, excluding: [errorLabel]); localizedViews.apply()
+        errorLabel.stringValue = NativeLocalization.render(errorMessage)
+    }
+    private func showError(_ value: String) { errorMessage = value; errorLabel.stringValue = NativeLocalization.render(value) }
     func close() { window?.close(); preview.state = .off; onPreview?(false) }
     func windowWillClose(_ notification: Notification) { preview.state = .off; onPreview?(false) }
 
@@ -44,7 +53,7 @@ import AppKit
         return stack
     }
     private func build() {
-        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 590, height: 670),
+        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 700),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
         panel.title = "字幕设置"; panel.isReleasedWhenClosed = false; panel.delegate = self; panel.center(); window = panel
         let body = NSStackView(); body.orientation = .vertical; body.alignment = .leading; body.spacing = 13
@@ -67,7 +76,7 @@ import AppKit
         intro.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         body.addArrangedSubview(enabled)
         func add(_ name: String, _ view: NSView) {
-            let label = NSTextField(labelWithString: name); label.widthAnchor.constraint(equalToConstant: 86).isActive = true
+            let label = NSTextField(wrappingLabelWithString: name); label.widthAnchor.constraint(equalToConstant: 160).isActive = true
             let line = row([label, view]); body.addArrangedSubview(line)
             line.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
             view.widthAnchor.constraint(equalToConstant: 420).isActive = true
@@ -77,6 +86,7 @@ import AppKit
         }) {
             font.addItem(withTitle: NSFont(name: name, size: 12)?.displayName ?? name)
             font.lastItem?.representedObject = name
+            font.lastItem?.identifier = NSUserInterfaceItemIdentifier("literal")
         }
         font.setAccessibilityLabel("字幕字体"); add("字体", font)
         addSlider("fontSize", label: "字号", range: 12...144, to: add)
@@ -109,8 +119,9 @@ import AppKit
             control.target = self; control.action = #selector(changed(_:))
         }
         preview.target = self; preview.action = #selector(previewChanged); preview.isEnabled = !active
+        refreshLocalization()
         body.layoutSubtreeIfNeeded()
-        panel.setContentSize(NSSize(width: 590, height: min(body.fittingSize.height + 44, (NSScreen.main?.visibleFrame.height ?? 760) - 70)))
+        panel.setContentSize(NSSize(width: 700, height: min(body.fittingSize.height + 44, (NSScreen.main?.visibleFrame.height ?? 760) - 70)))
         panel.contentView?.layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
         scroll.reflectScrolledClipView(scroll.contentView)
@@ -139,6 +150,7 @@ import AppKit
         for screen in NSScreen.screens {
             displays.addItem(withTitle: screen.localizedName)
             displays.lastItem?.representedObject = SubtitleDisplays.id(screen)
+            displays.lastItem?.identifier = NSUserInterfaceItemIdentifier("literal")
         }
         if !preferences.screenID.isEmpty && !displays.itemArray.contains(where: { $0.representedObject as? String == preferences.screenID }) {
             displays.addItem(withTitle: "所选显示器已断开 · 暂用主显示器")
@@ -173,6 +185,7 @@ import AppKit
         for view in [shadowColor, shadowHex, sliders["shadowOpacity"]!, sliders["shadowBlur"]!, sliders["shadowOffset"]!] as [NSControl] {
             view.isEnabled = p.shadowEnabled
         }
+        refreshLocalization()
     }
     @objc private func changed(_ sender: NSControl) {
         guard !syncing else { return }
@@ -184,7 +197,7 @@ import AppKit
         p.shadowColorHex = sender === shadowColor ? shadowColor.color.subtitleHex : shadowHex.stringValue
         for hex in [p.textColorHex, p.shadowColorHex] {
             guard hex.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil else {
-                errorLabel.stringValue = "颜色请填写 #RRGGBB，例如 #FFFFFF。"; return
+                showError("颜色请填写 #RRGGBB，例如 #FFFFFF。"); return
             }
         }
         p.fontSize = sliders["fontSize"]!.doubleValue.rounded()
@@ -202,8 +215,8 @@ import AppKit
     private func save(_ value: SubtitlePreferences) {
         do {
             let p = value.normalized(); try p.save(); preferences = p
-            errorLabel.stringValue = ""; sync(); onChange?(p)
-        } catch { errorLabel.stringValue = "无法保存字幕设置：\(error.localizedDescription)" }
+            showError(""); sync(); onChange?(p)
+        } catch { showError("无法保存字幕设置：\(error.localizedDescription)") }
     }
     @objc private func resetStyle() { save(SubtitlePreferences()) }
     @objc private func previewChanged() { onPreview?(preview.state == .on && !active) }

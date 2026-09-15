@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -24,12 +25,16 @@ LONG_CAPTION = (
 @pytest.fixture
 def listener_page():
     chrome = shutil.which("google-chrome")
+    mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if chrome is None and mac_chrome.is_file():
+        chrome = str(mac_chrome)
     if chrome is None:
         pytest.skip("system Google Chrome is unavailable")
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome, headless=True)
         context = browser.new_context(viewport={"width": 1280, "height": 900})
         page = context.new_page()
+        page.route("**/listen/assets/hls.min.js", lambda route: route.fulfill(body=""))
         page.route(
             "https://voxbridge.test/listen",
             lambda route: route.fulfill(
@@ -1370,3 +1375,95 @@ def test_listener_registers_lock_screen_media_session_controls(listener_page):
         "artist": "VoxHalo",
         "actions": ["pause", "play"],
     }
+
+
+@pytest.mark.parametrize("native_hls", [True, False])
+def test_live_interface_switch_preserves_audio_and_caption(listener_page, native_hls):
+    from voxbridge.web.localization import WEB_CATALOG
+
+    # This real caption deliberately matches an English placeholder. Only explicit
+    # UI bindings may be relabeled; translation text must never be guessed at.
+    original = "Waiting for translated speech"
+    _install_hls_harness(listener_page, caption_snapshot={
+        "live_edge_at_ms": 100000,
+        "cues": [{"cue_id": "speech-1-r7", "text": original,
+                  "start_at_ms": 80000, "end_at_ms": 110000}],
+    }, translated_audio_backlog_ms=6500, global_speed_multiplier=1.2,
+       native_hls=native_hls, hls_js_supported=not native_hls)
+    _start_hls_harness(listener_page)
+    if not native_hls:
+        listener_page.evaluate("window.__ttsHlsInstances[0].playingDate = new Date(90000)")
+    _set_live_lag(listener_page, current_time=50, live_edge=60)
+    listener_page.wait_for_function("document.querySelector('#nowPlaying').dataset.speaking === 'true'")
+    snapshot = """() => ({
+      plays: window.__ttsPlayCalls.length, pauses: window.__ttsPauseCalls,
+      seeks: window.__ttsSeekCalls, sources: window.__ttsSourceAssignments,
+      src: document.querySelector('#ttsPlayback').src,
+      rate: document.querySelector('#ttsPlayback').playbackRate,
+      defaultRate: document.querySelector('#ttsPlayback').defaultPlaybackRate,
+      time: document.querySelector('#ttsPlayback').currentTime,
+      playing: document.querySelector('#nowPlaying').dataset.playing,
+      speaking: document.querySelector('#nowPlaying').dataset.speaking,
+      deletes: window.__ttsFetchCalls.filter(call => call.method === 'DELETE'),
+      mediaState: window.__ttsMediaSession.playbackState,
+      hls: window.__ttsHlsInstances.map(controller => ({destroyed: controller.destroyed, sources: controller.loadedSources})),
+      caption: document.querySelector('#liveCaption').textContent
+    })"""
+    before = listener_page.evaluate(snapshot)
+    for locale, messages in WEB_CATALOG.items():
+        listener_page.select_option("#interfaceLanguage", locale)
+        assert listener_page.text_content("#startListening") == messages["listener.start"]
+        assert listener_page.text_content("#connectionStatus") == messages["listener.connected"]
+        assert listener_page.evaluate("window.__ttsMediaSession.metadata.title") == messages["listener.title"]
+        assert listener_page.evaluate(snapshot) == before
+        assert listener_page.locator("#startListening").is_disabled()
+        assert listener_page.locator("#stopListening").is_enabled()
+    assert before["caption"] == original
+    assert before["plays"] == 1
+    assert before["pauses"] == 0
+
+
+def test_interface_switch_relabels_blocked_and_waiting_messages(listener_page):
+    from voxbridge.web.localization import WEB_CATALOG
+
+    _install_hls_harness(listener_page, reject_first_play=True)
+    listener_page.goto("https://voxbridge.test/listen")
+    listener_page.click("#startListening")
+    listener_page.wait_for_function("document.querySelector('#connectionStatus').textContent === 'Tap to continue'")
+    listener_page.select_option("#interfaceLanguage", "ja")
+    assert listener_page.text_content("#connectionStatus") == WEB_CATALOG["ja"]["listener.tapContinue"]
+    assert listener_page.text_content("#playbackStatus") == WEB_CATALOG["ja"]["listener.tapResume"]
+    assert listener_page.text_content("#liveCaption") == WEB_CATALOG["ja"]["listener.waitSpeech"]
+    assert listener_page.locator("#resumeListening").is_visible()
+    assert len(listener_page.evaluate("window.__ttsPlayCalls")) == 1
+    assert listener_page.evaluate("window.__ttsPauseCalls") == 0
+
+
+@pytest.mark.parametrize("locale", ["zh", "en", "ja", "fr", "es", "it", "pt", "hi"])
+@pytest.mark.parametrize("viewport", [{"width": 390, "height": 844}, {"width": 667, "height": 375}, {"width": 320, "height": 568}])
+def test_localized_listener_controls_fit_viewport(listener_page, locale, viewport):
+    _install_hls_harness(listener_page)
+    listener_page.set_viewport_size(viewport)
+    _start_hls_harness(listener_page)
+    listener_page.select_option("#interfaceLanguage", locale)
+    for selector in ("#interfaceLanguage", "#startListening", "#stopListening", "#connectionCard", "#globalSpeedStatus"):
+        box = listener_page.locator(selector).bounding_box()
+        assert box and box["width"] > 0 and box["height"] > 0
+        assert box["x"] >= 0 and box["y"] >= 0
+        assert box["x"] + box["width"] <= viewport["width"] + 1
+        assert box["y"] + box["height"] <= viewport["height"] + 1
+    assert listener_page.locator("#startListening").evaluate("node => node.scrollHeight <= node.clientHeight + 1")
+
+
+def test_interface_switch_preserves_lock_screen_pause(listener_page):
+    from voxbridge.web.localization import WEB_CATALOG
+
+    _install_hls_harness(listener_page)
+    _start_hls_harness(listener_page)
+    listener_page.evaluate("window.__ttsMediaActions.pause()")
+    listener_page.select_option("#interfaceLanguage", "fr")
+    assert listener_page.text_content("#playbackStatus") == WEB_CATALOG["fr"]["listener.paused"]
+    assert listener_page.evaluate("window.__ttsMediaSession.playbackState") == "paused"
+    assert listener_page.evaluate("window.__ttsPauseCalls") == 1
+    assert len(listener_page.evaluate("window.__ttsPlayCalls")) == 1
+    assert listener_page.get_attribute("#nowPlaying", "data-playing") == "false"

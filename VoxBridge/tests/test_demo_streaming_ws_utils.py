@@ -2345,13 +2345,13 @@ def test_listener_page_exposes_read_only_global_auto_speed():
     assert 'id="playbackRate"' not in TTS_LISTENER_HTML
     assert "PLAYBACK_RATE_STORAGE_KEY" not in TTS_LISTENER_HTML
     assert "SUPPORTED_PLAYBACK_RATES" not in TTS_LISTENER_HTML
-    assert "window.localStorage" not in TTS_LISTENER_HTML
+    assert "voxhalo.interfaceLanguage" in TTS_LISTENER_HTML
 
 
 def test_listener_page_renders_server_global_speed_status_without_writing_it():
     assert 'status.global_speed_mode === "fixed" ? "Fixed" : "Auto"' in TTS_LISTENER_HTML
     assert "Number(status.global_speed_multiplier)" in TTS_LISTENER_HTML
-    assert "globalSpeedStatus.textContent =" in TTS_LISTENER_HTML
+    assert 'ui.bind(globalSpeedStatus, "listener.speedValue", speedParameters)' in TTS_LISTENER_HTML
     assert 'send({ type: "set_playback_rate"' not in TTS_LISTENER_HTML
 
 
@@ -2394,7 +2394,7 @@ def test_listener_page_uses_neutral_multilingual_branding_and_fits_viewport():
     assert "Resume Audio" in TTS_LISTENER_HTML
     assert "height: 100dvh" in TTS_LISTENER_HTML
     assert "overflow: hidden" in TTS_LISTENER_HTML
-    assert 'lang="zh-CN">同声传译' in TTS_LISTENER_HTML
+    assert 'data-i18n="listener.brand"' in TTS_LISTENER_HTML
 
 
 def test_listener_page_exposes_lock_screen_media_session_and_resume_action():

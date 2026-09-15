@@ -1,0 +1,925 @@
+{
+  "version": 1,
+  "messages": {
+    "选择音频设备后开始传译": {
+      "zh": "选择音频设备后开始传译",
+      "en": "Select audio devices, then start interpreting",
+      "ja": "音声デバイスを選択してから通訳を開始してください",
+      "fr": "Sélectionnez les périphériques audio, puis lancez l’interprétation",
+      "es": "Selecciona los dispositivos de audio y empieza la interpretación",
+      "it": "Seleziona i dispositivi audio, poi avvia l’interpretazione",
+      "pt": "Selecione os dispositivos de áudio e inicie a interpretação",
+      "hi": "ऑडियो डिवाइस चुनें, फिर अनुवाद शुरू करें"
+    },
+    "所选输出设备已断开，请重新选择。": {
+      "zh": "所选输出设备已断开，请重新选择。",
+      "en": "The selected output device is disconnected. Select an output device again.",
+      "ja": "選択した出力デバイスが切断されました。出力デバイスを選び直してください。",
+      "fr": "Le périphérique de sortie sélectionné est déconnecté. Sélectionnez à nouveau un périphérique de sortie.",
+      "es": "El dispositivo de salida seleccionado se ha desconectado. Vuelve a seleccionar uno.",
+      "it": "Il dispositivo di uscita selezionato è scollegato. Seleziona di nuovo un dispositivo di uscita.",
+      "pt": "O dispositivo de saída selecionado foi desconectado. Selecione um dispositivo de saída novamente.",
+      "hi": "चुना गया आउटपुट डिवाइस डिस्कनेक्ट हो गया है। आउटपुट डिवाइस फिर से चुनें।"
+    },
+    "本机控制凭据无效，请重新启动服务。": {
+      "zh": "本机控制凭据无效，请重新启动服务。",
+      "en": "Local control credentials are invalid. Restart the service.",
+      "ja": "ローカル制御の認証情報が無効です。サービスを再起動してください。",
+      "fr": "Les identifiants de contrôle local ne sont pas valides. Redémarrez le service.",
+      "es": "Las credenciales de control local no son válidas. Reinicia el servicio.",
+      "it": "Le credenziali di controllo locale non sono valide. Riavvia il servizio.",
+      "pt": "As credenciais de controle local são inválidas. Reinicie o serviço.",
+      "hi": "स्थानीय नियंत्रण के क्रेडेंशियल अमान्य हैं। सेवा फिर से शुरू करें।"
+    },
+    "正在连接本机识别服务…": {
+      "zh": "正在连接本机识别服务…",
+      "en": "Connecting to the local speech recognition service…",
+      "ja": "ローカル音声認識サービスに接続中…",
+      "fr": "Connexion au service local de reconnaissance vocale…",
+      "es": "Conectando con el servicio local de reconocimiento de voz…",
+      "it": "Connessione al servizio locale di riconoscimento vocale…",
+      "pt": "Conectando ao serviço local de reconhecimento de fala…",
+      "hi": "स्थानीय वाक् पहचान सेवा से कनेक्ट हो रहा है…"
+    },
+    "服务已关闭语音连接。": {
+      "zh": "服务已关闭语音连接。",
+      "en": "The service closed the speech connection.",
+      "ja": "サービスが音声接続を閉じました。",
+      "fr": "Le service a fermé la connexion vocale.",
+      "es": "El servicio ha cerrado la conexión de voz.",
+      "it": "Il servizio ha chiuso la connessione vocale.",
+      "pt": "O serviço encerrou a conexão de voz.",
+      "hi": "सेवा ने वाणी कनेक्शन बंद कर दिया है।"
+    },
+    "本机识别连接中断：{0}": {
+      "zh": "本机识别连接中断：{0}",
+      "en": "Local speech recognition connection interrupted: {0}",
+      "ja": "ローカル音声認識の接続が中断されました：{0}",
+      "fr": "Connexion à la reconnaissance vocale locale interrompue : {0}",
+      "es": "Se ha interrumpido la conexión del reconocimiento de voz local: {0}",
+      "it": "Connessione al riconoscimento vocale locale interrotta: {0}",
+      "pt": "A conexão de reconhecimento de fala local foi interrompida: {0}",
+      "hi": "स्थानीय वाक् पहचान का कनेक्शन टूट गया: {0}"
+    },
+    "识别服务没有就绪。": {
+      "zh": "识别服务没有就绪。",
+      "en": "The speech recognition service is not ready.",
+      "ja": "音声認識サービスの準備ができていません。",
+      "fr": "Le service de reconnaissance vocale n’est pas prêt.",
+      "es": "El servicio de reconocimiento de voz no está listo.",
+      "it": "Il servizio di riconoscimento vocale non è pronto.",
+      "pt": "O serviço de reconhecimento de fala não está pronto.",
+      "hi": "वाक् पहचान सेवा अभी तैयार नहीं है।"
+    },
+    "无法开始传译。": {
+      "zh": "无法开始传译。",
+      "en": "Unable to start interpreting.",
+      "ja": "通訳を開始できません。",
+      "fr": "Impossible de lancer l’interprétation.",
+      "es": "No se puede iniciar la interpretación.",
+      "it": "Impossibile avviare l’interpretazione.",
+      "pt": "Não foi possível iniciar a interpretação.",
+      "hi": "अनुवाद शुरू नहीं हो सका।"
+    },
+    "正在开启系统声音采集…": {
+      "zh": "正在开启系统声音采集…",
+      "en": "Starting system audio capture…",
+      "ja": "システム音声の取り込みを開始中…",
+      "fr": "Démarrage de la capture du son système…",
+      "es": "Iniciando la captura del audio del sistema…",
+      "it": "Avvio dell’acquisizione dell’audio di sistema…",
+      "pt": "Iniciando a captura do áudio do sistema…",
+      "hi": "सिस्टम ऑडियो कैप्चर शुरू हो रहा है…"
+    },
+    "正在开启输入设备…": {
+      "zh": "正在开启输入设备…",
+      "en": "Starting the input device…",
+      "ja": "入力デバイスを起動中…",
+      "fr": "Démarrage du périphérique d’entrée…",
+      "es": "Iniciando el dispositivo de entrada…",
+      "it": "Avvio del dispositivo di ingresso…",
+      "pt": "Iniciando o dispositivo de entrada…",
+      "hi": "इनपुट डिवाइस शुरू हो रहा है…"
+    },
+    "{0} · 传译运行中 · 网页可随时关闭": {
+      "zh": "{0} · 传译运行中 · 网页可随时关闭",
+      "en": "{0} · Interpreting · You can close the web page at any time",
+      "ja": "{0} · 通訳中 · ウェブページはいつでも閉じられます",
+      "fr": "{0} · Interprétation en cours · Vous pouvez fermer la page web à tout moment",
+      "es": "{0} · Interpretación en curso · Puedes cerrar la página web cuando quieras",
+      "it": "{0} · Interpretazione in corso · Puoi chiudere la pagina web in qualsiasi momento",
+      "pt": "{0} · Interpretação em andamento · Você pode fechar a página a qualquer momento",
+      "hi": "{0} · अनुवाद चालू है · वेब पेज कभी भी बंद कर सकते हैं"
+    },
+    "传译未启动": {
+      "zh": "传译未启动",
+      "en": "Interpretation did not start",
+      "ja": "通訳を開始できませんでした",
+      "fr": "L’interprétation n’a pas démarré",
+      "es": "La interpretación no se ha iniciado",
+      "it": "L’interpretazione non è stata avviata",
+      "pt": "A interpretação não foi iniciada",
+      "hi": "अनुवाद शुरू नहीं हुआ"
+    },
+    "音频发送中断：{0}": {
+      "zh": "音频发送中断：{0}",
+      "en": "Audio transmission interrupted: {0}",
+      "ja": "音声の送信が中断されました：{0}",
+      "fr": "Transmission audio interrompue : {0}",
+      "es": "Se ha interrumpido el envío de audio: {0}",
+      "it": "Invio dell’audio interrotto: {0}",
+      "pt": "O envio de áudio foi interrompido: {0}",
+      "hi": "ऑडियो भेजना बाधित हुआ: {0}"
+    },
+    "无法读取识别消息。": {
+      "zh": "无法读取识别消息。",
+      "en": "Unable to read the speech recognition message.",
+      "ja": "音声認識メッセージを読み取れません。",
+      "fr": "Impossible de lire le message de reconnaissance vocale.",
+      "es": "No se puede leer el mensaje de reconocimiento de voz.",
+      "it": "Impossibile leggere il messaggio di riconoscimento vocale.",
+      "pt": "Não foi possível ler a mensagem de reconhecimento de fala.",
+      "hi": "वाक् पहचान का संदेश पढ़ा नहीं जा सका।"
+    },
+    "识别服务返回了无效消息。": {
+      "zh": "识别服务返回了无效消息。",
+      "en": "The speech recognition service returned an invalid message.",
+      "ja": "音声認識サービスから無効なメッセージが返されました。",
+      "fr": "Le service de reconnaissance vocale a renvoyé un message non valide.",
+      "es": "El servicio de reconocimiento de voz ha devuelto un mensaje no válido.",
+      "it": "Il servizio di riconoscimento vocale ha restituito un messaggio non valido.",
+      "pt": "O serviço de reconhecimento de fala retornou uma mensagem inválida.",
+      "hi": "वाक् पहचान सेवा ने अमान्य संदेश लौटाया।"
+    },
+    "识别服务异常。": {
+      "zh": "识别服务异常。",
+      "en": "The speech recognition service encountered an error.",
+      "ja": "音声認識サービスでエラーが発生しました。",
+      "fr": "Le service de reconnaissance vocale a rencontré une erreur.",
+      "es": "Se ha producido un error en el servicio de reconocimiento de voz.",
+      "it": "Si è verificato un errore nel servizio di riconoscimento vocale.",
+      "pt": "Ocorreu um erro no serviço de reconhecimento de fala.",
+      "hi": "वाक् पहचान सेवा में त्रुटि हुई।"
+    },
+    "本机服务请求失败：{0}": {
+      "zh": "本机服务请求失败：{0}",
+      "en": "Local service request failed: {0}",
+      "ja": "ローカルサービスへのリクエストに失敗しました：{0}",
+      "fr": "La requête au service local a échoué : {0}",
+      "es": "Ha fallado la solicitud al servicio local: {0}",
+      "it": "Richiesta al servizio locale non riuscita: {0}",
+      "pt": "A solicitação ao serviço local falhou: {0}",
+      "hi": "स्थानीय सेवा का अनुरोध विफल हुआ: {0}"
+    },
+    "服务版本不匹配，请停止服务后重新启动。": {
+      "zh": "服务版本不匹配，请停止服务后重新启动。",
+      "en": "The service version does not match. Stop the service, then start it again.",
+      "ja": "サービスのバージョンが一致しません。サービスを停止してから再起動してください。",
+      "fr": "La version du service ne correspond pas. Arrêtez le service, puis redémarrez-le.",
+      "es": "La versión del servicio no coincide. Detén el servicio y vuelve a iniciarlo.",
+      "it": "La versione del servizio non corrisponde. Arresta il servizio, poi riavvialo.",
+      "pt": "A versão do serviço não corresponde. Pare o serviço e inicie-o novamente.",
+      "hi": "सेवा का संस्करण मेल नहीं खाता। सेवा बंद करके फिर से शुरू करें।"
+    },
+    "朗读合成提示：{0}；下一句会继续尝试。": {
+      "zh": "朗读合成提示：{0}；下一句会继续尝试。",
+      "en": "Speech synthesis notice: {0}. The next sentence will still be attempted.",
+      "ja": "音声合成のお知らせ：{0}。次の文でも引き続き試行します。",
+      "fr": "Avis de synthèse vocale : {0}. Une nouvelle tentative sera effectuée pour la phrase suivante.",
+      "es": "Aviso de síntesis de voz: {0}. Se volverá a intentar con la siguiente frase.",
+      "it": "Avviso di sintesi vocale: {0}. Verrà effettuato un nuovo tentativo con la frase successiva.",
+      "pt": "Aviso de síntese de voz: {0}. Haverá uma nova tentativa na próxima frase.",
+      "hi": "वाक् संश्लेषण सूचना: {0}। अगले वाक्य के लिए फिर कोशिश की जाएगी।"
+    },
+    "所选输出设备已断开，已停止传译。请重新选择输出设备。": {
+      "zh": "所选输出设备已断开，已停止传译。请重新选择输出设备。",
+      "en": "The selected output device disconnected, so interpretation stopped. Select an output device again.",
+      "ja": "選択した出力デバイスが切断されたため、通訳を停止しました。出力デバイスを選び直してください。",
+      "fr": "Le périphérique de sortie sélectionné s’est déconnecté. L’interprétation a été arrêtée. Sélectionnez à nouveau un périphérique de sortie.",
+      "es": "El dispositivo de salida seleccionado se ha desconectado y la interpretación se ha detenido. Vuelve a seleccionar un dispositivo de salida.",
+      "it": "Il dispositivo di uscita selezionato si è scollegato e l’interpretazione è stata arrestata. Seleziona di nuovo un dispositivo di uscita.",
+      "pt": "O dispositivo de saída selecionado foi desconectado e a interpretação foi interrompida. Selecione um dispositivo de saída novamente.",
+      "hi": "चुना गया आउटपुट डिवाइस डिस्कनेक्ट हो गया, इसलिए अनुवाद रुक गया। आउटपुट डिवाइस फिर से चुनें।"
+    },
+    "所选输入设备已断开，已停止传译。请重新选择输入设备。": {
+      "zh": "所选输入设备已断开，已停止传译。请重新选择输入设备。",
+      "en": "The selected input device disconnected, so interpretation stopped. Select an input device again.",
+      "ja": "選択した入力デバイスが切断されたため、通訳を停止しました。入力デバイスを選び直してください。",
+      "fr": "Le périphérique d’entrée sélectionné s’est déconnecté. L’interprétation a été arrêtée. Sélectionnez à nouveau un périphérique d’entrée.",
+      "es": "El dispositivo de entrada seleccionado se ha desconectado y la interpretación se ha detenido. Vuelve a seleccionar un dispositivo de entrada.",
+      "it": "Il dispositivo di ingresso selezionato si è scollegato e l’interpretazione è stata arrestata. Seleziona di nuovo un dispositivo di ingresso.",
+      "pt": "O dispositivo de entrada selecionado foi desconectado e a interpretação foi interrompida. Selecione um dispositivo de entrada novamente.",
+      "hi": "चुना गया इनपुट डिवाइस डिस्कनेक्ट हो गया, इसलिए अनुवाद रुक गया। इनपुट डिवाइस फिर से चुनें।"
+    },
+    "本机 PCM 朗读播放已停滞，请停止后重试。": {
+      "zh": "本机 PCM 朗读播放已停滞，请停止后重试。",
+      "en": "Local PCM speech playback has stalled. Stop and try again.",
+      "ja": "ローカルの PCM 音声再生が進まなくなりました。停止してから再試行してください。",
+      "fr": "La lecture vocale PCM locale est bloquée. Arrêtez-la, puis réessayez.",
+      "es": "La reproducción de voz PCM local se ha bloqueado. Detén la reproducción y vuelve a intentarlo.",
+      "it": "La riproduzione vocale PCM locale si è bloccata. Arrestala e riprova.",
+      "pt": "A reprodução de voz PCM local travou. Pare e tente novamente.",
+      "hi": "स्थानीय PCM आवाज़ का प्लेबैक अटक गया है। बंद करके फिर कोशिश करें।"
+    },
+    "本机朗读播放已停滞，请停止后重试。": {
+      "zh": "本机朗读播放已停滞，请停止后重试。",
+      "en": "Local speech playback has stalled. Stop and try again.",
+      "ja": "ローカルの音声再生が進まなくなりました。停止してから再試行してください。",
+      "fr": "La lecture vocale locale est bloquée. Arrêtez-la, puis réessayez.",
+      "es": "La reproducción de voz local se ha bloqueado. Detén la reproducción y vuelve a intentarlo.",
+      "it": "La riproduzione vocale locale si è bloccata. Arrestala e riprova.",
+      "pt": "A reprodução de voz local travou. Pare e tente novamente.",
+      "hi": "स्थानीय आवाज़ का प्लेबैक अटक गया है। बंद करके फिर कोशिश करें।"
+    },
+    "本机朗读未能开始播放，请检查输出设备后重试。": {
+      "zh": "本机朗读未能开始播放，请检查输出设备后重试。",
+      "en": "Local speech playback could not start. Check the output device and try again.",
+      "ja": "ローカルの音声再生を開始できませんでした。出力デバイスを確認して再試行してください。",
+      "fr": "La lecture vocale locale n’a pas pu démarrer. Vérifiez le périphérique de sortie, puis réessayez.",
+      "es": "No se ha podido iniciar la reproducción de voz local. Comprueba el dispositivo de salida y vuelve a intentarlo.",
+      "it": "Impossibile avviare la riproduzione vocale locale. Controlla il dispositivo di uscita e riprova.",
+      "pt": "Não foi possível iniciar a reprodução de voz local. Verifique o dispositivo de saída e tente novamente.",
+      "hi": "स्थानीय आवाज़ का प्लेबैक शुरू नहीं हो सका। आउटपुट डिवाइस जाँचकर फिर कोशिश करें।"
+    },
+    "未知错误": {
+      "zh": "未知错误",
+      "en": "Unknown error",
+      "ja": "不明なエラー",
+      "fr": "Erreur inconnue",
+      "es": "Error desconocido",
+      "it": "Errore sconosciuto",
+      "pt": "Erro desconhecido",
+      "hi": "अज्ञात त्रुटि"
+    },
+    "无法播放朗读：{0}": {
+      "zh": "无法播放朗读：{0}",
+      "en": "Unable to play speech: {0}",
+      "ja": "音声を再生できません：{0}",
+      "fr": "Impossible de lire l’audio vocal : {0}",
+      "es": "No se puede reproducir la voz: {0}",
+      "it": "Impossibile riprodurre la voce: {0}",
+      "pt": "Não foi possível reproduzir a voz: {0}",
+      "hi": "आवाज़ चलाई नहीं जा सकी: {0}"
+    },
+    "本机朗读连接中断：{0}": {
+      "zh": "本机朗读连接中断：{0}",
+      "en": "Local speech playback connection interrupted: {0}",
+      "ja": "ローカル音声再生の接続が中断されました：{0}",
+      "fr": "Connexion à la lecture vocale locale interrompue : {0}",
+      "es": "Se ha interrumpido la conexión de la reproducción de voz local: {0}",
+      "it": "Connessione alla riproduzione vocale locale interrotta: {0}",
+      "pt": "A conexão de reprodução de voz local foi interrompida: {0}",
+      "hi": "स्थानीय आवाज़ के प्लेबैक का कनेक्शन टूट गया: {0}"
+    },
+    "朗读音频尚未准备好，请重新开始。": {
+      "zh": "朗读音频尚未准备好，请重新开始。",
+      "en": "Speech audio is not ready yet. Start again.",
+      "ja": "読み上げ音声の準備ができていません。もう一度開始してください。",
+      "fr": "L’audio vocal n’est pas encore prêt. Relancez l’opération.",
+      "es": "El audio de voz aún no está listo. Vuelve a empezar.",
+      "it": "L’audio vocale non è ancora pronto. Ricomincia.",
+      "pt": "O áudio de voz ainda não está pronto. Inicie novamente.",
+      "hi": "आवाज़ का ऑडियो अभी तैयार नहीं है। फिर से शुरू करें।"
+    },
+    "传译已停止，需要处理": {
+      "zh": "传译已停止，需要处理",
+      "en": "Interpretation stopped · Action required",
+      "ja": "通訳を停止しました · 対応が必要です",
+      "fr": "Interprétation arrêtée · Intervention requise",
+      "es": "Interpretación detenida · Se requiere atención",
+      "it": "Interpretazione arrestata · Intervento richiesto",
+      "pt": "Interpretação interrompida · Ação necessária",
+      "hi": "अनुवाद रुक गया · कार्रवाई ज़रूरी है"
+    },
+    "正在完成最后一句并等待朗读结束…": {
+      "zh": "正在完成最后一句并等待朗读结束…",
+      "en": "Finishing the last sentence and waiting for speech playback to end…",
+      "ja": "最後の文を処理し、読み上げの終了を待っています…",
+      "fr": "Traitement de la dernière phrase et attente de la fin de la lecture vocale…",
+      "es": "Terminando la última frase y esperando a que finalice la reproducción de voz…",
+      "it": "Completamento dell’ultima frase e attesa della fine della riproduzione vocale…",
+      "pt": "Concluindo a última frase e aguardando o fim da reprodução de voz…",
+      "hi": "अंतिम वाक्य पूरा किया जा रहा है और आवाज़ का प्लेबैक खत्म होने का इंतज़ार है…"
+    },
+    "正在停止传译…": {
+      "zh": "正在停止传译…",
+      "en": "Stopping interpretation…",
+      "ja": "通訳を停止中…",
+      "fr": "Arrêt de l’interprétation…",
+      "es": "Deteniendo la interpretación…",
+      "it": "Arresto dell’interpretazione…",
+      "pt": "Encerrando a interpretação…",
+      "hi": "अनुवाद बंद हो रहा है…"
+    },
+    "最后一句处理超时，已结束此次传译。": {
+      "zh": "最后一句处理超时，已结束此次传译。",
+      "en": "Processing the last sentence timed out. This interpretation session has ended.",
+      "ja": "最後の文の処理がタイムアウトしたため、今回の通訳を終了しました。",
+      "fr": "Le traitement de la dernière phrase a dépassé le délai. Cette session d’interprétation est terminée.",
+      "es": "Se ha agotado el tiempo para procesar la última frase. Esta sesión de interpretación ha terminado.",
+      "it": "Il tempo per elaborare l’ultima frase è scaduto. Questa sessione di interpretazione è terminata.",
+      "pt": "O tempo limite para processar a última frase foi excedido. Esta sessão de interpretação foi encerrada.",
+      "hi": "अंतिम वाक्य संसाधित करने का समय समाप्त हो गया। यह अनुवाद सत्र समाप्त कर दिया गया है।"
+    },
+    "待发送音频未能及时完成，已结束此次传译。": {
+      "zh": "待发送音频未能及时完成，已结束此次传译。",
+      "en": "Pending audio could not be sent in time. This interpretation session has ended.",
+      "ja": "待機中の音声を時間内に送信できなかったため、今回の通訳を終了しました。",
+      "fr": "L’audio en attente n’a pas pu être envoyé à temps. Cette session d’interprétation est terminée.",
+      "es": "El audio pendiente no se ha podido enviar a tiempo. Esta sesión de interpretación ha terminado.",
+      "it": "L’audio in attesa non è stato inviato in tempo. Questa sessione di interpretazione è terminata.",
+      "pt": "O áudio pendente não pôde ser enviado a tempo. Esta sessão de interpretação foi encerrada.",
+      "hi": "बाकी ऑडियो समय पर भेजा नहीं जा सका। यह अनुवाद सत्र समाप्त कर दिया गया है।"
+    },
+    "传译已停止 · 服务保持就绪": {
+      "zh": "传译已停止 · 服务保持就绪",
+      "en": "Interpretation stopped · Service remains ready",
+      "ja": "通訳を停止しました · サービスは待機中です",
+      "fr": "Interprétation arrêtée · Le service reste prêt",
+      "es": "Interpretación detenida · El servicio sigue listo",
+      "it": "Interpretazione arrestata · Il servizio resta pronto",
+      "pt": "Interpretação encerrada · O serviço continua pronto",
+      "hi": "अनुवाद बंद है · सेवा तैयार है"
+    },
+    "最后一句朗读音频不完整，已停止。请检查语音合成错误后重试。": {
+      "zh": "最后一句朗读音频不完整，已停止。请检查语音合成错误后重试。",
+      "en": "Speech audio for the last sentence is incomplete. Playback stopped. Check the speech synthesis error and try again.",
+      "ja": "最後の文の読み上げ音声が不完全なため、停止しました。音声合成エラーを確認して再試行してください。",
+      "fr": "L’audio vocal de la dernière phrase est incomplet. La lecture a été arrêtée. Vérifiez l’erreur de synthèse vocale, puis réessayez.",
+      "es": "El audio de voz de la última frase está incompleto. La reproducción se ha detenido. Revisa el error de síntesis de voz y vuelve a intentarlo.",
+      "it": "L’audio vocale dell’ultima frase è incompleto. La riproduzione è stata arrestata. Controlla l’errore di sintesi vocale e riprova.",
+      "pt": "O áudio de voz da última frase está incompleto. A reprodução foi interrompida. Verifique o erro de síntese de voz e tente novamente.",
+      "hi": "अंतिम वाक्य की आवाज़ का ऑडियो अधूरा है। प्लेबैक रोक दिया गया है। वाक् संश्लेषण की त्रुटि जाँचकर फिर कोशिश करें।"
+    },
+    "朗读等待超过 60 秒，已停止本机播放。": {
+      "zh": "朗读等待超过 60 秒，已停止本机播放。",
+      "en": "The wait for speech playback exceeded 60 seconds. Local playback has stopped.",
+      "ja": "読み上げの待機時間が 60 秒を超えたため、ローカル再生を停止しました。",
+      "fr": "L’attente de la lecture vocale a dépassé 60 secondes. La lecture locale a été arrêtée.",
+      "es": "La espera de la reproducción de voz ha superado los 60 segundos. La reproducción local se ha detenido.",
+      "it": "L’attesa della riproduzione vocale ha superato 60 secondi. La riproduzione locale è stata arrestata.",
+      "pt": "A espera pela reprodução de voz excedeu 60 segundos. A reprodução local foi interrompida.",
+      "hi": "आवाज़ के प्लेबैक का इंतज़ार 60 सेकंड से अधिक हो गया। स्थानीय प्लेबैक रोक दिया गया है।"
+    },
+    "朗读会话信息无效。": {
+      "zh": "朗读会话信息无效。",
+      "en": "Speech playback session information is invalid.",
+      "ja": "読み上げセッションの情報が無効です。",
+      "fr": "Les informations de la session de lecture vocale ne sont pas valides.",
+      "es": "La información de la sesión de reproducción de voz no es válida.",
+      "it": "Le informazioni della sessione di riproduzione vocale non sono valide.",
+      "pt": "As informações da sessão de reprodução de voz são inválidas.",
+      "hi": "आवाज़ के प्लेबैक सत्र की जानकारी अमान्य है।"
+    },
+    "朗读会话已变化，请重新开始传译。": {
+      "zh": "朗读会话已变化，请重新开始传译。",
+      "en": "The speech playback session has changed. Start interpreting again.",
+      "ja": "読み上げセッションが変更されました。通訳をもう一度開始してください。",
+      "fr": "La session de lecture vocale a changé. Relancez l’interprétation.",
+      "es": "La sesión de reproducción de voz ha cambiado. Vuelve a iniciar la interpretación.",
+      "it": "La sessione di riproduzione vocale è cambiata. Riavvia l’interpretazione.",
+      "pt": "A sessão de reprodução de voz mudou. Inicie a interpretação novamente.",
+      "hi": "आवाज़ का प्लेबैक सत्र बदल गया है। अनुवाद फिर से शुरू करें।"
+    },
+    "朗读音频缺失或格式错误，已停止以避免漏读。": {
+      "zh": "朗读音频缺失或格式错误，已停止以避免漏读。",
+      "en": "Speech audio is missing or incorrectly formatted. Playback stopped to avoid skipping speech.",
+      "ja": "読み上げ音声が欠落しているか、形式が不正です。読み飛ばしを防ぐため停止しました。",
+      "fr": "L’audio vocal est manquant ou son format est incorrect. La lecture a été arrêtée pour éviter d’omettre du contenu.",
+      "es": "Falta audio de voz o su formato es incorrecto. La reproducción se ha detenido para evitar omisiones.",
+      "it": "L’audio vocale è mancante o ha un formato errato. La riproduzione è stata arrestata per evitare omissioni.",
+      "pt": "O áudio de voz está ausente ou em formato incorreto. A reprodução foi interrompida para evitar omissões.",
+      "hi": "आवाज़ का ऑडियो मौजूद नहीं है या उसका फ़ॉर्मैट गलत है। कोई अंश छूटने से बचाने के लिए प्लेबैक रोक दिया गया है।"
+    },
+    "朗读分段顺序错误。": {
+      "zh": "朗读分段顺序错误。",
+      "en": "Speech audio segments are out of order.",
+      "ja": "読み上げ音声の区切りの順序が不正です。",
+      "fr": "Les segments audio vocaux ne sont pas dans le bon ordre.",
+      "es": "Los segmentos de audio de voz están desordenados.",
+      "it": "I segmenti audio vocali non sono nell’ordine corretto.",
+      "pt": "Os segmentos de áudio de voz estão fora de ordem.",
+      "hi": "आवाज़ के ऑडियो खंडों का क्रम गलत है।"
+    },
+    "朗读句子重复或顺序错误。": {
+      "zh": "朗读句子重复或顺序错误。",
+      "en": "Speech sentences are duplicated or out of order.",
+      "ja": "読み上げの文が重複しているか、順序が不正です。",
+      "fr": "Les phrases de la lecture vocale sont dupliquées ou dans le mauvais ordre.",
+      "es": "Las frases de la reproducción de voz están duplicadas o desordenadas.",
+      "it": "Le frasi della riproduzione vocale sono duplicate o fuori ordine.",
+      "pt": "As frases da reprodução de voz estão duplicadas ou fora de ordem.",
+      "hi": "आवाज़ में पढ़े जाने वाले वाक्य दोहराए गए हैं या उनका क्रम गलत है।"
+    },
+    "朗读缺少句首，请重新开始传译。": {
+      "zh": "朗读缺少句首，请重新开始传译。",
+      "en": "The beginning of a spoken sentence is missing. Start interpreting again.",
+      "ja": "読み上げる文の先頭が欠落しています。通訳をもう一度開始してください。",
+      "fr": "Le début d’une phrase à lire est manquant. Relancez l’interprétation.",
+      "es": "Falta el inicio de una frase de voz. Vuelve a iniciar la interpretación.",
+      "it": "Manca l’inizio di una frase da leggere. Riavvia l’interpretazione.",
+      "pt": "O início de uma frase a ser lida está ausente. Inicie a interpretação novamente.",
+      "hi": "पढ़े जाने वाले वाक्य का शुरुआती अंश गायब है। अनुवाद फिर से शुरू करें।"
+    },
+    "朗读连续序号不匹配。": {
+      "zh": "朗读连续序号不匹配。",
+      "en": "Speech playback sequence numbers do not match.",
+      "ja": "読み上げの連続シーケンス番号が一致しません。",
+      "fr": "Les numéros de séquence de la lecture vocale ne correspondent pas.",
+      "es": "Los números de secuencia de la reproducción de voz no coinciden.",
+      "it": "I numeri di sequenza della riproduzione vocale non corrispondono.",
+      "pt": "Os números de sequência da reprodução de voz não correspondem.",
+      "hi": "आवाज़ के प्लेबैक के अनुक्रम नंबर मेल नहीं खाते।"
+    },
+    "所选朗读输出设备不可用。": {
+      "zh": "所选朗读输出设备不可用。",
+      "en": "The selected speech output device is unavailable.",
+      "ja": "選択した読み上げ出力デバイスを利用できません。",
+      "fr": "Le périphérique de sortie vocale sélectionné n’est pas disponible.",
+      "es": "El dispositivo de salida de voz seleccionado no está disponible.",
+      "it": "Il dispositivo di uscita vocale selezionato non è disponibile.",
+      "pt": "O dispositivo de saída de voz selecionado está indisponível.",
+      "hi": "चुना गया आवाज़ का आउटपुट डिवाइस उपलब्ध नहीं है।"
+    },
+    "无法设置朗读输出设备（{0}）。": {
+      "zh": "无法设置朗读输出设备（{0}）。",
+      "en": "Unable to set the speech output device ({0}).",
+      "ja": "読み上げ出力デバイスを設定できません（{0}）。",
+      "fr": "Impossible de définir le périphérique de sortie vocale ({0}).",
+      "es": "No se puede configurar el dispositivo de salida de voz ({0}).",
+      "it": "Impossibile impostare il dispositivo di uscita vocale ({0}).",
+      "pt": "Não foi possível configurar o dispositivo de saída de voz ({0}).",
+      "hi": "आवाज़ का आउटपुट डिवाइस सेट नहीं हो सका ({0})।"
+    },
+    "朗读输出设备配置已变化，请重新开始传译。": {
+      "zh": "朗读输出设备配置已变化，请重新开始传译。",
+      "en": "The speech output device configuration has changed. Start interpreting again.",
+      "ja": "読み上げ出力デバイスの構成が変更されました。通訳をもう一度開始してください。",
+      "fr": "La configuration du périphérique de sortie vocale a changé. Relancez l’interprétation.",
+      "es": "La configuración del dispositivo de salida de voz ha cambiado. Vuelve a iniciar la interpretación.",
+      "it": "La configurazione del dispositivo di uscita vocale è cambiata. Riavvia l’interpretazione.",
+      "pt": "A configuração do dispositivo de saída de voz mudou. Inicie a interpretação novamente.",
+      "hi": "आवाज़ के आउटपुट डिवाइस की सेटिंग बदल गई है। अनुवाद फिर से शुरू करें।"
+    },
+    "本机朗读播放器尚未就绪。": {
+      "zh": "本机朗读播放器尚未就绪。",
+      "en": "The local speech player is not ready yet.",
+      "ja": "ローカルの読み上げプレーヤーの準備ができていません。",
+      "fr": "Le lecteur vocal local n’est pas encore prêt.",
+      "es": "El reproductor de voz local aún no está listo.",
+      "it": "Il lettore vocale locale non è ancora pronto.",
+      "pt": "O reprodutor de voz local ainda não está pronto.",
+      "hi": "स्थानीय आवाज़ का प्लेयर अभी तैयार नहीं है।"
+    },
+    "本机待播音频过多，已停止以避免漏读。": {
+      "zh": "本机待播音频过多，已停止以避免漏读。",
+      "en": "Too much audio is waiting for local playback. Playback stopped to avoid skipping speech.",
+      "ja": "ローカル再生待ちの音声が多すぎます。読み飛ばしを防ぐため停止しました。",
+      "fr": "Trop d’audio est en attente de lecture locale. La lecture a été arrêtée pour éviter d’omettre du contenu.",
+      "es": "Hay demasiado audio pendiente de reproducción local. La reproducción se ha detenido para evitar omisiones.",
+      "it": "C’è troppo audio in attesa di riproduzione locale. La riproduzione è stata arrestata per evitare omissioni.",
+      "pt": "Há áudio demais aguardando reprodução local. A reprodução foi interrompida para evitar omissões.",
+      "hi": "स्थानीय प्लेबैक के लिए बहुत अधिक ऑडियो इंतज़ार में है। कोई अंश छूटने से बचाने के लिए प्लेबैक रोक दिया गया है।"
+    },
+    "无法分配朗读音频缓冲。": {
+      "zh": "无法分配朗读音频缓冲。",
+      "en": "Unable to allocate a speech audio buffer.",
+      "ja": "読み上げ音声のバッファを確保できません。",
+      "fr": "Impossible d’allouer un tampon audio vocal.",
+      "es": "No se puede asignar un búfer de audio de voz.",
+      "it": "Impossibile allocare un buffer audio vocale.",
+      "pt": "Não foi possível alocar um buffer de áudio de voz.",
+      "hi": "आवाज़ के ऑडियो के लिए बफ़र आवंटित नहीं हो सका।"
+    },
+    "无法建立音频采样转换器。": {
+      "zh": "无法建立音频采样转换器。",
+      "en": "Unable to create an audio sample rate converter.",
+      "ja": "音声サンプルレート変換器を作成できません。",
+      "fr": "Impossible de créer un convertisseur de fréquence d’échantillonnage audio.",
+      "es": "No se puede crear un conversor de frecuencia de muestreo de audio.",
+      "it": "Impossibile creare un convertitore della frequenza di campionamento audio.",
+      "pt": "Não foi possível criar um conversor de taxa de amostragem de áudio.",
+      "hi": "ऑडियो सैंपल दर का कन्वर्टर बनाया नहीं जा सका।"
+    },
+    "音频数据格式无效。": {
+      "zh": "音频数据格式无效。",
+      "en": "The audio data format is invalid.",
+      "ja": "音声データの形式が無効です。",
+      "fr": "Le format des données audio n’est pas valide.",
+      "es": "El formato de los datos de audio no es válido.",
+      "it": "Il formato dei dati audio non è valido.",
+      "pt": "O formato dos dados de áudio é inválido.",
+      "hi": "ऑडियो डेटा का फ़ॉर्मैट अमान्य है।"
+    },
+    "无法分配音频转换缓冲区。": {
+      "zh": "无法分配音频转换缓冲区。",
+      "en": "Unable to allocate an audio conversion buffer.",
+      "ja": "音声変換用のバッファを確保できません。",
+      "fr": "Impossible d’allouer un tampon de conversion audio.",
+      "es": "No se puede asignar un búfer de conversión de audio.",
+      "it": "Impossibile allocare un buffer di conversione audio.",
+      "pt": "Não foi possível alocar um buffer de conversão de áudio.",
+      "hi": "ऑडियो रूपांतरण के लिए बफ़र आवंटित नहीं हो सका।"
+    },
+    "音频采样转换失败。": {
+      "zh": "音频采样转换失败。",
+      "en": "Audio sample rate conversion failed.",
+      "ja": "音声サンプルレートの変換に失敗しました。",
+      "fr": "La conversion de la fréquence d’échantillonnage audio a échoué.",
+      "es": "Ha fallado la conversión de frecuencia de muestreo de audio.",
+      "it": "Conversione della frequenza di campionamento audio non riuscita.",
+      "pt": "A conversão da taxa de amostragem de áudio falhou.",
+      "hi": "ऑडियो सैंपल दर का रूपांतरण विफल हुआ।"
+    },
+    "音频处理速度不足，采集已停止。请重新开始。": {
+      "zh": "音频处理速度不足，采集已停止。请重新开始。",
+      "en": "Audio processing could not keep up, so capture stopped. Start again.",
+      "ja": "音声処理が追いつかないため、取り込みを停止しました。もう一度開始してください。",
+      "fr": "Le traitement audio n’a pas pu suivre. La capture a été arrêtée. Relancez l’opération.",
+      "es": "El procesamiento de audio no ha podido seguir el ritmo y la captura se ha detenido. Vuelve a empezar.",
+      "it": "L’elaborazione audio non è riuscita a tenere il passo e l’acquisizione è stata arrestata. Ricomincia.",
+      "pt": "O processamento de áudio não conseguiu acompanhar o ritmo e a captura foi interrompida. Inicie novamente.",
+      "hi": "ऑडियो प्रोसेसिंग की गति पर्याप्त नहीं थी, इसलिए कैप्चर रुक गया। फिर से शुरू करें।"
+    },
+    "音频设备未提供浮点 PCM 数据。": {
+      "zh": "音频设备未提供浮点 PCM 数据。",
+      "en": "The audio device did not provide floating-point PCM data.",
+      "ja": "音声デバイスから浮動小数点 PCM データが提供されませんでした。",
+      "fr": "Le périphérique audio n’a pas fourni de données PCM à virgule flottante.",
+      "es": "El dispositivo de audio no ha proporcionado datos PCM de coma flotante.",
+      "it": "Il dispositivo audio non ha fornito dati PCM a virgola mobile.",
+      "pt": "O dispositivo de áudio não forneceu dados PCM de ponto flutuante.",
+      "hi": "ऑडियो डिवाइस ने फ़्लोटिंग-पॉइंट PCM डेटा नहीं दिया।"
+    },
+    "系统音频采集已中断：{0}": {
+      "zh": "系统音频采集已中断：{0}",
+      "en": "System audio capture interrupted: {0}",
+      "ja": "システム音声の取り込みが中断されました：{0}",
+      "fr": "Capture du son système interrompue : {0}",
+      "es": "Se ha interrumpido la captura del audio del sistema: {0}",
+      "it": "Acquisizione dell’audio di sistema interrotta: {0}",
+      "pt": "A captura do áudio do sistema foi interrompida: {0}",
+      "hi": "सिस्टम ऑडियो कैप्चर बाधित हुआ: {0}"
+    },
+    "无法读取系统音频缓冲区（{0}）。": {
+      "zh": "无法读取系统音频缓冲区（{0}）。",
+      "en": "Unable to read the system audio buffer ({0}).",
+      "ja": "システム音声のバッファを読み取れません（{0}）。",
+      "fr": "Impossible de lire le tampon audio système ({0}).",
+      "es": "No se puede leer el búfer de audio del sistema ({0}).",
+      "it": "Impossibile leggere il buffer audio di sistema ({0}).",
+      "pt": "Não foi possível ler o buffer de áudio do sistema ({0}).",
+      "hi": "सिस्टम ऑडियो बफ़र पढ़ा नहीं जा सका ({0})।"
+    },
+    "系统音频数据格式无效。": {
+      "zh": "系统音频数据格式无效。",
+      "en": "The system audio data format is invalid.",
+      "ja": "システム音声データの形式が無効です。",
+      "fr": "Le format des données audio système n’est pas valide.",
+      "es": "El formato de los datos de audio del sistema no es válido.",
+      "it": "Il formato dei dati audio di sistema non è valido.",
+      "pt": "O formato dos dados de áudio do sistema é inválido.",
+      "hi": "सिस्टम ऑडियो डेटा का फ़ॉर्मैट अमान्य है।"
+    },
+    "所选输入设备已断开，请重新连接或选择输入设备。": {
+      "zh": "所选输入设备已断开，请重新连接或选择输入设备。",
+      "en": "The selected input device is disconnected. Reconnect it or select an input device.",
+      "ja": "選択した入力デバイスが切断されました。再接続するか、入力デバイスを選択してください。",
+      "fr": "Le périphérique d’entrée sélectionné est déconnecté. Reconnectez-le ou sélectionnez un périphérique d’entrée.",
+      "es": "El dispositivo de entrada seleccionado se ha desconectado. Vuelve a conectarlo o selecciona un dispositivo de entrada.",
+      "it": "Il dispositivo di ingresso selezionato è scollegato. Ricollegalo o seleziona un dispositivo di ingresso.",
+      "pt": "O dispositivo de entrada selecionado foi desconectado. Reconecte-o ou selecione um dispositivo de entrada.",
+      "hi": "चुना गया इनपुट डिवाइस डिस्कनेक्ट हो गया है। उसे फिर से कनेक्ट करें या इनपुट डिवाइस चुनें।"
+    },
+    "请在系统设置 → 隐私与安全性 → 麦克风中允许“同声传译” 访问麦克风。": {
+      "zh": "请在系统设置 → 隐私与安全性 → 麦克风中允许“同声传译” 访问麦克风。",
+      "en": "Allow “Simultaneous Interpretation” to access the microphone in System Settings → Privacy & Security → Microphone.",
+      "ja": "「システム設定 → プライバシーとセキュリティ → マイク」で「同時通訳」のマイクへのアクセスを許可してください。",
+      "fr": "Autorisez « Interprétation simultanée » à accéder au microphone dans Réglages Système → Confidentialité et sécurité → Microphone.",
+      "es": "Permite que «Interpretación simultánea» acceda al micrófono en Ajustes del Sistema → Privacidad y seguridad → Micrófono.",
+      "it": "Consenti a “Interpretazione simultanea” di accedere al microfono in Impostazioni di Sistema → Privacy e Sicurezza → Microfono.",
+      "pt": "Permita que “Interpretação simultânea” acesse o microfone em Ajustes do Sistema → Privacidade e Segurança → Microfone.",
+      "hi": "सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → माइक्रोफ़ोन में “समकालिक अनुवाद” को माइक्रोफ़ोन इस्तेमाल करने की अनुमति दें।"
+    },
+    "所选输入设备不可用，请连接该设备后重试。": {
+      "zh": "所选输入设备不可用，请连接该设备后重试。",
+      "en": "The selected input device is unavailable. Connect it and try again.",
+      "ja": "選択した入力デバイスを利用できません。デバイスを接続して再試行してください。",
+      "fr": "Le périphérique d’entrée sélectionné n’est pas disponible. Connectez-le, puis réessayez.",
+      "es": "El dispositivo de entrada seleccionado no está disponible. Conéctalo y vuelve a intentarlo.",
+      "it": "Il dispositivo di ingresso selezionato non è disponibile. Collegalo e riprova.",
+      "pt": "O dispositivo de entrada selecionado está indisponível. Conecte-o e tente novamente.",
+      "hi": "चुना गया इनपुट डिवाइस उपलब्ध नहीं है। उसे कनेक्ट करके फिर कोशिश करें।"
+    },
+    "麦克风恢复失败：{0}": {
+      "zh": "麦克风恢复失败：{0}",
+      "en": "Microphone recovery failed: {0}",
+      "ja": "マイクの復旧に失敗しました：{0}",
+      "fr": "La reprise du microphone a échoué : {0}",
+      "es": "No se ha podido restablecer el micrófono: {0}",
+      "it": "Ripristino del microfono non riuscito: {0}",
+      "pt": "A recuperação do microfone falhou: {0}",
+      "hi": "माइक्रोफ़ोन फिर से चालू नहीं हो सका: {0}"
+    },
+    "无法创建音频输入。": {
+      "zh": "无法创建音频输入。",
+      "en": "Unable to create an audio input.",
+      "ja": "音声入力を作成できません。",
+      "fr": "Impossible de créer une entrée audio.",
+      "es": "No se puede crear una entrada de audio.",
+      "it": "Impossibile creare un ingresso audio.",
+      "pt": "Não foi possível criar uma entrada de áudio.",
+      "hi": "ऑडियो इनपुट बनाया नहीं जा सका।"
+    },
+    "无法打开所选音频设备（{0}）。": {
+      "zh": "无法打开所选音频设备（{0}）。",
+      "en": "Unable to open the selected audio device ({0}).",
+      "ja": "選択した音声デバイスを開けません（{0}）。",
+      "fr": "Impossible d’ouvrir le périphérique audio sélectionné ({0}).",
+      "es": "No se puede abrir el dispositivo de audio seleccionado ({0}).",
+      "it": "Impossibile aprire il dispositivo audio selezionato ({0}).",
+      "pt": "Não foi possível abrir o dispositivo de áudio selecionado ({0}).",
+      "hi": "चुना गया ऑडियो डिवाइस खोला नहीं जा सका ({0})।"
+    },
+    "所选输入设备没有可用的音频通道。": {
+      "zh": "所选输入设备没有可用的音频通道。",
+      "en": "The selected input device has no available audio channels.",
+      "ja": "選択した入力デバイスに利用可能な音声チャンネルがありません。",
+      "fr": "Le périphérique d’entrée sélectionné ne dispose d’aucun canal audio disponible.",
+      "es": "El dispositivo de entrada seleccionado no tiene canales de audio disponibles.",
+      "it": "Il dispositivo di ingresso selezionato non dispone di canali audio disponibili.",
+      "pt": "O dispositivo de entrada selecionado não tem canais de áudio disponíveis.",
+      "hi": "चुने गए इनपुट डिवाइस में कोई ऑडियो चैनल उपलब्ध नहीं है।"
+    },
+    "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。\n{0}": {
+      "zh": "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。\n{0}",
+      "en": "Unable to capture system audio. Allow “Simultaneous Interpretation” in System Settings → Privacy & Security → Screen & System Audio Recording.\n{0}",
+      "ja": "システム音声を取り込めません。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「同時通訳」を許可してください。\n{0}",
+      "fr": "Impossible de capturer le son système. Autorisez « Interprétation simultanée » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.\n{0}",
+      "es": "No se puede capturar el audio del sistema. Permite «Interpretación simultánea» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.\n{0}",
+      "it": "Impossibile acquisire l’audio di sistema. Autorizza “Interpretazione simultanea” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.\n{0}",
+      "pt": "Não foi possível capturar o áudio do sistema. Permita “Interpretação simultânea” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.\n{0}",
+      "hi": "सिस्टम ऑडियो कैप्चर नहीं हो सका। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “समकालिक अनुवाद” को अनुमति दें।\n{0}"
+    },
+    "未找到可用于系统音频采集的显示器。": {
+      "zh": "未找到可用于系统音频采集的显示器。",
+      "en": "No display was found for system audio capture.",
+      "ja": "システム音声の取り込みに利用できるディスプレイが見つかりません。",
+      "fr": "Aucun écran disponible pour la capture du son système n’a été trouvé.",
+      "es": "No se ha encontrado ninguna pantalla para capturar el audio del sistema.",
+      "it": "Non è stato trovato alcuno schermo utilizzabile per acquisire l’audio di sistema.",
+      "pt": "Nenhuma tela foi encontrada para capturar o áudio do sistema.",
+      "hi": "सिस्टम ऑडियो कैप्चर के लिए कोई डिस्प्ले नहीं मिला।"
+    },
+    "无法排除本 App 的朗读音频，已取消采集以防止回声。": {
+      "zh": "无法排除本 App 的朗读音频，已取消采集以防止回声。",
+      "en": "Unable to exclude this app’s speech audio. Capture was canceled to prevent echo.",
+      "ja": "このアプリの読み上げ音声を除外できません。エコーを防ぐため、取り込みを中止しました。",
+      "fr": "Impossible d’exclure l’audio vocal de cette app. La capture a été annulée pour éviter l’écho.",
+      "es": "No se puede excluir el audio de voz de esta app. La captura se ha cancelado para evitar el eco.",
+      "it": "Impossibile escludere l’audio vocale di questa app. L’acquisizione è stata annullata per evitare l’eco.",
+      "pt": "Não foi possível excluir o áudio de voz deste app. A captura foi cancelada para evitar eco.",
+      "hi": "इस ऐप की आवाज़ का ऑडियो कैप्चर से बाहर नहीं रखा जा सका। गूँज रोकने के लिए कैप्चर रद्द कर दिया गया है।"
+    },
+    "同声传译 · 只听译音": {
+      "zh": "同声传译 · 只听译音",
+      "en": "Simultaneous Interpretation · Translation audio only",
+      "ja": "同時通訳 · 通訳音声のみ",
+      "fr": "Interprétation simultanée · Voix traduite uniquement",
+      "es": "Interpretación simultánea · Solo voz traducida",
+      "it": "Interpretazione simultanea · Solo voce tradotta",
+      "pt": "Interpretação simultânea · Somente voz traduzida",
+      "hi": "समकालिक अनुवाद · केवल अनूदित आवाज़"
+    },
+    "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。": {
+      "zh": "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。",
+      "en": "System audio capture failed ({0}: {1}). Allow “Simultaneous Interpretation” in System Settings → Privacy & Security → Screen & System Audio Recording.",
+      "ja": "システム音声の取り込みに失敗しました（{0}：{1}）。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「同時通訳」を許可してください。",
+      "fr": "La capture du son système a échoué ({0} : {1}). Autorisez « Interprétation simultanée » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.",
+      "es": "Ha fallado la captura del audio del sistema ({0}: {1}). Permite «Interpretación simultánea» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.",
+      "it": "Acquisizione dell’audio di sistema non riuscita ({0}: {1}). Autorizza “Interpretazione simultanea” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.",
+      "pt": "A captura do áudio do sistema falhou ({0}: {1}). Permita “Interpretação simultânea” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.",
+      "hi": "सिस्टम ऑडियो कैप्चर विफल हुआ ({0}: {1})। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “समकालिक अनुवाद” को अनुमति दें।"
+    },
+    "“只听译音”需要 macOS 14.2 或更新版本。": {
+      "zh": "“只听译音”需要 macOS 14.2 或更新版本。",
+      "en": "“Translation audio only” requires macOS 14.2 or later.",
+      "ja": "「通訳音声のみ」には macOS 14.2 以降が必要です。",
+      "fr": "« Voix traduite uniquement » nécessite macOS 14.2 ou une version ultérieure.",
+      "es": "«Solo voz traducida» requiere macOS 14.2 o posterior.",
+      "it": "“Solo voce tradotta” richiede macOS 14.2 o versioni successive.",
+      "pt": "“Somente voz traduzida” requer macOS 14.2 ou posterior.",
+      "hi": "“केवल अनूदित आवाज़” के लिए macOS 14.2 या उसके बाद का संस्करण चाहिए।"
+    },
+    "排除自身": {
+      "zh": "排除自身",
+      "en": "Exclude this app",
+      "ja": "このアプリを除外",
+      "fr": "Exclusion de cette app",
+      "es": "Excluir esta app",
+      "it": "Esclusione di questa app",
+      "pt": "Excluir este app",
+      "hi": "इस ऐप को बाहर रखना"
+    },
+    "创建截取": {
+      "zh": "创建截取",
+      "en": "Create audio tap",
+      "ja": "音声タップを作成",
+      "fr": "Création du point de capture audio",
+      "es": "Crear captura de audio",
+      "it": "Creazione del punto di acquisizione audio",
+      "pt": "Criar ponto de captura de áudio",
+      "hi": "ऑडियो टैप बनाना"
+    },
+    "读取格式": {
+      "zh": "读取格式",
+      "en": "Read audio format",
+      "ja": "音声形式を読み取り",
+      "fr": "Lecture du format audio",
+      "es": "Leer el formato de audio",
+      "it": "Lettura del formato audio",
+      "pt": "Ler formato de áudio",
+      "hi": "ऑडियो फ़ॉर्मैट पढ़ना"
+    },
+    "系统音频截取未提供有效浮点 PCM。": {
+      "zh": "系统音频截取未提供有效浮点 PCM。",
+      "en": "The system audio tap did not provide valid floating-point PCM.",
+      "ja": "システム音声タップから有効な浮動小数点 PCM が提供されませんでした。",
+      "fr": "Le point de capture du son système n’a pas fourni de données PCM à virgule flottante valides.",
+      "es": "La captura del audio del sistema no ha proporcionado datos PCM de coma flotante válidos.",
+      "it": "Il punto di acquisizione dell’audio di sistema non ha fornito dati PCM a virgola mobile validi.",
+      "pt": "O ponto de captura do áudio do sistema não forneceu dados PCM de ponto flutuante válidos.",
+      "hi": "सिस्टम ऑडियो टैप ने मान्य फ़्लोटिंग-पॉइंट PCM नहीं दिया।"
+    },
+    "创建采集设备": {
+      "zh": "创建采集设备",
+      "en": "Create capture device",
+      "ja": "取り込みデバイスを作成",
+      "fr": "Création du périphérique de capture",
+      "es": "Crear dispositivo de captura",
+      "it": "Creazione del dispositivo di acquisizione",
+      "pt": "Criar dispositivo de captura",
+      "hi": "कैप्चर डिवाइस बनाना"
+    },
+    "系统音频截取缓冲区无效。": {
+      "zh": "系统音频截取缓冲区无效。",
+      "en": "The system audio tap buffer is invalid.",
+      "ja": "システム音声タップのバッファが無効です。",
+      "fr": "Le tampon du point de capture du son système n’est pas valide.",
+      "es": "El búfer de captura del audio del sistema no es válido.",
+      "it": "Il buffer del punto di acquisizione dell’audio di sistema non è valido.",
+      "pt": "O buffer do ponto de captura do áudio do sistema é inválido.",
+      "hi": "सिस्टम ऑडियो टैप का बफ़र अमान्य है।"
+    },
+    "创建音频回调": {
+      "zh": "创建音频回调",
+      "en": "Create audio callback",
+      "ja": "音声コールバックを作成",
+      "fr": "Création du rappel audio",
+      "es": "Crear función de retorno de audio",
+      "it": "Creazione del callback audio",
+      "pt": "Criar callback de áudio",
+      "hi": "ऑडियो कॉलबैक बनाना"
+    },
+    "系统音频回调不可用。": {
+      "zh": "系统音频回调不可用。",
+      "en": "The system audio callback is unavailable.",
+      "ja": "システム音声のコールバックを利用できません。",
+      "fr": "Le rappel audio système n’est pas disponible.",
+      "es": "La función de retorno de audio del sistema no está disponible.",
+      "it": "Il callback audio di sistema non è disponibile.",
+      "pt": "O callback de áudio do sistema está indisponível.",
+      "hi": "सिस्टम ऑडियो कॉलबैक उपलब्ध नहीं है।"
+    },
+    "开始音频截取": {
+      "zh": "开始音频截取",
+      "en": "Start audio tap",
+      "ja": "音声タップを開始",
+      "fr": "Démarrage du point de capture audio",
+      "es": "Iniciar captura de audio",
+      "it": "Avvio del punto di acquisizione audio",
+      "pt": "Iniciar ponto de captura de áudio",
+      "hi": "ऑडियो टैप शुरू करना"
+    },
+    "无法读取音频设备信息（{0}）。": {
+      "zh": "无法读取音频设备信息（{0}）。",
+      "en": "Unable to read audio device information ({0}).",
+      "ja": "音声デバイスの情報を読み取れません（{0}）。",
+      "fr": "Impossible de lire les informations du périphérique audio ({0}).",
+      "es": "No se puede leer la información del dispositivo de audio ({0}).",
+      "it": "Impossibile leggere le informazioni del dispositivo audio ({0}).",
+      "pt": "Não foi possível ler as informações do dispositivo de áudio ({0}).",
+      "hi": "ऑडियो डिवाइस की जानकारी पढ़ी नहीं जा सकी ({0})।"
+    },
+    "无法列出音频设备（{0}）。": {
+      "zh": "无法列出音频设备（{0}）。",
+      "en": "Unable to list audio devices ({0}).",
+      "ja": "音声デバイスの一覧を取得できません（{0}）。",
+      "fr": "Impossible de répertorier les périphériques audio ({0}).",
+      "es": "No se puede obtener la lista de dispositivos de audio ({0}).",
+      "it": "Impossibile elencare i dispositivi audio ({0}).",
+      "pt": "Não foi possível listar os dispositivos de áudio ({0}).",
+      "hi": "ऑडियो डिवाइस की सूची नहीं मिल सकी ({0})।"
+    },
+    "语言目录格式无效，请重新安装 App。": {
+      "zh": "语言目录格式无效，请重新安装 App。",
+      "en": "The language catalog format is invalid. Reinstall the app.",
+      "ja": "言語カタログの形式が無効です。アプリを再インストールしてください。",
+      "fr": "Le format du catalogue de langues n’est pas valide. Réinstallez l’app.",
+      "es": "El formato del catálogo de idiomas no es válido. Vuelve a instalar la app.",
+      "it": "Il formato del catalogo delle lingue non è valido. Reinstalla l’app.",
+      "pt": "O formato do catálogo de idiomas é inválido. Reinstale o app.",
+      "hi": "भाषा सूची का फ़ॉर्मैट अमान्य है। ऐप फिर से इंस्टॉल करें।"
+    },
+    "无法加载语言目录，请重新安装 App：{0}": {
+      "zh": "无法加载语言目录，请重新安装 App：{0}",
+      "en": "Unable to load the language catalog. Reinstall the app: {0}",
+      "ja": "言語カタログを読み込めません。アプリを再インストールしてください：{0}",
+      "fr": "Impossible de charger le catalogue de langues. Réinstallez l’app : {0}",
+      "es": "No se puede cargar el catálogo de idiomas. Vuelve a instalar la app: {0}",
+      "it": "Impossibile caricare il catalogo delle lingue. Reinstalla l’app: {0}",
+      "pt": "Não foi possível carregar o catálogo de idiomas. Reinstale o app: {0}",
+      "hi": "भाषा सूची लोड नहीं हो सकी। ऐप फिर से इंस्टॉल करें: {0}"
+    },
+    "服务的识别或翻译语言与所选“{0}”不一致，已取消采集。请重新启动服务。": {
+      "zh": "服务的识别或翻译语言与所选“{0}”不一致，已取消采集。请重新启动服务。",
+      "en": "The service’s recognition or translation language does not match the selected “{0}”. Capture was canceled. Restart the service.",
+      "ja": "サービスの認識言語または翻訳言語が、選択した「{0}」と一致しないため、取り込みを中止しました。サービスを再起動してください。",
+      "fr": "La langue de reconnaissance ou de traduction du service ne correspond pas à la sélection « {0} ». La capture a été annulée. Redémarrez le service.",
+      "es": "El idioma de reconocimiento o traducción del servicio no coincide con la selección «{0}». La captura se ha cancelado. Reinicia el servicio.",
+      "it": "La lingua di riconoscimento o traduzione del servizio non corrisponde alla selezione “{0}”. L’acquisizione è stata annullata. Riavvia il servizio.",
+      "pt": "O idioma de reconhecimento ou tradução do serviço não corresponde à seleção “{0}”. A captura foi cancelada. Reinicie o serviço.",
+      "hi": "सेवा की वाक् पहचान या अनुवाद की भाषा चुने गए “{0}” से मेल नहीं खाती। कैप्चर रद्द कर दिया गया है। सेवा फिर से शुरू करें।"
+    },
+    "请选择翻译方向。": {
+      "zh": "请选择翻译方向。",
+      "en": "Select a translation direction.",
+      "ja": "翻訳の方向を選択してください。",
+      "fr": "Sélectionnez un sens de traduction.",
+      "es": "Selecciona una dirección de traducción.",
+      "it": "Seleziona una direzione di traduzione.",
+      "pt": "Selecione uma direção de tradução.",
+      "hi": "अनुवाद की दिशा चुनें।"
+    },
+    "请选择输入和输出设备。": {
+      "zh": "请选择输入和输出设备。",
+      "en": "Select input and output devices.",
+      "ja": "入力デバイスと出力デバイスを選択してください。",
+      "fr": "Sélectionnez les périphériques d’entrée et de sortie.",
+      "es": "Selecciona los dispositivos de entrada y salida.",
+      "it": "Seleziona i dispositivi di ingresso e di uscita.",
+      "pt": "Selecione os dispositivos de entrada e saída.",
+      "hi": "इनपुट और आउटपुट डिवाइस चुनें।"
+    },
+    "ASR 提示词最多 24 项，合计不超过 160 个字符。": {
+      "zh": "ASR 提示词最多 24 项，合计不超过 160 个字符。",
+      "en": "ASR hints are limited to 24 terms and 160 characters in total.",
+      "ja": "ASR ヒントは最大 24 項目、合計 160 文字以内にしてください。",
+      "fr": "Les indications ASR sont limitées à 24 termes et à 160 caractères au total.",
+      "es": "Las pistas ASR admiten un máximo de 24 términos y 160 caracteres en total.",
+      "it": "I suggerimenti ASR sono limitati a 24 termini e a 160 caratteri in totale.",
+      "pt": "As dicas de ASR são limitadas a 24 termos e 160 caracteres no total.",
+      "hi": "ASR संकेतों में अधिकतम 24 शब्द या पद और कुल 160 वर्ण हो सकते हैं।"
+    },
+    "采集音频格式无效。": {
+      "zh": "采集音频格式无效。",
+      "en": "The captured audio format is invalid.",
+      "ja": "取り込んだ音声の形式が無効です。",
+      "fr": "Le format de l’audio capturé n’est pas valide.",
+      "es": "El formato del audio capturado no es válido.",
+      "it": "Il formato dell’audio acquisito non è valido.",
+      "pt": "O formato do áudio capturado é inválido.",
+      "hi": "कैप्चर किए गए ऑडियो का फ़ॉर्मैट अमान्य है।"
+    },
+    "音频发送积压超过 5 秒，已停止采集。请检查本机服务。": {
+      "zh": "音频发送积压超过 5 秒，已停止采集。请检查本机服务。",
+      "en": "The audio transmission backlog exceeded 5 seconds, so capture stopped. Check the local service.",
+      "ja": "音声送信の滞留が 5 秒を超えたため、取り込みを停止しました。ローカルサービスを確認してください。",
+      "fr": "Le retard d’envoi audio a dépassé 5 secondes. La capture a été arrêtée. Vérifiez le service local.",
+      "es": "El audio pendiente de envío ha superado los 5 segundos y la captura se ha detenido. Comprueba el servicio local.",
+      "it": "L’audio in attesa di invio ha superato 5 secondi e l’acquisizione è stata arrestata. Controlla il servizio locale.",
+      "pt": "O acúmulo de áudio a enviar excedeu 5 segundos e a captura foi interrompida. Verifique o serviço local.",
+      "hi": "भेजे जाने वाले ऑडियो का जमाव 5 सेकंड से अधिक हो गया, इसलिए कैप्चर रुक गया। स्थानीय सेवा जाँचें।"
+    },
+    "找不到服务或 Python 环境。请选择包含 macos.sh 的 VoxBridge 文件夹。": {
+      "zh": "找不到服务或 Python 环境。请选择包含 macos.sh 的 VoxBridge 文件夹。",
+      "en": "The service or Python environment could not be found. Select the VoxBridge folder containing macos.sh.",
+      "ja": "サービスまたは Python 環境が見つかりません。macos.sh を含む VoxBridge フォルダを選択してください。",
+      "fr": "Le service ou l’environnement Python est introuvable. Sélectionnez le dossier VoxBridge contenant macos.sh.",
+      "es": "No se encuentra el servicio o el entorno de Python. Selecciona la carpeta VoxBridge que contiene macos.sh.",
+      "it": "Impossibile trovare il servizio o l’ambiente Python. Seleziona la cartella VoxBridge che contiene macos.sh.",
+      "pt": "O serviço ou o ambiente Python não foi encontrado. Selecione a pasta VoxBridge que contém macos.sh.",
+      "hi": "सेवा या Python परिवेश नहीं मिला। macos.sh वाला VoxBridge फ़ोल्डर चुनें।"
+    },
+    "服务命令执行失败。": {
+      "zh": "服务命令执行失败。",
+      "en": "The service command failed.",
+      "ja": "サービスコマンドの実行に失敗しました。",
+      "fr": "L’exécution de la commande du service a échoué.",
+      "es": "Ha fallado la ejecución del comando del servicio.",
+      "it": "Esecuzione del comando del servizio non riuscita.",
+      "pt": "A execução do comando do serviço falhou.",
+      "hi": "सेवा का कमांड चलाना विफल हुआ।"
+    }
+  }
+}

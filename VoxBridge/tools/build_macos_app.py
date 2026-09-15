@@ -41,7 +41,7 @@ def build(destination: Path, desktop_link: bool):
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-O', '-target', 'arm64-apple-macosx14.0',
                         '-framework', 'AppKit', '-framework', 'AVFoundation', '-framework', 'ScreenCaptureKit',
                         '-framework', 'CoreAudio', '-framework', 'CoreImage',
-                        *[str(SOURCES/name) for name in ('ServiceClient.swift', 'NativePreferences.swift',
+                        *[str(SOURCES/name) for name in ('NativeLocalization.swift', 'NativeLocalizedViews.swift', 'ServiceClient.swift', 'NativePreferences.swift',
                            'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift',
                            'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleOverlay.swift', 'SubtitleSettings.swift', 'NativeSession.swift', 'main.swift')],
                         '-o', str(executable_dir/'VoxBridgeConsole')], check=True)
@@ -51,6 +51,21 @@ def build(destination: Path, desktop_link: bool):
         subprocess.run([str(icon_builder), str(iconset)], check=True)
         subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'AppIcon.icns')], check=True)
         shutil.copy2(ROOT/'voxbridge/language_catalog.json', resources/'language_catalog.json')
+        (resources/'ui_locales').mkdir()
+        for catalog in ('native.json', 'native-errors.json'):
+            shutil.copy2(ROOT/'voxbridge/ui_locales'/catalog, resources/'ui_locales'/catalog)
+        translations = json.loads((resources/'ui_locales/native.json').read_text())['messages']
+        for locale in ('zh', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'):
+            localized = resources / f'{"zh-Hans" if locale == "zh" else locale}.lproj'
+            localized.mkdir()
+            strings = {
+                'CFBundleName': translations['同声传译'][locale],
+                'CFBundleDisplayName': translations['同声传译'][locale],
+                'NSMicrophoneUsageDescription': translations['采集所选麦克风的语音，在本机执行识别和翻译。'][locale],
+                'NSAudioCaptureUsageDescription': translations['采集系统播放声音，在本机执行识别和翻译，并排除本 App 的朗读。'][locale],
+            }
+            (localized/'InfoPlist.strings').write_text('\n'.join(
+                f'{json.dumps(key)} = {json.dumps(value, ensure_ascii=False)};' for key, value in strings.items()) + '\n')
         (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
@@ -58,8 +73,10 @@ def build(destination: Path, desktop_link: bool):
             'CFBundleDisplayName': '同声传译',
             'CFBundleExecutable': 'VoxBridgeConsole',
             'CFBundlePackageType': 'APPL',
-            'CFBundleShortVersionString': '1.6.1',
-            'CFBundleVersion': '19',
+            'CFBundleShortVersionString': '1.7.0',
+            'CFBundleVersion': '20',
+            'CFBundleDevelopmentRegion': 'en',
+            'CFBundleLocalizations': ['zh-Hans', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'],
             'CFBundleIconFile': 'AppIcon',
             'LSMinimumSystemVersion': '14.0',
             'LSMultipleInstancesProhibited': True,

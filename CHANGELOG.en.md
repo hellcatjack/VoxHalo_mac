@@ -2,6 +2,12 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.7.0 · build 20 · 2026-09-15
+
+- Add eight offline interface languages to the App, menus, subtitle settings, monitor, listener and optional sign-in pages. Follow system/browser preferences by default and remember manual choices.
+- Keep interface selection independent of audio devices and recognition/translation direction; switch during a session without restarting capture/playback or rewriting source/translated content.
+- Bundle localized permission descriptions, add native/browser switching regressions, and accommodate longer text and mobile layouts. See [interface languages](docs/en/INTERFACE-LANGUAGES.md).
+
 ## 2026-09-15 · Chinese speech-rate ceiling
 
 - Expand automatic Chinese speech to the user-selected 1.10–1.30 range, with 1.10, 1.18, 1.26 and 1.30 steps. Retain existing backlog thresholds and whole-sentence synthesis.

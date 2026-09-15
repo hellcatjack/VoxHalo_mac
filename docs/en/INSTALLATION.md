@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/INSTALLATION.md) · [README](../../README.md) · [Models](MODELS.md)
 
-These instructions match the repository's `setup.sh` and App 1.6.0/build 18. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
+These instructions match the repository's `setup.sh` and App 1.7.0/build 20. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
 
 ## 1. Check your Mac
 
@@ -136,6 +136,8 @@ Full Disk Access is not required. If you change audio permission after denying i
 
 ## 7. Start your first session
 
+Choose **Interface language** at the top of the App, or keep **Follow system**. Eight interface languages are available independently of the speech direction. The table below maps Chinese controls to their meaning; English instructions use the English interface. See [interface languages](INTERFACE-LANGUAGES.md).
+
 | App label | Meaning |
 |---|---|
 | 输入来源 | Input source |
@@ -147,16 +149,16 @@ Full Disk Access is not required. If you change audio permission after denying i
 | 字幕设置… | Configure subtitle appearance and placement |
 | 停止服务并退出 | Stop capture, playback, and services, then quit |
 
-For translated browser audio, select **系统播放声音 · 只听译音**, then **系统默认输出** or a specific headset, and choose the direction matching the source speech. Click **开始传译**, wait for active capture, then play the video. Keep the video's audio enabled. Suppression of the original sound is handled by the App; muting the source can remove the signal being captured.
+For translated browser audio, select **System audio · Translation only**, then **System default output** or a specific headset, and choose the direction matching the source speech. Click **Start interpreting**, wait for active capture, then play the video. Keep the video's audio enabled. Suppression of the original sound is handled by the App; muting the source can remove the signal being captured.
 
-Check input level, source text, translation, and speech output with a short sample. Test with the browser monitor both open and closed. Before ending interpretation, pause the source video. If you use regular **系统播放声音**, the original audio remains audible alongside translated speech.
+Check input level, source text, translation, and speech output with a short sample. Test with the browser monitor both open and closed. Before ending interpretation, pause the source video. If you use regular **System audio**, the original audio remains audible alongside translated speech.
 
-Capture includes other applications' system playback and excludes this App's own speech; pause other tabs and avoid opening a local HLS player during system capture. For microphone capture, use headphones to limit acoustic feedback. Change devices or direction only after ending the session. If an explicitly selected device disconnects, reconnect it or choose another device and press **刷新设备** (refresh devices).
+Capture includes other applications' system playback and excludes this App's own speech; pause other tabs and avoid opening a local HLS player during system capture. For microphone capture, use headphones to limit acoustic feedback. Change devices or direction only after ending the session. If an explicitly selected device disconnects, reconnect it or choose another device and press **Refresh devices**.
 
 ## 8. Monitor, subtitles, and LAN listeners
 
 - **Monitor:** `http://127.0.0.1:8024` on the Mac, or the Mac's actual LAN address from another device. It is not the session controller.
-- **Subtitles:** enable the overlay in **字幕设置…**. Configure display, font, size, color, shadow, position, and width; bottom placement can cover the Dock. Appearance changes do not alter TTS audio.
+- **Subtitles:** enable the overlay in **Subtitle settings…**. Configure display, font, size, color, shadow, position, and width; bottom placement can cover the Dock. Appearance changes do not alter TTS audio.
 - **Listeners:** scan the App's QR code on the same LAN, then press **Start Listening**. It points to the detected LAN IP, not `127.0.0.1`. No LAN address means local use can continue, but no valid LAN QR code is offered.
 
 If another device cannot connect, check Wi-Fi/Ethernet, firewall permissions, and guest-network/client isolation. The default profile has no web login; keep `8024` on a trusted network. Mobile HLS buffering is separate from the native Mac audio clock.
@@ -193,7 +195,7 @@ The App stores the absolute checkout location. Python environments also contain 
 
 For relocation or migration, stop the old installation, clone a fresh checkout at the final destination, and run `setup.sh` there. Optionally use `VOXHALO_ASSET_CACHE` to copy verified model assets from the old workspace. Rebuild the App against the new path, verify it, and only then remove the old installation. Only one installation can own ports 8024/8876 at a time.
 
-To uninstall, select **停止服务并退出**, remove the App from its chosen Applications folder, and remove the checkout only if its models/logs are no longer needed. Optional preference reset, with the App closed:
+To uninstall, select **Stop services and quit**, remove the App from its chosen Applications folder, and remove the checkout only if its models/logs are no longer needed. Optional preference reset, with the App closed:
 
 ```sh
 defaults delete org.pccs.voxbridge.console

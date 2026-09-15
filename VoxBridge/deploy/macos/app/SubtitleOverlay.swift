@@ -125,7 +125,7 @@ extension NSColor {
         guard self.text != text || self.preferences != normalized else { return }
         self.text = text; self.preferences = normalized
         setAccessibilityElement(true); setAccessibilityRole(.staticText)
-        setAccessibilityLabel("翻译字幕"); setAccessibilityValue(text)
+        setAccessibilityLabel(NativeLocalization.text("翻译字幕")); setAccessibilityValue(text)
         needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
@@ -149,7 +149,7 @@ extension NSColor {
 @MainActor final class SubtitleOverlayPanel: NSPanel {
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        title = "翻译字幕"; isOpaque = false; backgroundColor = .clear; hasShadow = false
+        title = NativeLocalization.text("翻译字幕"); isOpaque = false; backgroundColor = .clear; hasShadow = false
         ignoresMouseEvents = true; hidesOnDeactivate = false; isReleasedWhenClosed = false
         isExcludedFromWindowsMenu = true; level = .screenSaver
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
@@ -202,6 +202,11 @@ extension NSColor {
         if active { preview = false }
         render()
     }
+    func refreshLocalization() {
+        panel.title = NativeLocalization.text("翻译字幕")
+        textView.setAccessibilityLabel(NativeLocalization.text("翻译字幕"))
+        if preview { render() }
+    }
     func setPreview(_ enabled: Bool) { preview = enabled && !active; render() }
     func close() { active = false; liveText = ""; preview = false; hide() }
     private func hide() {
@@ -210,7 +215,7 @@ extension NSColor {
         if panel.isVisible { panel.orderOut(nil) }
     }
     private func render() {
-        let text = preview ? "字幕样式预览\n愿平安与你们同在。May peace be with you." : (active ? liveText : "")
+        let text = preview ? NativeLocalization.text("字幕样式预览") + "\n" + NativeLocalization.text("这是翻译字幕的显示效果。") : (active ? liveText : "")
         guard (preferences.enabled || preview), !text.isEmpty, let screen = SubtitleDisplays.selected(preferences.screenID) else { hide(); return }
         let key = LayoutKey(text: text, identity: identity, synchronized: synchronized, preferences: preferences, screen: screen.frame)
         guard lastLayout != key else { return }

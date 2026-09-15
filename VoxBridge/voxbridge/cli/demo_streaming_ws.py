@@ -1619,6 +1619,7 @@ def _should_release_partial_reset_guard(
 
 
 from voxbridge.web.pages import INDEX_HTML_TEMPLATE
+from voxbridge.web.localization import embedded_localization
 
 
 LOGIN_HTML_TEMPLATE = r"""<!doctype html>
@@ -1877,14 +1878,42 @@ def _create_app(
         return target
 
     def _render_login_html(error: bool = False, next_target: str = "/") -> str:
-        message = '<div class="error">用户名或密码错误。</div>' if error else ""
+        message = (
+            '<div class="error" role="alert" data-i18n="login.error">'
+            'Incorrect username or password.</div>' if error else ""
+        )
         safe_target = _safe_login_next(next_target)
         next_field = (
             '<input type="hidden" name="next" value="'
             + html.escape(safe_target, quote=True)
             + '" />'
         )
-        return LOGIN_HTML_TEMPLATE.replace("__MESSAGE__", message).replace(
+        # Presentation-only substitutions leave auth fields and redirect escaping
+        # unchanged. The selector sits outside the credential form.
+        localized_template = LOGIN_HTML_TEMPLATE
+        replacements = {
+            '<html lang="zh-CN">': '<html lang="en">',
+            '<title>VoxBridge 登录</title>':
+                '<title data-i18n="login.title">VoxBridge · Sign in</title>',
+            '<p>请输入访问凭据后继续使用语音识别与翻译。</p>':
+                '<p data-i18n="login.intro">Sign in to continue using speech recognition and translation.</p>',
+            '<label for="username">用户名</label>':
+                '<label for="username" data-i18n="login.username">Username</label>',
+            '<label for="password">密码</label>':
+                '<label for="password" data-i18n="login.password">Password</label>',
+            '<button type="submit">登录</button>':
+                '<button type="submit" data-i18n="login.submit">Sign in</button>',
+            '    input {': '    input, select {',
+            '    .error {': '    select { margin-bottom: 18px; }\n    .error {',
+            '    __MESSAGE__':
+                '<label for="interfaceLanguage" data-i18n="common.interface">Interface language</label>'
+                '<select id="interfaceLanguage" aria-label="Interface language" '
+                'data-i18n-aria="common.interface"></select>__MESSAGE__',
+            '</body>': embedded_localization() + '<script>window.VoxUI.mount();</script></body>',
+        }
+        for original, replacement in replacements.items():
+            localized_template = localized_template.replace(original, replacement)
+        return localized_template.replace("__MESSAGE__", message).replace(
             "__NEXT_FIELD__",
             next_field,
         )

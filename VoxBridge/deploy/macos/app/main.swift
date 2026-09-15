@@ -28,6 +28,9 @@ import CoreImage
     private let sourceLabel = NSTextField(wrappingLabelWithString: "原文将在这里显示")
     private let translationLabel = NSTextField(wrappingLabelWithString: "译文将在这里显示")
     private let addressLabel = NSTextField(wrappingLabelWithString: "正在获取局域网地址…")
+    private let interfacePopup = NSPopUpButton()
+    private let localizedViews = NativeLocalizedViews()
+    private var displayedLocale = ""
     private let inputPopup = NSPopUpButton()
     private let outputPopup = NSPopUpButton()
     private let sourcePopup = NSPopUpButton()
@@ -89,17 +92,21 @@ import CoreImage
     }
 
     private func buildWindow() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 750, height: 750),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 800),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "同声传译"; window.isReleasedWhenClosed = false; window.delegate = self
-        window.minSize = NSSize(width: 700, height: 680); window.center()
+        window.minSize = NSSize(width: 760, height: 680); window.center()
         let content = vertical([], spacing: 14); content.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView!.addSubview(content)
+        let scroll = NSScrollView(frame: window.contentView!.bounds)
+        scroll.autoresizingMask = [.width, .height]; scroll.hasVerticalScroller = true; scroll.drawsBackground = false
+        let document = NSView(); document.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = document; window.contentView!.addSubview(scroll); document.addSubview(content)
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 26),
-            content.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -26),
-            content.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(lessThanOrEqualTo: window.contentView!.bottomAnchor, constant: -20)
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 26),
+            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -26),
+            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 24),
+            content.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -20)
         ])
         let title = NSTextField(labelWithString: "同声传译")
         title.font = .systemFont(ofSize: 25, weight: .bold)
@@ -111,9 +118,18 @@ import CoreImage
         versionLabel.setAccessibilityLabel("应用版本")
         let heading = row([title, versionLabel], spacing: 12)
         heading.alignment = .firstBaseline
-        let subtitle = NSTextField(labelWithString: "独立采集 · 本机识别与翻译 · 本机及局域网朗读")
+        let subtitle = NSTextField(wrappingLabelWithString: "独立采集 · 本机识别与翻译 · 本机及局域网朗读")
         subtitle.textColor = .secondaryLabelColor
         content.addArrangedSubview(vertical([heading, subtitle], spacing: 4))
+        subtitle.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        interfacePopup.addItem(withTitle: "Auto"); interfacePopup.lastItem?.representedObject = "auto"
+        for (code, name) in zip(NativeLocalization.codes, NativeLocalization.autonyms) {
+            interfacePopup.addItem(withTitle: name); interfacePopup.lastItem?.representedObject = code
+        }
+        interfacePopup.select(interfacePopup.itemArray.first { $0.representedObject as? String == NativeLocalization.preference() })
+        interfacePopup.target = self; interfacePopup.action = #selector(interfaceLanguageChanged)
+        interfacePopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
+        content.addArrangedSubview(row([NSTextField(labelWithString: "界面语言"), interfacePopup]))
         stateLabel.font = .systemFont(ofSize: 17, weight: .semibold)
         spinner.style = .spinning; spinner.controlSize = .small; spinner.isDisplayedWhenStopped = false
         content.addArrangedSubview(row([spinner, stateLabel]))
@@ -155,13 +171,15 @@ import CoreImage
         meter.levelIndicatorStyle = .continuousCapacity; meter.minValue = 0; meter.maxValue = 1
         meter.warningValue = 0.75; meter.criticalValue = 0.95
         meter.widthAnchor.constraint(equalToConstant: 110).isActive = true
-        content.addArrangedSubview(row([NSTextField(labelWithString: "识别"), sourcePopup, NSTextField(labelWithString: "→ 译音"), targetPopup, devicesButton, meter]))
+        content.addArrangedSubview(row([NSTextField(labelWithString: "识别"), sourcePopup, NSTextField(labelWithString: "→ 译音"), targetPopup]))
+        content.addArrangedSubview(row([devicesButton, meter]))
         termsField.placeholderString = "ASR 提示词，以空格或逗号分隔（可选）"
         termsField.stringValue = preferences.contextTerms.joined(separator: "，")
         termsField.setAccessibilityLabel("ASR 提示词"); termsField.target = self; termsField.action = #selector(saveSelections)
         content.addArrangedSubview(termsField); termsField.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        let hint = NSTextField(labelWithString: "“只听译音”在传译时关闭原声输出，结束后恢复。系统采集会排除本 App 的朗读。")
+        let hint = NSTextField(wrappingLabelWithString: "“只听译音”在传译时关闭原声输出，结束后恢复。系统采集会排除本 App 的朗读。")
         hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor; content.addArrangedSubview(hint)
+        hint.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
 
         sessionLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         ttsLabel.font = .systemFont(ofSize: 12); ttsLabel.textColor = .secondaryLabelColor
@@ -191,11 +209,35 @@ import CoreImage
         detailLabel.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         folderButton = button("选择服务文件夹…", #selector(chooseFolder))
         content.addArrangedSubview(row([button("查看日志", #selector(openLogs)), button("字幕设置…", #selector(showSubtitleSettings)), folderButton]))
+        refreshInterfaceText()
         content.layoutSubtreeIfNeeded()
         let desired = content.fittingSize.height + 44
         let available = (NSScreen.main?.visibleFrame.height ?? 950) - 40
-        window.setContentSize(NSSize(width: 750, height: min(max(710, desired), available)))
+        window.setContentSize(NSSize(width: 920, height: min(max(710, desired), available)))
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentView.bounds.height)))
+        scroll.reflectScrolledClipView(scroll.contentView)
         render()
+    }
+
+    @objc private func interfaceLanguageChanged() {
+        let value = interfacePopup.selectedItem?.representedObject as? String ?? "auto"
+        NativeLocalization.save(value)
+        refreshInterfaceText(); render()
+    }
+
+    private func refreshInterfaceText() {
+        guard let content = window?.contentView else { return }
+        displayedLocale = NativeLocalization.locale
+        window.title = NativeLocalization.text("同声传译")
+        localizedViews.capture(content, excluding: [stateLabel, modelLabel, sessionLabel, ttsLabel, sourceLabel, translationLabel, addressLabel, detailLabel, interfacePopup])
+        if let menu = NSApp.mainMenu { localizedViews.capture(menu) }
+        if let menu = statusItem.menu { localizedViews.capture(menu) }
+        localizedViews.apply()
+        interfacePopup.item(at: 0)?.title = NativeLocalization.text("跟随系统")
+        interfacePopup.setAccessibilityLabel(NativeLocalization.text("界面语言"))
+        subtitleSettings.refreshLocalization()
+        subtitleOverlay.refreshLocalization()
     }
 
     private func separator(in content: NSStackView) {
@@ -245,6 +287,7 @@ import CoreImage
         popup.removeAllItems()
         for (name, uid) in base + devices.map({ ($0.name, $0.uid) }) {
             popup.addItem(withTitle: name); popup.lastItem?.representedObject = uid
+            if !base.contains(where: { $0.1 == uid }) { popup.lastItem?.identifier = NSUserInterfaceItemIdentifier("literal") }
         }
         if let selectedItem = popup.itemArray.first(where: { $0.representedObject as? String == selected }) {
             popup.select(selectedItem)
@@ -252,6 +295,7 @@ import CoreImage
             popup.addItem(withTitle: "已断开 · \(selected)"); popup.lastItem?.representedObject = selected
             popup.select(popup.lastItem)
         }
+        localizedViews.capture(popup); localizedViews.apply()
     }
 
     private func selectedPreferences() throws -> NativePreferences {
@@ -276,6 +320,7 @@ import CoreImage
             ?? targetPopup.itemArray.first { $0.representedObject as? String == preferences.languagePair.source.code }
             ?? targetPopup.itemArray.first
         if let choice { targetPopup.select(choice) }
+        if let menu = targetPopup.menu { localizedViews.capture(menu) }; localizedViews.apply()
     }
 
     @objc private func sourceLanguageChanged() {
@@ -309,6 +354,7 @@ import CoreImage
 
     private func render() {
         guard startButton != nil else { return }
+        if displayedLocale != NativeLocalization.locale { refreshInterfaceText() }
         let installed = client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
         let busy = operation != nil || snapshot?.busy == true || choosingFolder
         let sessionBusy = session.isActive
@@ -319,8 +365,9 @@ import CoreImage
         else if ready { stateLabel.stringValue = "本机服务已就绪" }
         else if snapshot == nil && polling { stateLabel.stringValue = "正在检查服务…" }
         else { stateLabel.stringValue = running ? "服务尚未就绪" : "服务已停止" }
+        stateLabel.stringValue = NativeLocalization.render(stateLabel.stringValue)
         stateLabel.textColor = ready && !busy ? .systemGreen : .labelColor
-        modelLabel.stringValue = "Qwen ASR · \(serviceText("app"))   HY-MT · \(serviceText("translation"))   Kokoro · 本机 CPU"
+        modelLabel.stringValue = "Qwen ASR · \(serviceText("app"))   HY-MT · \(serviceText("translation"))   Kokoro · \(NativeLocalization.text("本机 CPU"))"
         if busy || session.phase == .starting || session.phase == .stopping { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
         startButton.isEnabled = installed && snapshot != nil && !busy && !ready && !sessionBusy
         stopButton.isEnabled = installed && (running || sessionBusy || startTask != nil) && stopTask == nil && !choosingFolder
@@ -332,21 +379,23 @@ import CoreImage
         copyButton.isEnabled = snapshot?.listener_url != nil
         folderButton.isEnabled = !busy && !running && !sessionBusy && (snapshot != nil || !installed)
         startMenu.isEnabled = startButton.isEnabled; stopMenu.isEnabled = stopButton.isEnabled; captureMenu.isEnabled = captureButton.isEnabled
-        sessionLabel.stringValue = session.message
+        sessionLabel.stringValue = NativeLocalization.render(session.message)
         sessionLabel.textColor = session.phase == .running ? .systemGreen : session.phase == .failed ? .systemRed : .labelColor
         meter.doubleValue = Double(min(1, session.level * 3))
         let pair = sessionBusy ? session.languagePair : preferences.languagePair
         let showTranscript = pair == session.languagePair
-        ttsLabel.stringValue = session.isActive ? String(format: "\(pair.targetName)朗读待输出 %.1f 秒 · 合成语速 %.2f× · 音频连接 %d", session.backlogSeconds, session.speed, session.listenerCount) : "识别\(pair.sourceName) → 翻译并朗读\(pair.targetName) · 开始前可切换方向"
-        sourceLabel.stringValue = !showTranscript || session.sourceText.isEmpty ? "\(pair.sourceName)原文将在这里显示" : session.sourceText
+        ttsLabel.stringValue = session.isActive ? NativeLocalization.text("{0}朗读待输出 {1} 秒 · 合成语速 {2}× · 音频连接 {3}", pair.targetName, String(format: "%.1f", session.backlogSeconds), String(format: "%.2f", session.speed), String(session.listenerCount)) : NativeLocalization.text("识别{0} → 翻译并朗读{1} · 开始前可切换方向", pair.sourceName, pair.targetName)
+        sourceLabel.stringValue = !showTranscript || session.sourceText.isEmpty ? NativeLocalization.text("{0}原文将在这里显示", pair.sourceName) : session.sourceText
         let displayedTranslation = session.subtitleFollowsPlayback ? session.subtitleText : session.translationText
-        translationLabel.stringValue = !showTranscript || displayedTranslation.isEmpty ? "等待\(pair.targetName)\(session.subtitleFollowsPlayback ? "朗读字幕" : "译文")" : displayedTranslation
+        translationLabel.stringValue = !showTranscript || displayedTranslation.isEmpty ? NativeLocalization.text(session.subtitleFollowsPlayback ? "等待{0}朗读字幕" : "等待{0}译文", pair.targetName) : displayedTranslation
         addressLabel.stringValue = snapshot?.listener_url ?? snapshot?.lan_error ?? "连接局域网后自动显示地址"
+        addressLabel.stringValue = NativeLocalization.render(addressLabel.stringValue)
         if lastQR != snapshot?.listener_url { lastQR = snapshot?.listener_url; updateQR(lastQR) }
         let error = lastError ?? session.lastError ?? snapshot?.service_error ?? session.ttsWarning
-        detailLabel.stringValue = error.map { String($0.prefix(300)) } ?? "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。"
-        detailLabel.textColor = error == nil ? .secondaryLabelColor : .systemRed; detailLabel.toolTip = error
-        statusItem.button?.toolTip = "同声传译 · " + (sessionBusy ? session.message : stateLabel.stringValue)
+        detailLabel.stringValue = error.map { String(NativeLocalization.render($0).prefix(300)) } ?? "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。"
+        detailLabel.stringValue = NativeLocalization.render(detailLabel.stringValue)
+        detailLabel.textColor = error == nil ? .secondaryLabelColor : .systemRed; detailLabel.toolTip = error.map { NativeLocalization.render($0) }
+        statusItem.button?.toolTip = NativeLocalization.text("同声传译") + " · " + (sessionBusy ? NativeLocalization.render(session.message) : stateLabel.stringValue)
     }
 
     private func updateQR(_ address: String?) {
@@ -358,8 +407,8 @@ import CoreImage
     }
 
     private func serviceText(_ name: String) -> String {
-        guard let value = snapshot?.services[name] else { return "等待检查" }
-        return value.ready ? "已就绪" : value.pid == nil ? "已停止" : "加载中"
+        guard let value = snapshot?.services[name] else { return NativeLocalization.text("等待检查") }
+        return NativeLocalization.text(value.ready ? "已就绪" : value.pid == nil ? "已停止" : "加载中")
     }
 
     @objc private func showSubtitleSettings() { subtitleSettings.show() }
@@ -435,7 +484,7 @@ import CoreImage
         guard operation == nil, !choosingFolder, snapshot?.hasProcess != true, !session.isActive,
               snapshot != nil || client?.isInstalled != true else { return }
         choosingFolder = true; let originalClient = client; render()
-        let panel = NSOpenPanel(); panel.title = "选择 VoxBridge 服务文件夹"
+        let panel = NSOpenPanel(); panel.title = NativeLocalization.text("选择 VoxBridge 服务文件夹")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }

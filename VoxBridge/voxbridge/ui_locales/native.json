@@ -1,0 +1,1165 @@
+{
+  "version": 1,
+  "messages": {
+    "同声传译": {
+      "zh": "同声传译",
+      "en": "Simultaneous Interpretation",
+      "ja": "同時通訳",
+      "fr": "Interprétation simultanée",
+      "es": "Interpretación simultánea",
+      "it": "Interpretazione simultanea",
+      "pt": "Interpretação simultânea",
+      "hi": "समकालिक अनुवाद"
+    },
+    "界面语言": {
+      "zh": "界面语言",
+      "en": "Interface language",
+      "ja": "表示言語",
+      "fr": "Langue de l’interface",
+      "es": "Idioma de la interfaz",
+      "it": "Lingua dell’interfaccia",
+      "pt": "Idioma da interface",
+      "hi": "इंटरफ़ेस भाषा"
+    },
+    "跟随系统": {
+      "zh": "跟随系统",
+      "en": "Follow system",
+      "ja": "システムに従う",
+      "fr": "Suivre le système",
+      "es": "Según el sistema",
+      "it": "Segui il sistema",
+      "pt": "Seguir o sistema",
+      "hi": "सिस्टम के अनुसार"
+    },
+    "中文": {
+      "zh": "中文",
+      "en": "Chinese",
+      "ja": "中国語",
+      "fr": "Chinois",
+      "es": "Chino",
+      "it": "Cinese",
+      "pt": "Chinês",
+      "hi": "चीनी"
+    },
+    "英文": {
+      "zh": "英文",
+      "en": "English",
+      "ja": "英語",
+      "fr": "Anglais",
+      "es": "Inglés",
+      "it": "Inglese",
+      "pt": "Inglês",
+      "hi": "अंग्रेज़ी"
+    },
+    "日语": {
+      "zh": "日语",
+      "en": "Japanese",
+      "ja": "日本語",
+      "fr": "Japonais",
+      "es": "Japonés",
+      "it": "Giapponese",
+      "pt": "Japonês",
+      "hi": "जापानी"
+    },
+    "法语": {
+      "zh": "法语",
+      "en": "French",
+      "ja": "フランス語",
+      "fr": "Français",
+      "es": "Francés",
+      "it": "Francese",
+      "pt": "Francês",
+      "hi": "फ़्रेंच"
+    },
+    "西班牙语": {
+      "zh": "西班牙语",
+      "en": "Spanish",
+      "ja": "スペイン語",
+      "fr": "Espagnol",
+      "es": "Español",
+      "it": "Spagnolo",
+      "pt": "Espanhol",
+      "hi": "स्पेनिश"
+    },
+    "意大利语": {
+      "zh": "意大利语",
+      "en": "Italian",
+      "ja": "イタリア語",
+      "fr": "Italien",
+      "es": "Italiano",
+      "it": "Italiano",
+      "pt": "Italiano",
+      "hi": "इतालवी"
+    },
+    "葡萄牙语": {
+      "zh": "葡萄牙语",
+      "en": "Portuguese",
+      "ja": "ポルトガル語",
+      "fr": "Portugais",
+      "es": "Portugués",
+      "it": "Portoghese",
+      "pt": "Português",
+      "hi": "पुर्तगाली"
+    },
+    "印地语": {
+      "zh": "印地语",
+      "en": "Hindi",
+      "ja": "ヒンディー語",
+      "fr": "Hindi",
+      "es": "Hindi",
+      "it": "Hindi",
+      "pt": "Hindi",
+      "hi": "हिन्दी"
+    },
+    "{0} → {1}": {
+      "zh": "{0} → {1}",
+      "en": "{0} → {1}",
+      "ja": "{0} → {1}",
+      "fr": "{0} → {1}",
+      "es": "{0} → {1}",
+      "it": "{0} → {1}",
+      "pt": "{0} → {1}",
+      "hi": "{0} → {1}"
+    },
+    "正在检查服务…": {
+      "zh": "正在检查服务…",
+      "en": "Checking services…",
+      "ja": "サービスを確認中…",
+      "fr": "Vérification des services…",
+      "es": "Comprobando servicios…",
+      "it": "Verifica dei servizi…",
+      "pt": "Verificando serviços…",
+      "hi": "सेवाओं की जाँच हो रही है…"
+    },
+    "选择设备后开始传译": {
+      "zh": "选择设备后开始传译",
+      "en": "Choose devices, then start interpretation",
+      "ja": "デバイスを選んで通訳を開始",
+      "fr": "Choisissez les appareils, puis démarrez",
+      "es": "Elija los dispositivos e inicie la interpretación",
+      "it": "Scegli i dispositivi, poi avvia",
+      "pt": "Escolha os dispositivos e inicie",
+      "hi": "डिवाइस चुनें, फिर अनुवाद शुरू करें"
+    },
+    "本机朗读尚未开始": {
+      "zh": "本机朗读尚未开始",
+      "en": "Local speech has not started",
+      "ja": "ローカル読み上げは未開始",
+      "fr": "La lecture locale n’a pas commencé",
+      "es": "La lectura local no ha comenzado",
+      "it": "La lettura locale non è iniziata",
+      "pt": "A leitura local não começou",
+      "hi": "स्थानीय वाचन शुरू नहीं हुआ है"
+    },
+    "原文将在这里显示": {
+      "zh": "原文将在这里显示",
+      "en": "Source text will appear here",
+      "ja": "原文がここに表示されます",
+      "fr": "Le texte source s’affichera ici",
+      "es": "El texto original aparecerá aquí",
+      "it": "Il testo originale apparirà qui",
+      "pt": "O texto original aparecerá aqui",
+      "hi": "मूल पाठ यहाँ दिखाई देगा"
+    },
+    "译文将在这里显示": {
+      "zh": "译文将在这里显示",
+      "en": "Translation will appear here",
+      "ja": "訳文がここに表示されます",
+      "fr": "La traduction s’affichera ici",
+      "es": "La traducción aparecerá aquí",
+      "it": "La traduzione apparirà qui",
+      "pt": "A tradução aparecerá aqui",
+      "hi": "अनुवाद यहाँ दिखाई देगा"
+    },
+    "正在获取局域网地址…": {
+      "zh": "正在获取局域网地址…",
+      "en": "Finding the local network address…",
+      "ja": "LAN アドレスを取得中…",
+      "fr": "Recherche de l’adresse réseau local…",
+      "es": "Buscando la dirección de red local…",
+      "it": "Ricerca dell’indirizzo di rete locale…",
+      "pt": "Buscando o endereço da rede local…",
+      "hi": "स्थानीय नेटवर्क का पता खोजा जा रहा है…"
+    },
+    "开发版": {
+      "zh": "开发版",
+      "en": "Development",
+      "ja": "開発版",
+      "fr": "Développement",
+      "es": "Desarrollo",
+      "it": "Sviluppo",
+      "pt": "Desenvolvimento",
+      "hi": "विकास संस्करण"
+    },
+    "应用版本": {
+      "zh": "应用版本",
+      "en": "App version",
+      "ja": "アプリのバージョン",
+      "fr": "Version de l’application",
+      "es": "Versión de la aplicación",
+      "it": "Versione dell’app",
+      "pt": "Versão do aplicativo",
+      "hi": "ऐप संस्करण"
+    },
+    "独立采集 · 本机识别与翻译 · 本机及局域网朗读": {
+      "zh": "独立采集 · 本机识别与翻译 · 本机及局域网朗读",
+      "en": "Independent capture · Local ASR and translation · Local and LAN speech",
+      "ja": "独立した音声入力 · ローカル認識と翻訳 · 本機と LAN で読み上げ",
+      "fr": "Capture autonome · Reconnaissance et traduction locales · Lecture locale et réseau",
+      "es": "Captura autónoma · Reconocimiento y traducción locales · Audio local y en red",
+      "it": "Acquisizione autonoma · Riconoscimento e traduzione locali · Audio locale e LAN",
+      "pt": "Captura independente · Reconhecimento e tradução locais · Áudio local e em rede",
+      "hi": "स्वतंत्र ऑडियो इनपुट · स्थानीय पहचान और अनुवाद · स्थानीय और LAN वाचन"
+    },
+    "启动服务": {
+      "zh": "启动服务",
+      "en": "Start services",
+      "ja": "サービスを開始",
+      "fr": "Démarrer les services",
+      "es": "Iniciar servicios",
+      "it": "Avvia servizi",
+      "pt": "Iniciar serviços",
+      "hi": "सेवाएँ शुरू करें"
+    },
+    "停止服务": {
+      "zh": "停止服务",
+      "en": "Stop services",
+      "ja": "サービスを停止",
+      "fr": "Arrêter les services",
+      "es": "Detener servicios",
+      "it": "Arresta servizi",
+      "pt": "Parar serviços",
+      "hi": "सेवाएँ रोकें"
+    },
+    "开始传译": {
+      "zh": "开始传译",
+      "en": "Start interpreting",
+      "ja": "通訳を開始",
+      "fr": "Démarrer l’interprétation",
+      "es": "Iniciar interpretación",
+      "it": "Avvia interpretazione",
+      "pt": "Iniciar interpretação",
+      "hi": "अनुवाद शुरू करें"
+    },
+    "结束传译": {
+      "zh": "结束传译",
+      "en": "End interpretation",
+      "ja": "通訳を終了",
+      "fr": "Terminer l’interprétation",
+      "es": "Finalizar interpretación",
+      "it": "Termina interpretazione",
+      "pt": "Encerrar interpretação",
+      "hi": "अनुवाद समाप्त करें"
+    },
+    "输入来源": {
+      "zh": "输入来源",
+      "en": "Audio input",
+      "ja": "音声入力",
+      "fr": "Entrée audio",
+      "es": "Entrada de audio",
+      "it": "Ingresso audio",
+      "pt": "Entrada de áudio",
+      "hi": "ऑडियो इनपुट"
+    },
+    "朗读输出": {
+      "zh": "朗读输出",
+      "en": "Speech output",
+      "ja": "読み上げ出力",
+      "fr": "Sortie audio",
+      "es": "Salida de voz",
+      "it": "Uscita vocale",
+      "pt": "Saída de voz",
+      "hi": "वाचन आउटपुट"
+    },
+    "识别语言": {
+      "zh": "识别语言",
+      "en": "Recognition language",
+      "ja": "認識言語",
+      "fr": "Langue de reconnaissance",
+      "es": "Idioma de reconocimiento",
+      "it": "Lingua di riconoscimento",
+      "pt": "Idioma de reconhecimento",
+      "hi": "पहचान की भाषा"
+    },
+    "翻译及朗读语言": {
+      "zh": "翻译及朗读语言",
+      "en": "Translation and speech language",
+      "ja": "翻訳・読み上げ言語",
+      "fr": "Langue de traduction et de lecture",
+      "es": "Idioma de traducción y lectura",
+      "it": "Lingua di traduzione e lettura",
+      "pt": "Idioma da tradução e leitura",
+      "hi": "अनुवाद और वाचन की भाषा"
+    },
+    "开始前选择语言；结束传译后可切换，无需重新加载 ASR 或翻译模型。": {
+      "zh": "开始前选择语言；结束传译后可切换，无需重新加载 ASR 或翻译模型。",
+      "en": "Choose languages before starting. Change them after ending interpretation without reloading models.",
+      "ja": "開始前に言語を選択してください。終了後はモデルを再読み込みせず変更できます。",
+      "fr": "Choisissez les langues avant de démarrer. Changez-les après l’arrêt sans recharger les modèles.",
+      "es": "Elija los idiomas antes de iniciar. Cámbielos al terminar sin recargar los modelos.",
+      "it": "Scegli le lingue prima di iniziare. Puoi cambiarle dopo l’arresto senza ricaricare i modelli.",
+      "pt": "Escolha os idiomas antes de iniciar. Altere-os após encerrar, sem recarregar os modelos.",
+      "hi": "शुरू करने से पहले भाषाएँ चुनें। समाप्त करने के बाद मॉडल दोबारा लोड किए बिना बदल सकते हैं।"
+    },
+    "刷新设备": {
+      "zh": "刷新设备",
+      "en": "Refresh devices",
+      "ja": "デバイスを更新",
+      "fr": "Actualiser les appareils",
+      "es": "Actualizar dispositivos",
+      "it": "Aggiorna dispositivi",
+      "pt": "Atualizar dispositivos",
+      "hi": "डिवाइस ताज़ा करें"
+    },
+    "识别": {
+      "zh": "识别",
+      "en": "Recognize",
+      "ja": "認識",
+      "fr": "Reconnaître",
+      "es": "Reconocer",
+      "it": "Riconosci",
+      "pt": "Reconhecer",
+      "hi": "पहचानें"
+    },
+    "→ 译音": {
+      "zh": "→ 译音",
+      "en": "→ Translate to",
+      "ja": "→ 訳音",
+      "fr": "→ Traduire en",
+      "es": "→ Traducir a",
+      "it": "→ Traduci in",
+      "pt": "→ Traduzir para",
+      "hi": "→ अनुवाद करें"
+    },
+    "ASR 提示词，以空格或逗号分隔（可选）": {
+      "zh": "ASR 提示词，以空格或逗号分隔（可选）",
+      "en": "ASR context terms, separated by spaces or commas (optional)",
+      "ja": "ASR 用語ヒント（スペース・カンマ区切り、任意）",
+      "fr": "Termes ASR séparés par des espaces ou des virgules (facultatif)",
+      "es": "Términos ASR separados por espacios o comas (opcional)",
+      "it": "Termini ASR separati da spazi o virgole (facoltativo)",
+      "pt": "Termos ASR separados por espaços ou vírgulas (opcional)",
+      "hi": "ASR संकेत शब्द, स्पेस या कॉमा से अलग करें (वैकल्पिक)"
+    },
+    "ASR 提示词": {
+      "zh": "ASR 提示词",
+      "en": "ASR context terms",
+      "ja": "ASR 用語ヒント",
+      "fr": "Termes ASR",
+      "es": "Términos ASR",
+      "it": "Termini ASR",
+      "pt": "Termos ASR",
+      "hi": "ASR संकेत शब्द"
+    },
+    "“只听译音”在传译时关闭原声输出，结束后恢复。系统采集会排除本 App 的朗读。": {
+      "zh": "“只听译音”在传译时关闭原声输出，结束后恢复。系统采集会排除本 App 的朗读。",
+      "en": "“Translation only” mutes the source during interpretation and restores it afterward. Capture excludes this app’s speech.",
+      "ja": "「訳音のみ」は通訳中に原音を消音し、終了後に戻します。このアプリの読み上げは収録しません。",
+      "fr": "« Traduction seule » coupe le son source pendant l’interprétation et le rétablit ensuite. La lecture de l’application est exclue de la capture.",
+      "es": "« Solo traducción » silencia el original durante la interpretación y lo restaura al terminar. La captura excluye la voz de esta app.",
+      "it": "“Solo traduzione” disattiva l’audio originale durante l’interpretazione e lo ripristina al termine. La voce dell’app è esclusa dall’acquisizione.",
+      "pt": "“Só tradução” silencia o áudio original durante a interpretação e o restaura ao terminar. A captura exclui a voz deste aplicativo.",
+      "hi": "“केवल अनुवाद” के दौरान मूल ऑडियो म्यूट रहता है और अंत में बहाल होता है। कैप्चर में इस ऐप की आवाज़ शामिल नहीं होती।"
+    },
+    "打开监控页": {
+      "zh": "打开监控页",
+      "en": "Open monitor",
+      "ja": "モニターを開く",
+      "fr": "Ouvrir le moniteur",
+      "es": "Abrir monitor",
+      "it": "Apri monitor",
+      "pt": "Abrir monitor",
+      "hi": "मॉनिटर खोलें"
+    },
+    "听众朗读页": {
+      "zh": "听众朗读页",
+      "en": "Listener page",
+      "ja": "リスナーページ",
+      "fr": "Page d’écoute",
+      "es": "Página de escucha",
+      "it": "Pagina di ascolto",
+      "pt": "Página de escuta",
+      "hi": "श्रोता पृष्ठ"
+    },
+    "复制地址": {
+      "zh": "复制地址",
+      "en": "Copy address",
+      "ja": "アドレスをコピー",
+      "fr": "Copier l’adresse",
+      "es": "Copiar dirección",
+      "it": "Copia indirizzo",
+      "pt": "Copiar endereço",
+      "hi": "पता कॉपी करें"
+    },
+    "局域网听众入口": {
+      "zh": "局域网听众入口",
+      "en": "Local network listening",
+      "ja": "LAN リスナー用リンク",
+      "fr": "Écoute sur le réseau local",
+      "es": "Escucha en red local",
+      "it": "Ascolto in rete locale",
+      "pt": "Escuta na rede local",
+      "hi": "स्थानीय नेटवर्क पर सुनें"
+    },
+    "选择服务文件夹…": {
+      "zh": "选择服务文件夹…",
+      "en": "Choose service folder…",
+      "ja": "サービスフォルダーを選択…",
+      "fr": "Choisir le dossier du service…",
+      "es": "Elegir carpeta del servicio…",
+      "it": "Scegli cartella del servizio…",
+      "pt": "Escolher pasta do serviço…",
+      "hi": "सेवा फ़ोल्डर चुनें…"
+    },
+    "查看日志": {
+      "zh": "查看日志",
+      "en": "View logs",
+      "ja": "ログを表示",
+      "fr": "Voir les journaux",
+      "es": "Ver registros",
+      "it": "Visualizza log",
+      "pt": "Ver registros",
+      "hi": "लॉग देखें"
+    },
+    "字幕设置…": {
+      "zh": "字幕设置…",
+      "en": "Subtitle settings…",
+      "ja": "字幕設定…",
+      "fr": "Réglages des sous-titres…",
+      "es": "Ajustes de subtítulos…",
+      "it": "Impostazioni sottotitoli…",
+      "pt": "Configurações de legendas…",
+      "hi": "उपशीर्षक सेटिंग…"
+    },
+    "显示控制面板": {
+      "zh": "显示控制面板",
+      "en": "Show control panel",
+      "ja": "コントロールパネルを表示",
+      "fr": "Afficher le panneau",
+      "es": "Mostrar panel de control",
+      "it": "Mostra pannello di controllo",
+      "pt": "Mostrar painel de controle",
+      "hi": "नियंत्रण पैनल दिखाएँ"
+    },
+    "停止服务并退出": {
+      "zh": "停止服务并退出",
+      "en": "Stop services and quit",
+      "ja": "サービスを停止して終了",
+      "fr": "Arrêter les services et quitter",
+      "es": "Detener servicios y salir",
+      "it": "Arresta servizi ed esci",
+      "pt": "Parar serviços e sair",
+      "hi": "सेवाएँ रोकें और बंद करें"
+    },
+    "编辑": {
+      "zh": "编辑",
+      "en": "Edit",
+      "ja": "編集",
+      "fr": "Édition",
+      "es": "Editar",
+      "it": "Modifica",
+      "pt": "Editar",
+      "hi": "संपादन"
+    },
+    "剪切": {
+      "zh": "剪切",
+      "en": "Cut",
+      "ja": "切り取り",
+      "fr": "Couper",
+      "es": "Cortar",
+      "it": "Taglia",
+      "pt": "Recortar",
+      "hi": "काटें"
+    },
+    "复制": {
+      "zh": "复制",
+      "en": "Copy",
+      "ja": "コピー",
+      "fr": "Copier",
+      "es": "Copiar",
+      "it": "Copia",
+      "pt": "Copiar",
+      "hi": "कॉपी करें"
+    },
+    "粘贴": {
+      "zh": "粘贴",
+      "en": "Paste",
+      "ja": "貼り付け",
+      "fr": "Coller",
+      "es": "Pegar",
+      "it": "Incolla",
+      "pt": "Colar",
+      "hi": "चिपकाएँ"
+    },
+    "全选": {
+      "zh": "全选",
+      "en": "Select all",
+      "ja": "すべて選択",
+      "fr": "Tout sélectionner",
+      "es": "Seleccionar todo",
+      "it": "Seleziona tutto",
+      "pt": "Selecionar tudo",
+      "hi": "सभी चुनें"
+    },
+    "显示翻译字幕": {
+      "zh": "显示翻译字幕",
+      "en": "Show translated subtitles",
+      "ja": "翻訳字幕を表示",
+      "fr": "Afficher les sous-titres traduits",
+      "es": "Mostrar subtítulos traducidos",
+      "it": "Mostra sottotitoli tradotti",
+      "pt": "Mostrar legendas traduzidas",
+      "hi": "अनूदित उपशीर्षक दिखाएँ"
+    },
+    "系统播放声音": {
+      "zh": "系统播放声音",
+      "en": "System audio",
+      "ja": "システム音声",
+      "fr": "Audio système",
+      "es": "Audio del sistema",
+      "it": "Audio di sistema",
+      "pt": "Áudio do sistema",
+      "hi": "सिस्टम ऑडियो"
+    },
+    "系统播放声音 · 只听译音": {
+      "zh": "系统播放声音 · 只听译音",
+      "en": "System audio · Translation only",
+      "ja": "システム音声 · 訳音のみ",
+      "fr": "Audio système · Traduction seule",
+      "es": "Audio del sistema · Solo traducción",
+      "it": "Audio di sistema · Solo traduzione",
+      "pt": "Áudio do sistema · Só tradução",
+      "hi": "सिस्टम ऑडियो · केवल अनुवाद"
+    },
+    "系统默认输入": {
+      "zh": "系统默认输入",
+      "en": "System default input",
+      "ja": "システム既定の入力",
+      "fr": "Entrée par défaut du système",
+      "es": "Entrada predeterminada",
+      "it": "Ingresso predefinito",
+      "pt": "Entrada padrão do sistema",
+      "hi": "सिस्टम का डिफ़ॉल्ट इनपुट"
+    },
+    "系统默认输出": {
+      "zh": "系统默认输出",
+      "en": "System default output",
+      "ja": "システム既定の出力",
+      "fr": "Sortie par défaut du système",
+      "es": "Salida predeterminada",
+      "it": "Uscita predefinita",
+      "pt": "Saída padrão do sistema",
+      "hi": "सिस्टम का डिफ़ॉल्ट आउटपुट"
+    },
+    "本机不播放 · 保留局域网朗读": {
+      "zh": "本机不播放 · 保留局域网朗读",
+      "en": "No local playback · LAN only",
+      "ja": "本機で再生しない · LAN のみ",
+      "fr": "Pas de lecture locale · Réseau seul",
+      "es": "Sin reproducción local · Solo red",
+      "it": "Nessuna riproduzione locale · Solo LAN",
+      "pt": "Sem reprodução local · Só rede",
+      "hi": "स्थानीय वाचन बंद · केवल LAN"
+    },
+    "已断开 · {0}": {
+      "zh": "已断开 · {0}",
+      "en": "Disconnected · {0}",
+      "ja": "切断済み · {0}",
+      "fr": "Déconnecté · {0}",
+      "es": "Desconectado · {0}",
+      "it": "Disconnesso · {0}",
+      "pt": "Desconectado · {0}",
+      "hi": "डिस्कनेक्ट · {0}"
+    },
+    "未找到本机安装。请选择包含 macos.sh 的 VoxBridge 文件夹。": {
+      "zh": "未找到本机安装。请选择包含 macos.sh 的 VoxBridge 文件夹。",
+      "en": "Local installation not found. Choose the VoxBridge folder containing macos.sh.",
+      "ja": "ローカル環境が見つかりません。macos.sh を含む VoxBridge フォルダーを選択してください。",
+      "fr": "Installation locale introuvable. Choisissez le dossier VoxBridge contenant macos.sh.",
+      "es": "No se encontró la instalación local. Elija la carpeta VoxBridge que contiene macos.sh.",
+      "it": "Installazione locale non trovata. Scegli la cartella VoxBridge contenente macos.sh.",
+      "pt": "Instalação local não encontrada. Escolha a pasta VoxBridge que contém macos.sh.",
+      "hi": "स्थानीय इंस्टॉलेशन नहीं मिला। macos.sh वाली VoxBridge फ़ोल्डर चुनें।"
+    },
+    "正在停止…": {
+      "zh": "正在停止…",
+      "en": "Stopping…",
+      "ja": "停止中…",
+      "fr": "Arrêt en cours…",
+      "es": "Deteniendo…",
+      "it": "Arresto…",
+      "pt": "Parando…",
+      "hi": "रोक रहे हैं…"
+    },
+    "正在准备本机服务…": {
+      "zh": "正在准备本机服务…",
+      "en": "Preparing local services…",
+      "ja": "ローカルサービスを準備中…",
+      "fr": "Préparation des services locaux…",
+      "es": "Preparando servicios locales…",
+      "it": "Preparazione dei servizi locali…",
+      "pt": "Preparando serviços locais…",
+      "hi": "स्थानीय सेवाएँ तैयार हो रही हैं…"
+    },
+    "本机服务已就绪": {
+      "zh": "本机服务已就绪",
+      "en": "Local services ready",
+      "ja": "ローカルサービス準備完了",
+      "fr": "Services locaux prêts",
+      "es": "Servicios locales listos",
+      "it": "Servizi locali pronti",
+      "pt": "Serviços locais prontos",
+      "hi": "स्थानीय सेवाएँ तैयार हैं"
+    },
+    "服务尚未就绪": {
+      "zh": "服务尚未就绪",
+      "en": "Services not ready",
+      "ja": "サービス準備中",
+      "fr": "Services non prêts",
+      "es": "Servicios aún no listos",
+      "it": "Servizi non pronti",
+      "pt": "Serviços ainda não prontos",
+      "hi": "सेवाएँ अभी तैयार नहीं हैं"
+    },
+    "服务已停止": {
+      "zh": "服务已停止",
+      "en": "Services stopped",
+      "ja": "サービス停止中",
+      "fr": "Services arrêtés",
+      "es": "Servicios detenidos",
+      "it": "Servizi arrestati",
+      "pt": "Serviços parados",
+      "hi": "सेवाएँ बंद हैं"
+    },
+    "本机 CPU": {
+      "zh": "本机 CPU",
+      "en": "Local CPU",
+      "ja": "本機 CPU",
+      "fr": "CPU local",
+      "es": "CPU local",
+      "it": "CPU locale",
+      "pt": "CPU local",
+      "hi": "स्थानीय CPU"
+    },
+    "{0}朗读待输出 {1} 秒 · 合成语速 {2}× · 音频连接 {3}": {
+      "zh": "{0}朗读待输出 {1} 秒 · 合成语速 {2}× · 音频连接 {3}",
+      "en": "{0} speech queued {1} s · Speed {2}× · Audio connections {3}",
+      "ja": "{0}読み上げ待ち {1} 秒 · 速度 {2}× · 音声接続 {3}",
+      "fr": "Lecture {0} en attente {1} s · Vitesse {2}× · Connexions audio {3}",
+      "es": "Lectura en {0} pendiente {1} s · Velocidad {2}× · Conexiones {3}",
+      "it": "Lettura {0} in attesa {1} s · Velocità {2}× · Connessioni {3}",
+      "pt": "Leitura em {0} pendente {1} s · Velocidade {2}× · Conexões {3}",
+      "hi": "{0} वाचन कतार {1} सेकंड · गति {2}× · ऑडियो कनेक्शन {3}"
+    },
+    "识别{0} → 翻译并朗读{1} · 开始前可切换方向": {
+      "zh": "识别{0} → 翻译并朗读{1} · 开始前可切换方向",
+      "en": "Recognize {0} → Translate and speak {1} · Choose before starting",
+      "ja": "{0}を認識 → {1}に翻訳・読み上げ · 開始前に切替可能",
+      "fr": "Reconnaître {0} → Traduire et lire en {1} · Choisir avant de démarrer",
+      "es": "Reconocer {0} → Traducir y leer en {1} · Elija antes de iniciar",
+      "it": "Riconosci {0} → Traduci e leggi in {1} · Scegli prima di iniziare",
+      "pt": "Reconhecer {0} → Traduzir e ler em {1} · Escolha antes de iniciar",
+      "hi": "{0} पहचानें → {1} में अनुवाद और वाचन · शुरू करने से पहले चुनें"
+    },
+    "{0}原文将在这里显示": {
+      "zh": "{0}原文将在这里显示",
+      "en": "{0} source text will appear here",
+      "ja": "{0}の原文がここに表示されます",
+      "fr": "Le texte source en {0} s’affichera ici",
+      "es": "El texto original en {0} aparecerá aquí",
+      "it": "Il testo originale in {0} apparirà qui",
+      "pt": "O texto original em {0} aparecerá aqui",
+      "hi": "{0} मूल पाठ यहाँ दिखाई देगा"
+    },
+    "等待{0}朗读字幕": {
+      "zh": "等待{0}朗读字幕",
+      "en": "Waiting for {0} spoken subtitles",
+      "ja": "{0}の読み上げ字幕を待機中",
+      "fr": "En attente des sous-titres lus en {0}",
+      "es": "Esperando subtítulos de voz en {0}",
+      "it": "In attesa dei sottotitoli letti in {0}",
+      "pt": "Aguardando legendas faladas em {0}",
+      "hi": "{0} वाचन उपशीर्षक की प्रतीक्षा"
+    },
+    "等待{0}译文": {
+      "zh": "等待{0}译文",
+      "en": "Waiting for {0} translation",
+      "ja": "{0}の訳文を待機中",
+      "fr": "En attente de la traduction en {0}",
+      "es": "Esperando traducción a {0}",
+      "it": "In attesa della traduzione in {0}",
+      "pt": "Aguardando tradução em {0}",
+      "hi": "{0} अनुवाद की प्रतीक्षा"
+    },
+    "连接局域网后自动显示地址": {
+      "zh": "连接局域网后自动显示地址",
+      "en": "Address appears when connected to the local network",
+      "ja": "LAN 接続後にアドレスを自動表示",
+      "fr": "L’adresse apparaît une fois connecté au réseau local",
+      "es": "La dirección aparece al conectarse a la red local",
+      "it": "L’indirizzo appare con la connessione alla rete locale",
+      "pt": "O endereço aparece ao conectar à rede local",
+      "hi": "स्थानीय नेटवर्क से जुड़ने पर पता दिखाई देगा"
+    },
+    "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。": {
+      "zh": "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。",
+      "en": "Interpretation continues when this window closes. Return from the menu bar. “Stop services and quit” ends capture and releases models.",
+      "ja": "ウィンドウを閉じても通訳は続きます。メニューバーから戻れます。「サービスを停止して終了」で入力を終了しモデルを解放します。",
+      "fr": "L’interprétation continue après fermeture. Revenez depuis la barre des menus. « Arrêter les services et quitter » termine la capture et libère les modèles.",
+      "es": "La interpretación continúa al cerrar la ventana. Vuelva desde la barra de menús. « Detener servicios y salir » finaliza la captura y libera los modelos.",
+      "it": "L’interpretazione continua chiudendo la finestra. Torna dalla barra dei menu. “Arresta servizi ed esci” termina l’acquisizione e libera i modelli.",
+      "pt": "A interpretação continua ao fechar a janela. Volte pela barra de menus. “Parar serviços e sair” encerra a captura e libera os modelos.",
+      "hi": "विंडो बंद करने पर अनुवाद चलता रहता है। मेनू बार से वापस आएँ। “सेवाएँ रोकें और बंद करें” कैप्चर समाप्त करके मॉडल मुक्त करता है।"
+    },
+    "等待检查": {
+      "zh": "等待检查",
+      "en": "Awaiting check",
+      "ja": "確認待ち",
+      "fr": "Vérification en attente",
+      "es": "Pendiente de comprobación",
+      "it": "In attesa di verifica",
+      "pt": "Aguardando verificação",
+      "hi": "जाँच की प्रतीक्षा"
+    },
+    "已就绪": {
+      "zh": "已就绪",
+      "en": "Ready",
+      "ja": "準備完了",
+      "fr": "Prêt",
+      "es": "Listo",
+      "it": "Pronto",
+      "pt": "Pronto",
+      "hi": "तैयार"
+    },
+    "已停止": {
+      "zh": "已停止",
+      "en": "Stopped",
+      "ja": "停止済み",
+      "fr": "Arrêté",
+      "es": "Detenido",
+      "it": "Arrestato",
+      "pt": "Parado",
+      "hi": "बंद"
+    },
+    "加载中": {
+      "zh": "加载中",
+      "en": "Loading",
+      "ja": "読み込み中",
+      "fr": "Chargement",
+      "es": "Cargando",
+      "it": "Caricamento",
+      "pt": "Carregando",
+      "hi": "लोड हो रहा है"
+    },
+    "选择 VoxBridge 服务文件夹": {
+      "zh": "选择 VoxBridge 服务文件夹",
+      "en": "Choose the VoxBridge service folder",
+      "ja": "VoxBridge サービスフォルダーを選択",
+      "fr": "Choisir le dossier du service VoxBridge",
+      "es": "Elegir carpeta del servicio VoxBridge",
+      "it": "Scegli la cartella del servizio VoxBridge",
+      "pt": "Escolher a pasta do serviço VoxBridge",
+      "hi": "VoxBridge सेवा फ़ोल्डर चुनें"
+    },
+    "未找到服务脚本或上一级 Python 环境。": {
+      "zh": "未找到服务脚本或上一级 Python 环境。",
+      "en": "Service script or parent Python environment not found.",
+      "ja": "サービススクリプトまたは親フォルダーの Python 環境が見つかりません。",
+      "fr": "Script du service ou environnement Python parent introuvable.",
+      "es": "No se encontró el script del servicio o el entorno Python superior.",
+      "it": "Script del servizio o ambiente Python della cartella superiore non trovato.",
+      "pt": "Script do serviço ou ambiente Python da pasta superior não encontrado.",
+      "hi": "सेवा स्क्रिप्ट या ऊपरी फ़ोल्डर का Python वातावरण नहीं मिला।"
+    },
+    "原服务正在运行，请先停止服务。": {
+      "zh": "原服务正在运行，请先停止服务。",
+      "en": "The current service is running. Stop it first.",
+      "ja": "現在のサービスを先に停止してください。",
+      "fr": "Le service actuel fonctionne. Arrêtez-le d’abord.",
+      "es": "El servicio actual está activo. Deténgalo primero.",
+      "it": "Il servizio attuale è attivo. Arrestalo prima.",
+      "pt": "O serviço atual está ativo. Pare-o primeiro.",
+      "hi": "वर्तमान सेवा चल रही है। पहले उसे रोकें।"
+    },
+    "字幕设置": {
+      "zh": "字幕设置",
+      "en": "Subtitle settings",
+      "ja": "字幕設定",
+      "fr": "Réglages des sous-titres",
+      "es": "Ajustes de subtítulos",
+      "it": "Impostazioni sottotitoli",
+      "pt": "Configurações de legendas",
+      "hi": "उपशीर्षक सेटिंग"
+    },
+    "预览字幕样式（仅在未传译时可用）": {
+      "zh": "预览字幕样式（仅在未传译时可用）",
+      "en": "Preview subtitle style (when interpretation is stopped)",
+      "ja": "字幕スタイルをプレビュー（通訳停止中のみ）",
+      "fr": "Aperçu du style (interprétation arrêtée)",
+      "es": "Vista previa del estilo (con interpretación detenida)",
+      "it": "Anteprima stile (a interpretazione ferma)",
+      "pt": "Prévia do estilo (com interpretação parada)",
+      "hi": "उपशीर्षक शैली का पूर्वावलोकन (अनुवाद बंद होने पर)"
+    },
+    "启用文字阴影": {
+      "zh": "启用文字阴影",
+      "en": "Enable text shadow",
+      "ja": "文字の影を有効化",
+      "fr": "Activer l’ombre du texte",
+      "es": "Activar sombra del texto",
+      "it": "Attiva ombra del testo",
+      "pt": "Ativar sombra do texto",
+      "hi": "पाठ की छाया सक्षम करें"
+    },
+    "透明置顶，鼠标穿透。只显示已完成的译文；设置即时生效并自动保存。": {
+      "zh": "透明置顶，鼠标穿透。只显示已完成的译文；设置即时生效并自动保存。",
+      "en": "Transparent, always on top and click-through. Shows completed translations; changes apply immediately and save automatically.",
+      "ja": "透明・最前面・クリック透過。完成した訳文を表示し、設定は即時反映・自動保存します。",
+      "fr": "Transparent, au premier plan et sans interception des clics. Traductions terminées uniquement ; réglages immédiats et enregistrés.",
+      "es": "Transparente, siempre visible y permite clics a través. Muestra traducciones completas; los ajustes se aplican y guardan al instante.",
+      "it": "Trasparente, in primo piano e non intercetta i clic. Mostra traduzioni complete; modifiche immediate e salvate automaticamente.",
+      "pt": "Transparente, sempre no topo e permite cliques através. Exibe traduções completas; ajustes imediatos e salvos automaticamente.",
+      "hi": "पारदर्शी, हमेशा ऊपर और क्लिक आर-पार। पूर्ण अनुवाद दिखाता है; बदलाव तुरंत लागू और अपने आप सहेजे जाते हैं।"
+    },
+    "字幕字体": {
+      "zh": "字幕字体",
+      "en": "Subtitle font",
+      "ja": "字幕フォント",
+      "fr": "Police des sous-titres",
+      "es": "Fuente de subtítulos",
+      "it": "Carattere sottotitoli",
+      "pt": "Fonte das legendas",
+      "hi": "उपशीर्षक फ़ॉन्ट"
+    },
+    "字体": {
+      "zh": "字体",
+      "en": "Font",
+      "ja": "フォント",
+      "fr": "Police",
+      "es": "Fuente",
+      "it": "Carattere",
+      "pt": "Fonte",
+      "hi": "फ़ॉन्ट"
+    },
+    "字号": {
+      "zh": "字号",
+      "en": "Font size",
+      "ja": "文字サイズ",
+      "fr": "Taille",
+      "es": "Tamaño",
+      "it": "Dimensione",
+      "pt": "Tamanho",
+      "hi": "फ़ॉन्ट आकार"
+    },
+    "字幕颜色": {
+      "zh": "字幕颜色",
+      "en": "Subtitle color",
+      "ja": "字幕の色",
+      "fr": "Couleur des sous-titres",
+      "es": "Color de subtítulos",
+      "it": "Colore sottotitoli",
+      "pt": "Cor das legendas",
+      "hi": "उपशीर्षक रंग"
+    },
+    "文字颜色": {
+      "zh": "文字颜色",
+      "en": "Text color",
+      "ja": "文字色",
+      "fr": "Couleur du texte",
+      "es": "Color del texto",
+      "it": "Colore testo",
+      "pt": "Cor do texto",
+      "hi": "पाठ का रंग"
+    },
+    "阴影颜色": {
+      "zh": "阴影颜色",
+      "en": "Shadow color",
+      "ja": "影の色",
+      "fr": "Couleur de l’ombre",
+      "es": "Color de sombra",
+      "it": "Colore ombra",
+      "pt": "Cor da sombra",
+      "hi": "छाया का रंग"
+    },
+    "阴影浓度": {
+      "zh": "阴影浓度",
+      "en": "Shadow opacity",
+      "ja": "影の濃さ",
+      "fr": "Opacité de l’ombre",
+      "es": "Opacidad",
+      "it": "Opacità ombra",
+      "pt": "Opacidade",
+      "hi": "छाया की अपारदर्शिता"
+    },
+    "阴影模糊": {
+      "zh": "阴影模糊",
+      "en": "Shadow blur",
+      "ja": "影のぼかし",
+      "fr": "Flou de l’ombre",
+      "es": "Desenfoque",
+      "it": "Sfocatura ombra",
+      "pt": "Desfoque",
+      "hi": "छाया का धुंधलापन"
+    },
+    "阴影距离": {
+      "zh": "阴影距离",
+      "en": "Shadow offset",
+      "ja": "影の距離",
+      "fr": "Décalage de l’ombre",
+      "es": "Desplazamiento",
+      "it": "Distanza ombra",
+      "pt": "Deslocamento",
+      "hi": "छाया की दूरी"
+    },
+    "字幕显示器": {
+      "zh": "字幕显示器",
+      "en": "Subtitle display",
+      "ja": "字幕ディスプレイ",
+      "fr": "Écran des sous-titres",
+      "es": "Pantalla de subtítulos",
+      "it": "Schermo sottotitoli",
+      "pt": "Tela das legendas",
+      "hi": "उपशीर्षक डिस्प्ले"
+    },
+    "显示器": {
+      "zh": "显示器",
+      "en": "Display",
+      "ja": "ディスプレイ",
+      "fr": "Écran",
+      "es": "Pantalla",
+      "it": "Schermo",
+      "pt": "Tela",
+      "hi": "डिस्प्ले"
+    },
+    "顶部居中": {
+      "zh": "顶部居中",
+      "en": "Top center",
+      "ja": "上部中央",
+      "fr": "En haut au centre",
+      "es": "Arriba al centro",
+      "it": "In alto al centro",
+      "pt": "Superior central",
+      "hi": "ऊपर बीच में"
+    },
+    "屏幕居中": {
+      "zh": "屏幕居中",
+      "en": "Screen center",
+      "ja": "画面中央",
+      "fr": "Au centre",
+      "es": "Centro de pantalla",
+      "it": "Centro schermo",
+      "pt": "Centro da tela",
+      "hi": "स्क्रीन के बीच में"
+    },
+    "底部居中": {
+      "zh": "底部居中",
+      "en": "Bottom center",
+      "ja": "下部中央",
+      "fr": "En bas au centre",
+      "es": "Abajo al centro",
+      "it": "In basso al centro",
+      "pt": "Inferior central",
+      "hi": "नीचे बीच में"
+    },
+    "自定义位置": {
+      "zh": "自定义位置",
+      "en": "Custom position",
+      "ja": "カスタム位置",
+      "fr": "Position personnalisée",
+      "es": "Posición personalizada",
+      "it": "Posizione personalizzata",
+      "pt": "Posição personalizada",
+      "hi": "अपनी स्थिति"
+    },
+    "字幕位置预设": {
+      "zh": "字幕位置预设",
+      "en": "Subtitle position preset",
+      "ja": "字幕位置プリセット",
+      "fr": "Position prédéfinie des sous-titres",
+      "es": "Posición predefinida de subtítulos",
+      "it": "Posizione predefinita sottotitoli",
+      "pt": "Posição predefinida das legendas",
+      "hi": "उपशीर्षक की पूर्वनिर्धारित स्थिति"
+    },
+    "位置预设": {
+      "zh": "位置预设",
+      "en": "Position preset",
+      "ja": "位置プリセット",
+      "fr": "Position prédéfinie",
+      "es": "Posición predefinida",
+      "it": "Posizione predefinita",
+      "pt": "Posição predefinida",
+      "hi": "पूर्वनिर्धारित स्थिति"
+    },
+    "水平位置": {
+      "zh": "水平位置",
+      "en": "Horizontal position",
+      "ja": "水平位置",
+      "fr": "Position horizontale",
+      "es": "Posición horizontal",
+      "it": "Posizione orizzontale",
+      "pt": "Posição horizontal",
+      "hi": "क्षैतिज स्थिति"
+    },
+    "垂直位置": {
+      "zh": "垂直位置",
+      "en": "Vertical position",
+      "ja": "垂直位置",
+      "fr": "Position verticale",
+      "es": "Posición vertical",
+      "it": "Posizione verticale",
+      "pt": "Posição vertical",
+      "hi": "लंबवत स्थिति"
+    },
+    "字幕宽度": {
+      "zh": "字幕宽度",
+      "en": "Subtitle width",
+      "ja": "字幕幅",
+      "fr": "Largeur des sous-titres",
+      "es": "Ancho de subtítulos",
+      "it": "Larghezza sottotitoli",
+      "pt": "Largura das legendas",
+      "hi": "उपशीर्षक चौड़ाई"
+    },
+    "垂直 100% 可覆盖 Dock。字幕跟随本机实际朗读，语音段整段显示，空间不足时自动缩小；本机不播放时显示最新完整译文。": {
+      "zh": "垂直 100% 可覆盖 Dock。字幕跟随本机实际朗读，语音段整段显示，空间不足时自动缩小；本机不播放时显示最新完整译文。",
+      "en": "Vertical 100% can cover the Dock. Subtitles follow local speech, showing each complete segment and shrinking to fit. Without local playback, the latest complete translation is shown.",
+      "ja": "垂直 100% で Dock に重ねられます。字幕は本機の読み上げに同期し、各音声区間全体を表示して必要に応じ縮小します。本機で再生しない場合は最新の完成訳を表示します。",
+      "fr": "À 100 % vertical, les sous-titres peuvent couvrir le Dock. Ils suivent la lecture locale, affichent chaque segment entier et s’adaptent à l’espace. Sans lecture locale, la dernière traduction complète s’affiche.",
+      "es": "Al 100 % vertical pueden cubrir el Dock. Siguen la voz local, muestran cada segmento completo y reducen su tamaño si hace falta. Sin audio local, muestran la última traducción completa.",
+      "it": "Al 100% verticale possono coprire il Dock. Seguono la voce locale, mostrando ogni segmento intero e riducendosi se necessario. Senza riproduzione locale, mostrano l’ultima traduzione completa.",
+      "pt": "Em 100% vertical, podem cobrir o Dock. Seguem a voz local, exibindo cada trecho inteiro e diminuindo se necessário. Sem áudio local, exibem a última tradução completa.",
+      "hi": "लंबवत 100% पर Dock ढक सकता है। उपशीर्षक स्थानीय वाचन के साथ चलते हैं, पूरा खंड दिखाते हैं और जगह कम होने पर छोटे होते हैं। स्थानीय वाचन बंद हो तो नवीनतम पूर्ण अनुवाद दिखता है।"
+    },
+    "恢复默认样式": {
+      "zh": "恢复默认样式",
+      "en": "Reset style",
+      "ja": "標準スタイルに戻す",
+      "fr": "Rétablir le style",
+      "es": "Restablecer estilo",
+      "it": "Ripristina stile",
+      "pt": "Restaurar estilo",
+      "hi": "डिफ़ॉल्ट शैली बहाल करें"
+    },
+    "刷新显示器": {
+      "zh": "刷新显示器",
+      "en": "Refresh displays",
+      "ja": "ディスプレイを更新",
+      "fr": "Actualiser les écrans",
+      "es": "Actualizar pantallas",
+      "it": "Aggiorna schermi",
+      "pt": "Atualizar telas",
+      "hi": "डिस्प्ले ताज़ा करें"
+    },
+    "{0}十六进制": {
+      "zh": "{0}十六进制",
+      "en": "{0} hexadecimal",
+      "ja": "{0} 16 進数",
+      "fr": "{0} hexadécimal",
+      "es": "{0} hexadecimal",
+      "it": "{0} esadecimale",
+      "pt": "{0} hexadecimal",
+      "hi": "{0} हेक्साडेसिमल"
+    },
+    "主显示器（自动）": {
+      "zh": "主显示器（自动）",
+      "en": "Main display (automatic)",
+      "ja": "主ディスプレイ（自動）",
+      "fr": "Écran principal (automatique)",
+      "es": "Pantalla principal (automática)",
+      "it": "Schermo principale (automatico)",
+      "pt": "Tela principal (automática)",
+      "hi": "मुख्य डिस्प्ले (अपने आप)"
+    },
+    "所选显示器已断开 · 暂用主显示器": {
+      "zh": "所选显示器已断开 · 暂用主显示器",
+      "en": "Selected display disconnected · Using main display",
+      "ja": "選択画面が未接続 · 主画面を使用",
+      "fr": "Écran déconnecté · Utilisation de l’écran principal",
+      "es": "Pantalla desconectada · Usando la principal",
+      "it": "Schermo scollegato · Uso dello schermo principale",
+      "pt": "Tela desconectada · Usando a principal",
+      "hi": "चुना डिस्प्ले डिस्कनेक्ट · मुख्य डिस्प्ले उपयोग में"
+    },
+    "{0}（未安装，使用系统字体）": {
+      "zh": "{0}（未安装，使用系统字体）",
+      "en": "{0} (not installed; using system font)",
+      "ja": "{0}（未インストール、システムフォントを使用）",
+      "fr": "{0} (non installée ; police système)",
+      "es": "{0} (no instalada; fuente del sistema)",
+      "it": "{0} (non installato; carattere di sistema)",
+      "pt": "{0} (não instalada; fonte do sistema)",
+      "hi": "{0} (इंस्टॉल नहीं; सिस्टम फ़ॉन्ट उपयोग में)"
+    },
+    "颜色请填写 #RRGGBB，例如 #FFFFFF。": {
+      "zh": "颜色请填写 #RRGGBB，例如 #FFFFFF。",
+      "en": "Enter a color as #RRGGBB, for example #FFFFFF.",
+      "ja": "色を #RRGGBB 形式で入力してください（例：#FFFFFF）。",
+      "fr": "Saisissez une couleur au format #RRGGBB, par exemple #FFFFFF.",
+      "es": "Escriba un color #RRGGBB, por ejemplo #FFFFFF.",
+      "it": "Inserisci un colore #RRGGBB, ad esempio #FFFFFF.",
+      "pt": "Digite uma cor #RRGGBB, por exemplo #FFFFFF.",
+      "hi": "रंग #RRGGBB में लिखें, जैसे #FFFFFF।"
+    },
+    "无法保存字幕设置：{0}": {
+      "zh": "无法保存字幕设置：{0}",
+      "en": "Cannot save subtitle settings: {0}",
+      "ja": "字幕設定を保存できません：{0}",
+      "fr": "Impossible d’enregistrer les sous-titres : {0}",
+      "es": "No se pudieron guardar los ajustes: {0}",
+      "it": "Impossibile salvare le impostazioni: {0}",
+      "pt": "Não foi possível salvar as configurações: {0}",
+      "hi": "उपशीर्षक सेटिंग सहेजी नहीं जा सकी: {0}"
+    },
+    "翻译字幕": {
+      "zh": "翻译字幕",
+      "en": "Translated subtitles",
+      "ja": "翻訳字幕",
+      "fr": "Sous-titres traduits",
+      "es": "Subtítulos traducidos",
+      "it": "Sottotitoli tradotti",
+      "pt": "Legendas traduzidas",
+      "hi": "अनूदित उपशीर्षक"
+    },
+    "字幕样式预览": {
+      "zh": "字幕样式预览",
+      "en": "Subtitle style preview",
+      "ja": "字幕スタイルのプレビュー",
+      "fr": "Aperçu des sous-titres",
+      "es": "Vista previa de subtítulos",
+      "it": "Anteprima sottotitoli",
+      "pt": "Prévia das legendas",
+      "hi": "उपशीर्षक शैली का पूर्वावलोकन"
+    },
+    "这是翻译字幕的显示效果。": {
+      "zh": "这是翻译字幕的显示效果。",
+      "en": "This is how translated subtitles will appear.",
+      "ja": "翻訳字幕はこのように表示されます。",
+      "fr": "Voici l’affichage des sous-titres traduits.",
+      "es": "Así se mostrarán los subtítulos traducidos.",
+      "it": "Ecco come appariranno i sottotitoli tradotti.",
+      "pt": "É assim que as legendas traduzidas aparecerão.",
+      "hi": "अनूदित उपशीर्षक इस तरह दिखाई देंगे।"
+    },
+    "采集所选麦克风的语音，在本机执行识别和翻译。": {
+      "zh": "采集所选麦克风的语音，在本机执行识别和翻译。",
+      "en": "Capture the selected microphone for on-device recognition and translation.",
+      "ja": "選択したマイクを収録し、本機で認識と翻訳を行います。",
+      "fr": "Capturer le microphone sélectionné pour la reconnaissance et la traduction locales.",
+      "es": "Capturar el micrófono seleccionado para reconocimiento y traducción locales.",
+      "it": "Acquisire il microfono selezionato per riconoscimento e traduzione locali.",
+      "pt": "Capturar o microfone selecionado para reconhecimento e tradução locais.",
+      "hi": "चुने माइक्रोफ़ोन का ऑडियो लेकर इसी डिवाइस पर पहचान और अनुवाद करें।"
+    },
+    "采集系统播放声音，在本机执行识别和翻译，并排除本 App 的朗读。": {
+      "zh": "采集系统播放声音，在本机执行识别和翻译，并排除本 App 的朗读。",
+      "en": "Capture system audio for on-device recognition and translation, excluding this app’s speech.",
+      "ja": "システム音声を収録して本機で認識・翻訳し、このアプリの読み上げを除外します。",
+      "fr": "Capturer l’audio système pour la reconnaissance et la traduction locales, en excluant la voix de cette application.",
+      "es": "Capturar el audio del sistema para reconocimiento y traducción locales, excluyendo la voz de esta app.",
+      "it": "Acquisire l’audio di sistema per riconoscimento e traduzione locali, escludendo la voce dell’app.",
+      "pt": "Capturar o áudio do sistema para reconhecimento e tradução locais, excluindo a voz deste aplicativo.",
+      "hi": "सिस्टम ऑडियो लेकर इसी डिवाइस पर पहचान और अनुवाद करें; इस ऐप का वाचन शामिल नहीं होगा।"
+    }
+  }
+}

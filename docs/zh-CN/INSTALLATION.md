@@ -2,7 +2,7 @@
 
 [English](../en/INSTALLATION.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [模型说明](MODELS.md)
 
-本文与仓库的 `setup.sh` 及 App 1.6.0/build 18 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
+本文与仓库的 `setup.sh` 及 App 1.7.0/build 20 对应。命令在“终端”运行；`$HOME` 会自动指向当前用户主目录，不需要替换成原开发者路径。
 
 ## 1. 检查 Mac 配置
 
@@ -135,6 +135,8 @@ open "$HOME/Applications/同声传译.app"
 无需“完全磁盘访问权限”。之前拒绝过音频权限，修改后可能需要退出并重开 App；权限属于原生 App，不属于 Chrome。
 
 ## 7. 开始第一次传译
+
+先在 App 顶部的 **界面语言 / Interface language** 中选择语言，或保留跟随系统。界面语言与识别／译音方向相互独立；以下使用中文控件名称。详见[界面语言](INTERFACE-LANGUAGES.md)。
 
 | App 控件 | 用途 |
 |---|---|

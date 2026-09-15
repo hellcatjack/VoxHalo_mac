@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from voxbridge.web.localization import embedded_localization
+
 
 HLS_JS_PATH = Path(__file__).with_name("vendor") / "hls.min.js"
 
@@ -11,7 +13,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>VoxHalo · 同声传译 | Live Interpretation</title>
+  <title data-i18n="listener.title">VoxHalo · Live Interpretation</title>
   <style>
     :root {
       color-scheme: light;
@@ -94,7 +96,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       display: grid; align-content: center; gap: 5px;
     }
     .status-card span { color: var(--muted); font-size: 9px; letter-spacing: .06em; font-weight: 600; text-transform: uppercase; }
-    .status-card strong { font-size: 12px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status-card strong { font-size: 12px; font-weight: 600; min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
     .status-card[data-state="ok"] strong { color: #12634d; }
     .status-card[data-state="warn"] strong { color: #725323; }
     .status-card[data-state="error"] strong { color: #b03a36; }
@@ -124,6 +126,9 @@ TTS_LISTENER_HTML = r"""<!doctype html>
     }
     .pulse { display: none; }
     .controls { grid-column: 2; grid-row: 4; min-width: 0; display: grid; gap: 12px; }
+    .interface-picker { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+    .interface-picker select { min-width: 0; max-width: 54%; padding: 5px 8px; font: inherit; color: var(--ink); background: white; border: 1px solid #c7d1e0; border-radius: 6px; }
+    .interface-picker select:focus-visible { outline: 3px solid #83afff; outline-offset: 2px; }
     .playback-settings { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
     .playback-settings > span { color: var(--muted); font-size: 12px; }
     .playback-settings strong { color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -173,7 +178,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       main { padding: 12px; gap: 10px; }
       .hero { padding: 14px; }
       h1 { font-size: 26px; }
-      .intro, .channel-note { display: none; }
+      .intro, .channel-note, .eyebrow, .language-panel { display: none; }
       .language-panel { padding-top: 7px; }
       .eyebrow { margin-bottom: 7px; }
       .status-card { min-height: 44px; gap: 3px; }
@@ -182,7 +187,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       .controls { gap: 6px; }
       button { min-height: 44px; padding: 9px; font-size: 12px; }
     }
-    @media (min-width: 700px) and (max-height: 500px) {
+    @media (min-width: 600px) and (max-height: 500px) {
       body { padding: 8px; }
       main { padding: 16px; gap: 12px 18px;
         grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
@@ -222,44 +227,44 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       </div>
       <div class="brand-copy">
         <strong>VoxHalo</strong>
-        <span lang="zh-CN">同声传译</span>
+        <span data-i18n="listener.brand">Live interpretation</span>
       </div>
-      <div class="live-tag">LISTENER</div>
+      <div class="live-tag" data-i18n="listener.tag">LISTENER</div>
     </header>
 
     <section class="hero">
-      <p class="eyebrow">LIVE INTERPRETATION</p>
-      <h1>Stay in the conversation.</h1>
-      <p class="intro">Listen to the live translation. Follow each sentence with captions that move with the audio.</p>
+      <p class="eyebrow" data-i18n="listener.eyebrow">LIVE INTERPRETATION</p>
+      <h1 data-i18n="listener.heading">Stay in the conversation.</h1>
+      <p class="intro" data-i18n="listener.intro">Listen to the live translation. Follow each sentence with captions that move with the audio.</p>
       <div class="language-panel">
-        <p class="language-summary">8 languages · 56 translation directions</p>
-        <ul class="language-list" aria-label="Supported languages">
+        <p class="language-summary" data-i18n="listener.languages">8 languages · 56 translation directions</p>
+        <ul class="language-list" aria-label="Supported languages" data-i18n-aria="listener.supported">
           <li lang="zh-CN">中文</li><li lang="en">English</li>
           <li lang="ja">日本語</li><li lang="fr">Français</li>
           <li lang="es">Español</li><li lang="it">Italiano</li>
           <li lang="pt-BR">Português</li><li lang="hi">हिन्दी</li>
         </ul>
-        <p class="channel-note">The host selects the language for this live stream.</p>
+        <p class="channel-note" data-i18n="listener.hostLanguage">The host selects the language for this live stream.</p>
       </div>
     </section>
 
     <section class="status-grid" aria-live="polite">
       <div id="connectionCard" class="status-card" data-state="warn">
-        <span>Connection</span><strong id="connectionStatus">Not started</strong>
+        <span data-i18n="listener.connection">Connection</span><strong id="connectionStatus" data-i18n="listener.notStarted">Not started</strong>
       </div>
       <div id="producerCard" class="status-card" data-state="warn">
-        <span>Service</span><strong id="producerStatus">Waiting</strong>
+        <span data-i18n="listener.service">Service</span><strong id="producerStatus" data-i18n="listener.waiting">Waiting</strong>
       </div>
       <div id="queueCard" class="status-card">
-        <span>Listeners</span><strong id="queueStatus">Not joined</strong>
+        <span data-i18n="listener.listeners">Listeners</span><strong id="queueStatus" data-i18n="listener.notJoined">Not joined</strong>
       </div>
     </section>
 
     <section id="nowPlaying" class="now-playing" data-playing="false" data-speaking="false">
       <div class="now-playing-copy">
-        <small>TRANSLATED CAPTIONS</small>
-        <strong id="liveCaption" aria-live="polite" aria-atomic="true">Waiting to start</strong>
-        <span id="playbackStatus" class="playback-state">Start listening to join the shared stream</span>
+        <small data-i18n="listener.captions">TRANSLATED CAPTIONS</small>
+        <strong id="liveCaption" data-i18n="listener.waitStart" aria-live="polite" aria-atomic="true">Waiting to start</strong>
+        <span id="playbackStatus" class="playback-state" data-i18n="listener.joinHint">Start listening to join the shared stream</span>
       </div>
       <div class="pulse" aria-hidden="true"></div>
     </section>
@@ -267,21 +272,25 @@ TTS_LISTENER_HTML = r"""<!doctype html>
     <audio id="ttsPlayback" preload="none" playsinline hidden></audio>
 
     <section class="controls">
+      <label class="interface-picker"><span data-i18n="common.interface">Interface language</span><select id="interfaceLanguage" aria-label="Interface language" data-i18n-aria="common.interface"></select></label>
       <div class="playback-settings" aria-live="polite">
-        <span>Playback speed</span>
+        <span data-i18n="listener.speed">Playback speed</span>
         <strong id="globalSpeedStatus">Auto - 1.0x</strong>
       </div>
       <div class="actions">
-        <button id="startListening" type="button">Start Listening</button>
-        <button id="stopListening" type="button" disabled>Stop Listening</button>
-        <button id="resumeListening" type="button" hidden>Resume Audio</button>
+        <button id="startListening" type="button" data-i18n="listener.start">Start Listening</button>
+        <button id="stopListening" type="button" data-i18n="listener.stop" disabled>Stop Listening</button>
+        <button id="resumeListening" type="button" data-i18n="listener.resume" hidden>Resume Audio</button>
       </div>
     </section>
   </main>
 
+  __LOCALIZATION__
   <script src="/listen/assets/hls.min.js"></script>
   <script>
   (() => {
+    const ui = window.VoxUI;
+    ui.mount();
     const startButton = document.getElementById("startListening");
     const stopButton = document.getElementById("stopListening");
     const resumeButton = document.getElementById("resumeListening");
@@ -357,31 +366,35 @@ TTS_LISTENER_HTML = r"""<!doctype html>
 
     function expectedMediaWaitStatus() {
       return serverTranslatedAudioBacklogSec > 0
-        ? "Preparing next translated sentence"
-        : "Waiting for translated speech";
+        ? "listener.preparingSentence"
+        : "listener.waitSpeech";
     }
 
-    function showPlaybackInterruptionStatus(label) {
+    function showPlaybackInterruptionStatus(labelKey) {
       const bufferedAhead = forwardBufferedSec();
       playbackStatusHoldUntilMs = (
         performance.now() + PLAYBACK_INTERRUPTION_STATUS_HOLD_MS
       );
-      playbackStatus.textContent = bufferedAhead === null
-        ? `${label} · buffer unknown`
-        : `${label} · ${bufferedAhead.toFixed(1)}s buffered ahead`;
+      ui.bind(playbackStatus, bufferedAhead === null
+        ? "listener.bufferUnknown" : "listener.bufferAhead",
+        () => ({label: ui.t(labelKey), seconds: bufferedAhead === null ? "" : bufferedAhead.toFixed(1)}));
     }
 
     function formatDurationSec(value) {
       const totalSec = Math.max(0, Math.ceil(Number(value) || 0));
-      if (totalSec < 60) return `${totalSec}s`;
+      if (totalSec < 60) return ui.t("listener.seconds", {seconds: totalSec});
       const minutes = Math.floor(totalSec / 60);
       const seconds = totalSec % 60;
-      return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+      return ui.t(seconds > 0 ? "listener.minutesSeconds" : "listener.minutes", {minutes, seconds});
     }
 
-    function describeSharedAudioStatus() {
-      return `Speech backlog: ${formatDurationSec(serverTranslatedAudioBacklogSec)}`
-        + ` · Global speed: ${globalSpeedMode} - ${globalSpeedMultiplier.toFixed(1)}x`;
+    function speedParameters() {
+      return {mode: ui.t(globalSpeedMode === "Fixed" ? "listener.fixed" : "common.auto"),
+        speed: globalSpeedMultiplier.toFixed(1)};
+    }
+
+    function sharedAudioParameters() {
+      return {...speedParameters(), duration: formatDurationSec(serverTranslatedAudioBacklogSec)};
     }
 
     function estimatedPlaybackAtMs(snapshot) {
@@ -466,7 +479,13 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       });
     }
 
+    function setLiveCaptionMessage(key) {
+      setLiveCaption(ui.t(key));
+      ui.bind(liveCaption, key);
+    }
+
     function setLiveCaption(text, cueId = "") {
+      ui.unbind(liveCaption);
       const nextText = String(text || "").trim();
       if (!nextText) return;
       const nextCueId = String(cueId || "");
@@ -622,7 +641,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
         }
       }
       if (selected === null) {
-        if (!captionCueId) setLiveCaption("Waiting for translated speech");
+        if (!captionCueId) setLiveCaptionMessage("listener.waitSpeech");
         nowPlaying.dataset.speaking = "false";
         return;
       }
@@ -680,18 +699,17 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       if (!running) return;
       if (waitingForMedia) {
         playbackStatusHoldUntilMs = 0;
-        playbackStatus.textContent = expectedMediaWaitStatus();
+        ui.bind(playbackStatus, expectedMediaWaitStatus());
         return;
       }
       if (performance.now() < playbackStatusHoldUntilMs) return;
       playbackStatusHoldUntilMs = 0;
       if (!playbackStarted) {
-        playbackStatus.textContent = "Buffering live audio";
+        ui.bind(playbackStatus, "listener.buffering");
       } else if (serverTranslatedAudioBacklogSec > 0) {
-        playbackStatus.textContent = describeSharedAudioStatus();
+        ui.bind(playbackStatus, "listener.backlog", sharedAudioParameters);
       } else {
-        playbackStatus.textContent =
-          `Live translation · Global speed: ${globalSpeedMode} - ${globalSpeedMultiplier.toFixed(1)}x`;
+        ui.bind(playbackStatus, "listener.liveSpeed", speedParameters);
       }
     }
 
@@ -756,7 +774,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       waitingForMedia = false;
       playbackStarted = true;
       resumeButton.hidden = true;
-      connectionStatus.textContent = "Connected";
+      ui.bind(connectionStatus, "listener.connected");
       setCard(connectionCard, "ok");
       nowPlaying.dataset.playing = "true";
       beginCaptionPolling();
@@ -772,11 +790,9 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       playbackStatusHoldUntilMs = 0;
       forceNormalPlaybackRate();
       const blocked = error && error.name === "NotAllowedError";
-      connectionStatus.textContent = blocked ? "Tap to continue" : "Audio unavailable";
+      ui.bind(connectionStatus, blocked ? "listener.tapContinue" : "listener.unavailable");
       setCard(connectionCard, blocked ? "warn" : "error");
-      playbackStatus.textContent = blocked
-        ? "Tap Resume Audio below"
-        : "The shared stream is temporarily unavailable";
+      ui.bind(playbackStatus, blocked ? "listener.tapResume" : "listener.streamUnavailable");
       nowPlaying.dataset.playing = "false";
       nowPlaying.dataset.speaking = "false";
       resumeButton.hidden = false;
@@ -806,18 +822,15 @@ TTS_LISTENER_HTML = r"""<!doctype html>
         globalSpeedMultiplier = Number.isFinite(reportedSpeedMultiplier)
           ? Math.max(0.5, reportedSpeedMultiplier)
           : 1;
-        globalSpeedStatus.textContent =
-          `${globalSpeedMode} - ${globalSpeedMultiplier.toFixed(1)}x`;
-        producerStatus.textContent = status.producer_active ? "Service live" : "Waiting for service";
+        ui.bind(globalSpeedStatus, "listener.speedValue", speedParameters);
+        ui.bind(producerStatus, status.producer_active ? "listener.serviceLive" : "listener.waitService");
         setCard(producerCard, status.producer_active ? "ok" : "warn");
         const listeners = Number(status.listener_count || 0);
-        queueStatus.textContent = status.encoder_active
-          ? `Live · ${listeners} listening`
-          : "Preparing stream";
+        ui.bind(queueStatus, status.encoder_active ? "listener.liveListeners" : "listener.preparingStream", {count: listeners});
         updateLiveAudioStatus();
       } catch (error) {
         if (!running) return;
-        producerStatus.textContent = "Status unavailable";
+        ui.bind(producerStatus, "listener.statusUnavailable");
         setCard(producerCard, "warn");
       }
     }
@@ -864,16 +877,16 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       globalSpeedMode = "Auto";
       globalSpeedMultiplier = 1;
       attemptedGapCueKeys.clear();
-      globalSpeedStatus.textContent = "Auto - 1.0x";
+      ui.bind(globalSpeedStatus, "listener.speedValue", speedParameters);
       listenerId = createListenerId();
       startButton.disabled = true;
       stopButton.disabled = false;
       resumeButton.hidden = true;
-      connectionStatus.textContent = "Connecting";
-      producerStatus.textContent = "Checking service";
-      queueStatus.textContent = "Joining live stream";
-      playbackStatus.textContent = "Starting audio";
-      setLiveCaption("Waiting for translated speech");
+      ui.bind(connectionStatus, "listener.connecting");
+      ui.bind(producerStatus, "listener.checkService");
+      ui.bind(queueStatus, "listener.joining");
+      ui.bind(playbackStatus, "listener.startingAudio");
+      setLiveCaptionMessage("listener.waitSpeech");
       nowPlaying.dataset.speaking = "false";
       setCard(connectionCard, "warn");
       setCard(producerCard, "warn");
@@ -908,7 +921,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       playbackStatusHoldUntilMs = 0;
       forceNormalPlaybackRate();
       resumeButton.hidden = true;
-      connectionStatus.textContent = "Restoring audio";
+      ui.bind(connectionStatus, "listener.restoring");
       setCard(connectionCard, "warn");
       const playPromise = playbackElement.play();
       if (playPromise) {
@@ -948,15 +961,15 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       resumeButton.hidden = true;
       nowPlaying.dataset.playing = "false";
       nowPlaying.dataset.speaking = "false";
-      connectionStatus.textContent = "Stopped";
-      producerStatus.textContent = "Waiting";
-      queueStatus.textContent = "Not joined";
+      ui.bind(connectionStatus, "listener.stopped");
+      ui.bind(producerStatus, "listener.waiting");
+      ui.bind(queueStatus, "listener.notJoined");
       globalSpeedMode = "Auto";
       globalSpeedMultiplier = 1;
-      globalSpeedStatus.textContent = "Auto - 1.0x";
-      liveCaption.textContent = "Waiting to start";
+      ui.bind(globalSpeedStatus, "listener.speedValue", speedParameters);
+      ui.bind(liveCaption, "listener.waitStart");
       fitLiveCaption();
-      playbackStatus.textContent = "Start listening to join the shared stream";
+      ui.bind(playbackStatus, "listener.joinHint");
       setCard(connectionCard, "warn");
       setCard(producerCard, "warn");
       startButton.disabled = false;
@@ -964,15 +977,20 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       setMediaPlaybackState("none");
     }
 
-    function configureMediaSession() {
+    function updateMediaMetadata() {
       if (!("mediaSession" in navigator)) return;
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: "VoxHalo · Live Interpretation",
+          title: ui.t("listener.title"),
           artist: "VoxHalo",
-          album: "Multilingual Interpretation",
+          album: ui.t("listener.album"),
         });
       } catch (error) {}
+    }
+
+    function configureMediaSession() {
+      if (!("mediaSession" in navigator)) return;
+      updateMediaMetadata();
       try {
         navigator.mediaSession.setActionHandler("play", () => {
           if (!running) startListeningFromGesture();
@@ -985,7 +1003,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
           waitingForMedia = false;
           nowPlaying.dataset.playing = "false";
           nowPlaying.dataset.speaking = "false";
-          playbackStatus.textContent = "Paused / resume from the lock screen";
+          ui.bind(playbackStatus, "listener.paused");
           setMediaPlaybackState("paused");
         });
       } catch (error) {}
@@ -993,6 +1011,12 @@ TTS_LISTENER_HTML = r"""<!doctype html>
 
     forceNormalPlaybackRate();
     configureMediaSession();
+    ui.bind(globalSpeedStatus, "listener.speedValue", speedParameters);
+    ui.onChange(() => {
+      // Relabeling must not seek, restart, pause, or select another caption.
+      updateMediaMetadata();
+      fitLiveCaption();
+    });
 
     startButton.addEventListener("click", startListeningFromGesture);
     resumeButton.addEventListener("click", resumeListeningFromGesture);
@@ -1003,7 +1027,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       waitingForMedia = true;
       forceNormalPlaybackRate();
       playbackStatusHoldUntilMs = 0;
-      playbackStatus.textContent = expectedMediaWaitStatus();
+      ui.bind(playbackStatus, expectedMediaWaitStatus());
       nowPlaying.dataset.playing = "false";
       nowPlaying.dataset.speaking = "false";
     });
@@ -1012,7 +1036,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       waitingForMedia = false;
       playbackStarted = false;
       forceNormalPlaybackRate();
-      showPlaybackInterruptionStatus("Reconnecting to live audio");
+      showPlaybackInterruptionStatus("listener.reconnecting");
       nowPlaying.dataset.playing = "false";
       nowPlaying.dataset.speaking = "false";
     });
@@ -1045,5 +1069,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
 </html>
 """
 
+
+TTS_LISTENER_HTML = TTS_LISTENER_HTML.replace("__LOCALIZATION__", embedded_localization())
 
 __all__ = ["HLS_JS_PATH", "TTS_LISTENER_HTML"]
