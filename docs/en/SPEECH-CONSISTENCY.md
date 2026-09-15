@@ -32,6 +32,14 @@ These conservative hints are not a full grammar parser or named-entity recognize
 
 Capture, translation and native playback remain independent of browser pages.
 
+## Short English quotations
+
+The 2026-09-15 service update recognizes paired straight/curly single and double quotes. When an introduction and complete short quotation fit the current 18-word chunk, surrounding commas, semicolons and colons no longer force a separate synthesis; ordinary clauses within that quotation can also stay together. Sentence stops retain their existing behavior. Quotations that do not fit, and unclosed quotes, retain the previous splitting rules.
+
+This does not remove quote characters, alter translation text or increase stabilization waits. Contraction apostrophes are not quotation marks. Ambiguous or nonstandard typography may still use the original splits; this is not a complete English grammar parser. Chinese and other language splitting are unchanged.
+
+Validation on 2026-09-15: 1,039 tests passed; six optional checks were skipped because the ONNX converter, Playwright or ffprobe were unavailable. A captured 16-word example changed from two Kokoro synthesis calls to one. Its 5,013 ms PCM output exactly matched the whole-sentence reference at the same voice and speed; the shared-output regression also retained the complete caption. This removes the forced synthesis break, while normal punctuation prosody can remain.
+
 ## Development boundaries
 
 `RevisionStableTTSBuffer` tracks confirmation per revision and retains a replaceable head until the first native PCM commit. `SharedSpeechOutput` carries invalidation, commit guards and callbacks. `SharedHLSTTSPublisher` retains atomic PCM/HLS commitment. `SpeechConfirmation` handles text/decode evidence without inference or audio scheduling.

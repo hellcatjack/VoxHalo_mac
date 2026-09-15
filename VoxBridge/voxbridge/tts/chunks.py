@@ -53,21 +53,80 @@ def _split_chinese_chunks(text: str) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _english_quoted_spans(text: str) -> list[tuple[int, int]]:
+    """Complete outer quotations, excluding word-internal apostrophes."""
+    pairs = {'"': '"', "'": "'", '“': '”', '‘': '’'}
+    # Leading apostrophes are ambiguous until a closing mark arrives. Keep
+    # independent candidates so an unpaired 'em cannot hide a double quote.
+    openings: dict[str, list[int]] = {}
+    spans = []
+    elisions = re.compile(r"(?:em|cause|cos|tis|twas|twere|twill|twould|bout|round|til|till|n)\b", re.I)
+    for index, char in enumerate(text):
+        if char not in '\"\x27“”‘’':
+            continue
+        before = text[index - 1] if index else ''
+        after = text[index + 1] if index + 1 < len(text) else ''
+        if char in "'’" and after.isalnum():
+            if char == "'" and not before.isalnum():
+                openings.setdefault(char, []).append(index)
+            # Word-internal apostrophes and leading right-curly elisions are
+            # not closing marks (God’s, isn't, ’em).
+            continue
+        if openings.get(char):
+            if char in "'’" and before.lower() == 's' and re.match(r'\s+\w', text[index + 1:]):
+                # In 'read the students' notes, and begin.' the first mark is
+                # possessive. Require a later punctuated close before any new
+                # quotation; do not consume a separately quoted next phrase.
+                later = re.search(r'''(?P<open>["“‘]|(?<!\w)'(?=\w))|(?P<close>[.,!?;:]'''
+                                  + re.escape(char) + ')', text[index + 1:])
+                if later and later.lastgroup == 'close':
+                    continue
+            candidates = openings.pop(char)
+            # Prefer an explicit phrase over a leading elision, but never
+            # reject a complete quote merely because it starts with 'cause.
+            start = next((left for left in candidates
+                          if char != "'" or not elisions.match(text, left + 1)), candidates[0])
+            spans.append((start, index + 1))
+            for closing in list(openings):
+                openings[closing] = [left for left in openings[closing] if left < start]
+        elif char in pairs and not (char == "'" and before.isalnum()):
+            # A trailing possessive (students') cannot open a quotation.
+            openings.setdefault(pairs[char], []).append(index)
+    # Inner quotes must not bypass the word cap of a complete outer quote.
+    outer = []
+    for left, right in sorted(spans, key=lambda span: (span[0], -span[1])):
+        if not outer or left >= outer[-1][1]:
+            outer.append((left, right))
+    return outer
+
+
 def _split_english_chunks(text: str) -> tuple[str, ...]:
     if not text or not text.strip():
         return ()
     words = list(re.finditer(r'\S+\s*', text))
+    quotes = _english_quoted_spans(text)
     result = []
     start = 0
     word_start = 0
     while word_start < len(words):
         end_word = min(word_start + 18, len(words))
+        # Keep an introduction and a short quote in one inference only when
+        # they already fit the normal budget. Long/unclosed quotes stay bounded.
+        fitting_quotes = [(left, right) for left, right in quotes
+                          if start <= left < right <= words[end_word - 1].end()]
         for index in range(word_start + 7, min(word_start + 16, len(words))):
             token = words[index].group().strip()
             # Commas/semicolons are natural clauses; periods inside numbers and
             # abbreviations are never scanned as character-level boundaries.
             sentence_end = (token.endswith('.') and token.lower() not in {'dr.', 'mr.', 'mrs.', 'ms.', 'prof.', 'rev.', 'st.', 'vs.', 'etc.'} and not re.fullmatch(r'(?:[A-Za-z]\.)+', token))
             if sentence_end or re.search(r'[,;:!?][\"\u201d\u2019)]*$', token):
+                cut = words[index].end()
+                clause_end = bool(re.search(r'[,;:][\"\u201d\u2019)]*$', token))
+                if clause_end and any(left < cut < right or (
+                    cut == left or (end_word == len(words) and right <= cut
+                                    and not text[right:cut].strip(' \t\r\n,;:)\"\u201d\u2019\x27')))
+                       for left, right in fitting_quotes):
+                    continue
                 end_word = index + 1
                 break
         end = words[end_word - 1].end()

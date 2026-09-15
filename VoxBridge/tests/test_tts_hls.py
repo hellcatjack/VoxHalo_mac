@@ -2240,9 +2240,12 @@ async def test_failed_hls_epoch_start_does_not_hide_previous_error(tmp_path):
         await publisher.close()
 
 
-def test_chinese_whole_sentence_reaches_shared_audio_and_subtitle_metadata(tmp_path):
+@pytest.mark.parametrize('language,text', [
+    ('Chinese', '当我们一同学习神的话语时，不仅要明白经文原本的意思，也要思想这些教导怎样影响我们的家庭和教会生活，让我们在面对困难的时候仍然能够彼此扶持，并且带着信心继续前行。'),
+    ('English', 'So their attitude towards daily practice isn’t just something like, “Oh, I will come on Sunday.”'),
+])
+def test_whole_sentence_reaches_shared_audio_and_subtitle_metadata(tmp_path, language, text):
     async def scenario():
-        text = '当我们一同学习神的话语时，不仅要明白经文原本的意思，也要思想这些教导怎样影响我们的家庭和教会生活，让我们在面对困难的时候仍然能够彼此扶持，并且带着信心继续前行。'
         wav = make_wav()
         synth = FakeSynthesizer(wav)
         encoder = FakeEncoder(tmp_path)
@@ -2250,11 +2253,11 @@ def test_chinese_whole_sentence_reaches_shared_audio_and_subtitle_metadata(tmp_p
             encoder_factory=lambda root: encoder, chunked_synthesis=True)
         try:
             await stream.touch_listener('native', 'owner')
-            await stream.publish(TTSReadyItem('whole-zh', 1, 1, 'Chinese', text))
+            await stream.publish(TTSReadyItem('whole-sentence', 1, 1, language, text))
             await asyncio.wait_for(stream.wait_idle(), 3)
             chunks = stream.native_pcm.snapshot(0)['chunks']
             assert [(c['text'], c['index'], c['count']) for c in chunks] == [(text, 0, 1)]
-            assert synth.calls == [(text, 'Chinese')]
+            assert synth.calls == [(text, language)]
             # One audio payload, with the existing 300 ms pause only at its end.
             assert len(encoder.appended) == 1
             pcm = decode_mono_pcm16_wav(wav, expected_rate=24000)

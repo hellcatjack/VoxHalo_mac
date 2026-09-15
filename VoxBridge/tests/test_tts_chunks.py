@@ -85,3 +85,100 @@ def test_english_sentence_boundary_is_preferred():
     from voxbridge.tts.chunks import split_speech_chunks
     text = 'One two three four five six seven eight. Nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.'
     assert split_speech_chunks(text, 'en')[0] == 'One two three four five six seven eight. '
+
+
+@pytest.mark.parametrize('opening,closing', [('“', '”'), ('‘', '’'), ('"', '"'), ("'", "'")])
+def test_short_english_quote_stays_with_its_introduction(opening, closing):
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = ("So their attitude towards daily practice isn't just something like, "
+            + opening + 'Oh, I will come on Sunday.' + closing)
+    assert split_speech_chunks(text, 'en') == (text,)
+
+
+def test_short_quote_keeps_internal_and_following_clause_in_one_synthesis():
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = 'She calls this daily habit “take your time, stay calm,” and recommends it to everyone.'
+    assert split_speech_chunks(text, 'English') == (text,)
+
+
+def test_nested_quotes_do_not_treat_contractions_as_quote_boundaries():
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = 'The teacher repeats this short instruction every morning, “Please say \'I’m ready,\' and begin.”'
+    assert split_speech_chunks(text, 'English') == (text,)
+
+
+@pytest.mark.parametrize('ending', [
+    "Oh, I will come on Sunday.",
+    "‘Oh, I will come on Sunday.",
+    "‘I will come every single day and spend more time practicing with everyone in the group.’",
+])
+def test_ordinary_unclosed_and_overlong_quotes_keep_existing_clause_cut(ending):
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = "So their attitude towards daily practice isn't just something like, "
+    chunks = split_speech_chunks(first + ending, 'English')
+    assert chunks[0] == first
+    assert ''.join(chunks) == first + ending
+    assert all(len(chunk.split()) <= 18 for chunk in chunks)
+
+
+def test_possessives_do_not_hide_ordinary_clause_cuts():
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = "The students' teacher gave us John's notes this morning, "
+    rest = "and we'll read them before tomorrow's lesson begins."
+    assert split_speech_chunks(first + rest, 'English') == (first, rest)
+
+
+def test_complete_sentence_before_a_quote_still_ends_its_chunk():
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = 'One two three four five six seven eight. '
+    rest = '“Nine ten eleven twelve thirteen fourteen.”'
+    assert split_speech_chunks(first + rest, 'English') == (first, rest)
+
+
+def test_complete_sentences_inside_a_quote_keep_their_boundary():
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = 'He made his position clear to everyone, “We should leave. '
+    rest = 'Nobody will miss us.”'
+    assert split_speech_chunks(first + rest, 'English') == (first, rest)
+
+
+def test_leading_elisions_are_not_paired_as_a_quote():
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = "We like to see 'em every Sunday morning, "
+    rest = "and we welcome 'em with open arms."
+    assert split_speech_chunks(first + rest, 'English') == (first, rest)
+
+
+@pytest.mark.parametrize('opening,closing', [('‘', '’'), ("'", "'")])
+def test_plural_possessive_inside_quote_is_not_its_closing_mark(opening, closing):
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = ('The teacher repeats this short instruction every morning, '
+            + opening + 'Read the students' + closing + ' notes, and begin.' + closing)
+    assert split_speech_chunks(text, 'English') == (text,)
+
+
+def test_plural_word_at_quote_end_does_not_consume_a_later_quote():
+    from voxbridge.tts.chunks import split_speech_chunks
+    first = "We call all of these people 'students' this morning, "
+    rest = "and then they call us 'teachers.'"
+    assert split_speech_chunks(first + rest, 'English') == (first, rest)
+
+
+def test_real_quote_can_begin_with_a_word_used_in_an_elision():
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = "We discussed a familiar principle in class today, 'cause and effect, action and reaction.'"
+    assert split_speech_chunks(text, 'English') == (text,)
+
+
+@pytest.mark.parametrize('opening,closing', [('“', '”'), ('‘', '’'), ('"', '"'), ("'", "'")])
+def test_unpaired_elision_before_a_real_quote_does_not_hide_it(opening, closing):
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = "I like to see 'em every morning and say, " + opening + 'keep trying, everyone.' + closing
+    assert split_speech_chunks(text, 'English') == (text,)
+
+
+@pytest.mark.parametrize('opening,closing', [('“', '”'), ('‘', '’'), ('"', '"'), ("'", "'")])
+def test_elision_inside_real_quote_does_not_hide_it(opening, closing):
+    from voxbridge.tts.chunks import split_speech_chunks
+    text = 'The teacher repeats this short instruction every morning, ' + opening + "Keep 'em calm, and begin." + closing
+    assert split_speech_chunks(text, 'English') == (text,)

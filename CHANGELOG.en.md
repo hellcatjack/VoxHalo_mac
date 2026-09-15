@@ -2,6 +2,12 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 2026-09-15 · English quotation speech fix
+
+- Keep a short quotation and its introduction in one synthesis when they fit the existing 18-word chunk budget, avoiding unnecessary comma, semicolon and colon cuts around quoted phrases.
+- Distinguish straight/curly quotes, contractions, leading elisions and common plural possessives inside quotations. Preserve sentence stops, original caption text, long-quote limits and whole-sentence Chinese synthesis.
+- This service update works with App 1.6.1 (build 19). Models, voices, speed and stabilization timers are unchanged. After updating the code, end interpretation and restart services through the App.
+
 ## 1.6.1 · build 19 · 2026-09-14
 
 - Bind confirmation to exact source revisions; revoke unshared speech on edits or decoder withdrawal, and lock a sentence only at its first shared PCM commit.
