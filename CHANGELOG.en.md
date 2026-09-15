@@ -4,6 +4,8 @@
 
 ## 1.6.0 · build 18 · 2026-09-14
 
+- Redesign the listener page for multilingual interpretation, remove church branding from the page and lock-screen metadata, and improve responsive caption layout while preserving playback behavior.
+
 - Enable Chinese, English, Japanese, French, Spanish, Italian, Portuguese and Hindi across all 56 directed pairs.
 - Share one catalog between native source/target menus, Python pair validation and passive monitoring. Reject invalid pairs and missing speech resources before capture.
 - Add six Kokoro voice routes while sharing the existing multilingual ONNX model; add a pinned offline Japanese pronunciation frontend and dictionary.

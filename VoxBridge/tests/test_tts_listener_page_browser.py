@@ -1366,7 +1366,7 @@ def test_listener_registers_lock_screen_media_session_controls(listener_page):
         })"""
     )
     assert media == {
-        "title": "PCCS Live Translation",
-        "artist": "Pittsburgh Christian Church South",
+        "title": "VoxHalo · Live Interpretation",
+        "artist": "VoxHalo",
         "actions": ["pause", "play"],
     }

@@ -2383,16 +2383,18 @@ def test_listener_page_uses_one_native_hls_element_without_sentence_blob_queue()
         assert removed not in TTS_LISTENER_HTML
 
 
-def test_listener_page_is_english_pccs_and_suppresses_document_overflow():
+def test_listener_page_uses_neutral_multilingual_branding_and_fits_viewport():
     assert '<html lang="en">' in TTS_LISTENER_HTML
-    assert "Pittsburgh Christian Church South" in TTS_LISTENER_HTML
-    assert "LIVE TRANSLATION" in TTS_LISTENER_HTML
+    assert "VoxHalo" in TTS_LISTENER_HTML
+    assert "LIVE INTERPRETATION" in TTS_LISTENER_HTML
+    for brand in ("pccs", "pittsburgh", "church", "christian", "worship", "教会", "主日"):
+        assert brand not in TTS_LISTENER_HTML.lower()
     assert "Start Listening" in TTS_LISTENER_HTML
     assert "Stop Listening" in TTS_LISTENER_HTML
     assert "Resume Audio" in TTS_LISTENER_HTML
     assert "height: 100dvh" in TTS_LISTENER_HTML
     assert "overflow: hidden" in TTS_LISTENER_HTML
-    assert re.search(r"[\u3400-\u9fff]", TTS_LISTENER_HTML) is None
+    assert 'lang="zh-CN">同声传译' in TTS_LISTENER_HTML
 
 
 def test_listener_page_exposes_lock_screen_media_session_and_resume_action():
