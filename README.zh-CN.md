@@ -2,14 +2,15 @@
 
 [English](README.md) | **简体中文**
 
-在 Apple Silicon Mac 上独立运行的中文 ↔ 英文语音传译系统，提供原生音频采集、译音朗读、与播放同步的字幕，以及局域网听众功能。
+在 Apple Silicon Mac 上独立运行的八语言语音传译系统，提供原生音频采集、译音朗读、与播放同步的字幕，以及局域网听众功能。
 
-**App 版本：**1.5.2，build 17 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App 版本：**1.6.0，build 18 · **维护者：**[hellcatjack](https://github.com/hellcatjack) · **联系邮箱：**[hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
 App 名称为 **同声传译**，当前界面为中文。识别、翻译和语音合成都在本机完成；首次安装需要下载模型与依赖，日常推理无需云端账号或 API 密钥。
 
 ## 文档导航
 
+- [八语言验证与限制](docs/zh-CN/EIGHT-LANGUAGES.md)
 - [第一阶段重构验收](docs/zh-CN/PHASE1-VALIDATION.md)
 - [架构与通用模块边界](docs/zh-CN/ARCHITECTURE.md)
 - [详细安装、更新与故障排查](docs/zh-CN/INSTALLATION.md)
@@ -19,7 +20,7 @@ App 名称为 **同声传译**，当前界面为中文。识别、翻译和语�
 
 ## 主要功能
 
-- 中文 → 英文、英文 → 中文，在开始传译前选择方向。
+- 中文、英文、日语、法语、西班牙语、意大利语、葡萄牙语和印地语，支持 56 个互译方向；开始前选择源语言与目标语言。
 - 原生系统声音采集、只听译音模式、系统默认输入或指定麦克风／声卡。
 - 系统默认输出、指定耳机／扬声器，或本机不播放而保留局域网朗读。
 - 连续 PCM 播放，按待播量自动调整追赶语速；中文优先整句合成，减少句中重新起调。
@@ -42,13 +43,13 @@ App 名称为 **同声传译**，当前界面为中文。识别、翻译和语�
 |---|---|---|
 | 语音识别 | [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，0.6B 型号 | MLX 0.32.2 / mlx-qwen3-asr 0.4.0；INT8 权重、group size 64；Metal GPU |
 | 文本翻译 | [HY-MT1.5-1.8B](https://huggingface.co/tencent/HY-MT1.5-1.8B)，18 亿参数 | 官方 Q8_0 GGUF；llama.cpp b10809；Metal GPU；4,096 token 上下文 |
-| 英文朗读 | [Kokoro-82M v1.0](https://huggingface.co/hexgrad/Kokoro-82M)，约 8,200 万参数 | ONNX Runtime CPU；音色 `am_michael` |
+| 七语言朗读 | [Kokoro-82M v1.0](https://huggingface.co/hexgrad/Kokoro-82M)，约 8,200 万参数 | 共享 ONNX Runtime CPU 模型；英文 `am_michael` 及六种语言音色 |
 | 中文朗读 | [Kokoro-82M v1.1-zh](https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh)，约 8,200 万参数 | ONNX Runtime CPU；男声 `zm_029`；修复浮点语速输入 |
 | 语音活动检测 | Silero VAD ONNX | CPU，辅助静音处理和语音边界保护 |
 
 识别与翻译共享 GPU 执行锁，TTS 使用两个 CPU 线程。本版本使用 Metal，没有部署到 Apple Neural Engine。OpenAI 兼容翻译接口实际指向**本地 llama.cpp 服务**，不会请求 OpenAI 云服务。
 
-[模型说明](docs/zh-CN/MODELS.md)列出具体配置、固定版本、校验值和各自许可证。安装器下载约 **4.55 GB** 模型／运行时资源，另需 Python 依赖；中文语速修复会额外生成约 **344 MB** 模型。
+[模型说明](docs/zh-CN/MODELS.md)列出具体配置、固定版本、校验值和各自许可证。安装器下载约 **4.58 GB** 模型／运行时资源，另需 Python 依赖；中文语速修复会额外生成约 **344 MB** 模型。
 
 ## 最低 Mac 配置
 
@@ -95,7 +96,7 @@ open "$HOME/Applications/同声传译.app"
 
 ## 使用方法
 
-1. 在 App 中选择**输入来源**、**朗读输出**和翻译方向。
+1. 在 App 中选择**输入来源**、**朗读输出**和**识别 → 译音**的源语言、目标语言。
 2. 可选填写少量 ASR 提示词，点击**开始传译**，按 macOS 提示允许音频权限。
 3. 采集开始后再讲话或播放源音频。需要查看历史时再点击**打开监控页**。
 4. **结束传译**停止采集并收尾；**停止服务**卸载模型；**停止服务并退出**完全退出。

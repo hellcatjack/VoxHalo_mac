@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/INSTALLATION.md) · [README](../../README.md) · [Models](MODELS.md)
 
-These instructions match the repository's `setup.sh` and App 1.5.2/build 17. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
+These instructions match the repository's `setup.sh` and App 1.6.0/build 18. Run commands in Terminal. Commands with `$HOME` adapt to your account; do not replace them with the original developer's path.
 
 ## 1. Check your Mac
 
@@ -72,7 +72,9 @@ The script performs these steps:
 6. Generates the separate Chinese floating-point-speed model and checks its expected hash.
 7. Checks local resources and compiles/codesigns **同声传译.app** into `~/Applications`.
 
-About 4.55 GB of model/runtime assets are downloaded, plus Python and packages. Installation time depends on your network; no fixed duration is promised. The first App service start also loads and quantizes the ASR model, so allow it to finish before trying to capture audio.
+Setup also installs `pyopenjtalk==0.4.1` and the checksum-pinned OpenJTalk 1.11 dictionary for Japanese. This native dependency uses the command-line build tools installed above. Japanese speech never downloads a dictionary during a session.
+
+About 4.58 GB of model/runtime assets are downloaded, plus Python and packages. Installation time depends on your network; no fixed duration is promised. The first App service start also loads and quantizes the ASR model, so allow it to finish before trying to capture audio.
 
 The installer needs access to GitHub release assets, Hugging Face model files, and Python package indexes. It creates local resources only and does not start recording. Model use is subject to the [separate model licenses](MODELS.md#licenses-and-attribution), including HY-MT's custom conditions.
 
@@ -128,6 +130,8 @@ If you selected `/Applications`, open the App at that path instead. Current buil
 | Checkout in a protected folder | Allow the specific folder request if it is your chosen installation location |
 | LAN listeners | Allow incoming connections for the relevant service if macOS Firewall prompts |
 
+Rebuilding or updating an ad-hoc signed App changes its code identity. macOS may request audio access again even when the previous entry still appears enabled. The system-audio dialog is separate from the Desktop-folder dialog; finish each requested permission before expecting capture to start.
+
 Full Disk Access is not required. If you change audio permission after denying it, quit and reopen the App. Permissions belong to the native App, not Chrome.
 
 ## 7. Start your first session
@@ -136,7 +140,7 @@ Full Disk Access is not required. If you change audio permission after denying i
 |---|---|
 | 输入来源 | Input source |
 | 朗读输出 | Speech output |
-| 中文 → 英文 / 英文 → 中文 | Translation direction |
+| 识别 → 译音 | Source and target languages; eight choices, identical pairs excluded |
 | 开始传译 / 结束传译 | Start / end interpretation |
 | 启动服务 / 停止服务 | Load / unload model services |
 | 打开监控页 | Open read-only monitoring page |
@@ -196,6 +200,8 @@ defaults delete org.pccs.voxbridge.console
 ```
 
 This resets this App's device/subtitle preferences; it does not remove model files or macOS audio permissions. A “domain not found” response simply means no saved preference domain exists.
+
+For an existing 1.5.x installation, follow the update procedure below and rerun `./setup.sh`; a source-only `git pull` does not install the new Japanese dependency or dictionary.
 
 ## Troubleshooting
 

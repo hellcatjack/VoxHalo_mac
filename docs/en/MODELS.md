@@ -2,7 +2,7 @@
 
 **English** | [简体中文](../zh-CN/MODELS.md) · [Project README](../../README.md) · [Installation](INSTALLATION.md)
 
-This document describes App 1.5.2/build 17. The authoritative settings are in [macos_service.py](../../VoxBridge/tools/macos_service.py), the [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py), and the [asset manifest](../../scripts/runtime-assets.json). It describes this implementation, not every capability advertised by the upstream model families.
+This document describes App 1.6.0/build 18. The authoritative settings are in [macos_service.py](../../VoxBridge/tools/macos_service.py), the [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py), and the [asset manifest](../../scripts/runtime-assets.json). It describes this implementation, not every capability advertised by the upstream model families.
 
 ## 1. Qwen3-ASR 0.6B: speech recognition
 
@@ -11,7 +11,7 @@ This document describes App 1.5.2/build 17. The authoritative settings are in [m
 - **Precision:** the original local checkpoint is loaded with FP16 dtype, then MLX quantizes eligible weights to 8 bits with group size 64. Activations and unquantized layers remain floating point. The approximately 1.88 GB downloaded checkpoint is not an already packed INT8 file; startup conversion and temporary allocations also require memory.
 - **Input:** mono 16 kHz audio. The native client sends 100 ms frames; recognition is triggered at approximately 2-second intervals. The default boundary policy uses a 12-second threshold, 0.8-second candidate silence, and 0.32-second overlap, with protection for incomplete phrases and final redecoding.
 - **Streaming:** bounded-window repeated decoding plus source revisions; no claim of upstream vLLM streaming or fully incremental KV-cache reuse. Initial text can change before it is committed.
-- **Language:** Chinese ASR for Chinese → English; English ASR for English → Chinese. The model family supports additional languages, but this App exposes only these two directions.
+- **Languages:** Chinese, English, Japanese, French, Spanish, Italian, Portuguese and Hindi. The selected source forces the corresponding Qwen language; any of the other seven can be the translation/speech target.
 - **Context:** optional ASR terms help names and specialist vocabulary; the native UI accepts at most 24 whitespace-separated entries, 160 characters combined. These terms do not replace the separate translation policy or guarantee correct recognition.
 
 The [upstream model card](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) documents the model family and Apache-2.0 license. Mixed-language speech, names, accents, and noise still need workload-specific evaluation.
@@ -35,6 +35,8 @@ The `mac-verified` profile deliberately uses temperature **0**, while the upstre
 
 ### Translation policy
 
+The established Chinese ↔ English policy below is retained. Other pairs use HY-MT’s official short template: the Chinese template when either side is Chinese, and the English template for other pairs. They do not inherit the Chinese/English church glossary. Script checks catch obviously incompatible outputs; they cannot reliably distinguish languages sharing the Latin script.
+
 - Preserve what the speaker actually said and return translated text without explanation.
 - Chinese → English uses the project's church/ESV terminology policy when appropriate; English → Chinese favors conventional Chinese Bible names and church terminology.
 - Do not reconstruct scripture, fill missing passages, correct quotations from memory, or add theological explanations.
@@ -51,6 +53,14 @@ Kokoro is a compact neural TTS model, not the translation language model. Both a
 |---|---|---|---|
 | English | Kokoro v1.0 ONNX | `am_michael` | Existing natural speech chunks |
 | Chinese | Kokoro v1.1-zh ONNX, repaired speed input | `zm_029`, male | Prefer complete sentences; unusually long text is split within synthesis limits |
+| Japanese | Shared v1.0 ONNX | `jm_kumo`, male | Misaki + local OpenJTalk; sentence-first chunks |
+| French | Shared v1.0 ONNX | `ff_siwis`, female | eSpeak `fr-fr`; sentence-first chunks |
+| Spanish | Shared v1.0 ONNX | `em_alex`, male | eSpeak `es`; sentence-first chunks |
+| Italian | Shared v1.0 ONNX | `im_nicola`, male | eSpeak `it`; sentence-first chunks |
+| Portuguese | Shared v1.0 ONNX | `pm_alex`, male | eSpeak `pt-br` (Brazilian Portuguese) |
+| Hindi | Shared v1.0 ONNX | `hm_omega`, male | eSpeak `hi`; Devanagari-aware chunks |
+
+The seven non-Chinese targets share one cached model; Chinese has a separate cached model. Voice availability and pronunciation dependencies are checked before capture starts. Voice defaults follow the [upstream inventory](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md). Added-language queue duration estimates are provisional; real buffered PCM duration drives playback feedback.
 
 Local output uses AVAudioEngine PCM playback. The LAN path shares generated speech through AAC/HLS. Subtitles follow local rendered audio rather than the arrival time of a translation. Native playback and LAN HLS can have different buffering delays.
 
@@ -83,6 +93,7 @@ Sizes below are decimal download sizes rounded from the manifest. They are not r
 | HY-MT GGUF and license | 1.909 GB | Tencent revision `265b2e615a7dc9b06c435dc878829ad99a512ba2` |
 | Kokoro models, voices, Chinese config | 751 MB | Pinned releases/checksums; Chinese mirror `463d2d58c267a5c58b8989a73d171e153c50be20`; config `01e7505bd6a7a2ac4975463114c3a7650a9f7218` |
 | Silero VAD | 0.644 MB | sherpa-onnx release asset, fixed SHA-256 |
+| Japanese dictionary | 23.65 MB | OpenJTalk UTF-8 1.11; SHA-256 `fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a` |
 | llama.cpp archive | 11.1 MB | Official `b10809` macOS arm64 release |
 
 The installer additionally obtains uv 0.12.13, managed Python 3.12.14, and [pinned service packages](../../VoxBridge/deploy/macos/requirements.lock). The Chinese repaired model adds approximately 344 MB on disk. Reserve 20 GB for the full installation and temporary space.
@@ -109,6 +120,7 @@ The source code's [Apache-2.0 license](../../LICENSE) does not replace model or 
 | MLX ASR adapter / Kokoro adapter | [mlx-qwen3-asr](https://github.com/moona3k/mlx-qwen3-asr) / [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx); retain their package licenses |
 | VAD / sherpa-onnx | [Silero VAD](https://github.com/snakers4/silero-vad) / [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); retain upstream licenses |
 | hls.js | Apache-2.0; bundled [notice](../../VoxBridge/voxbridge/tts/vendor/README.txt) and [license](../../VoxBridge/voxbridge/tts/vendor/hls.LICENSE.txt) |
+| Japanese frontend | [pyopenjtalk 0.4.1](https://pypi.org/project/pyopenjtalk/0.4.1/), MIT; OpenJTalk dictionary retains its BSD 3-clause `COPYING` notices |
 | FFmpeg, eSpeak NG, Misaki, uv, Python | Separate package licenses and bundled third-party notices apply; these are not relicensed by this repository |
 
 HY-MT's published license limits its territory to locations outside the EU, UK, and South Korea and includes use, attribution, redistribution, and other conditions. The installer retains `models/translation-experiments/gguf/License.txt`; read the complete agreement before use. This is an independently maintained project by hellcatjack, with no Tencent affiliation, sponsorship, or endorsement. Deployers providing a service must identify their own actual service provider as required by the model terms.

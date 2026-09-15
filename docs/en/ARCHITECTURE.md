@@ -2,16 +2,16 @@
 
 **English** | [简体中文](../zh-CN/ARCHITECTURE.md) · [Project home](../../README.md)
 
-Phase 1 extracts reusable code from the Chinese ↔ English CLI service. Only Mandarin Chinese and English are enabled. The verified models, prompts, speed settings, stabilization and audio commit algorithms are retained.
+App 1.6.0 builds on the phase 1 module extraction and enables eight languages / 56 directed pairs. The verified models, Chinese/English prompts and speech chunking, stabilization and atomic audio commit algorithms are retained.
 
 ## Responsibilities
 
 | Module | Responsibility |
 |---|---|
-| `voxbridge/languages.py` | Immutable language profiles and pairs; rejects unavailable languages and identical source/target pairs |
+| `voxbridge/language_catalog.json` + `languages.py` | One catalog bundled by both Python and Swift; immutable profiles and pairs; rejects unavailable languages and identical source/target pairs |
 | `interpretation/contracts.py` | Immutable translation requests, per-session bounded queue and latest-revision index |
 | `interpretation/translation_queue.py` | Translation concurrency limits, waiting and cancellation cleanup |
-| `interpretation/transcript.py` | Source-text policy interface and the existing Chinese/English implementation |
+| `interpretation/transcript.py` | Source-text policy interface; retained Chinese/English rules, sentence/abbreviation/Unicode rules for added sources |
 | `streaming/sentence_rules.py` | Verified sentence, clause, abbreviation and incomplete-phrase boundaries |
 | `translation/prompts.py` | Verified prompts and domain policy, independent of network requests |
 | `translation/backends.py` | Local Transformers and OpenAI-compatible HTTP clients; this Mac uses HTTP to local HY-MT |
@@ -52,11 +52,11 @@ request = TranslationRequest(
 translated_text = await service.translate(request)
 ```
 
-Requests use model language strings. `TranslationService` validates enabled language pairs and direction consistency before inference, rejecting unavailable languages. Session creation can also call `translation_pair(source, target)` to validate configuration early. Explicitly configured legacy Chinese/English labels retain their original prompt wording. Historical direction defaults remain confined to the CLI protocol compatibility boundary.
+Requests use model language strings. `TranslationService` validates enabled language pairs and direction consistency before inference, rejecting unavailable languages. Session creation can also call `translation_pair(source, target)` to validate configuration early. Explicitly configured legacy Chinese/English labels retain their original prompt wording. Missing directions retain the default at the compatibility boundary; unknown explicit directions are rejected before session mutation. The selected pair is authoritative for ASR, translation and TTS. `/api/languages` exposes the eight profiles and 56 allowed directions.
 
 ## Remaining boundaries
 
-Phase 1 retains the two Swift directions, legacy protocol defaults, complex ASR revision state machine and existing speech publisher. The entire WebSocket session has not yet become a standalone generic session class, and 56 directions are not enabled.
+The native App reads the common JSON catalog and stores a canonical pair string, preserving old zh2en/en2zh preferences. Source and target menus exclude identical pairs; switching requires ending capture. The WebSocket revision state machine and speech publisher remain in their existing orchestration layer. The complete session has not yet become a standalone generic session class.
 
 Adding a language requires its text and speech strategies, pronunciation/number/code-switching/boundary/output-language validation, and updates to capabilities and the native handshake. Chinese/English regexes and church terminology must not be applied blindly to other languages. Further publisher extraction must retain stale-revision checks, cancellation commit fences, replay protection and the continuous PCM timeline.
 
@@ -66,4 +66,4 @@ From `VoxBridge/`, run `../.venv/bin/python -m pytest -q -rs`. Core tests invoke
 
 `tests/macos/NativeFileReplayChecks.swift` is a manual integration harness requiring the local model services. It feeds at least ten minutes of 16 kHz mono PCM16 in 100 ms frames through production `NativeSession` and `NativeSpeechPlayer`. File input bypasses the capture device, so this validates the model-to-playback path, not system-audio recording permissions. Audio fixtures, PCM and logs are not committed.
 
-[Phase 1 validation results](PHASE1-VALIDATION.md)
+[Eight-language validation](EIGHT-LANGUAGES.md) · [Phase 1 validation results](PHASE1-VALIDATION.md)

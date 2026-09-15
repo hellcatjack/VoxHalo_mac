@@ -2,15 +2,16 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-Local Chinese ↔ English speech interpretation for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
+Local speech interpretation between eight languages for Apple Silicon Macs, with native audio capture, translated speech, playback-synchronized subtitles, and LAN listening.
 
-**App:** 1.5.2, build 17 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
+**App:** 1.6.0, build 18 · **Maintainer:** [hellcatjack](https://github.com/hellcatjack) · **Contact:** [hellcatjack@gmail.com](mailto:hellcatjack@gmail.com)
 
 The App is named **同声传译**. Its current interface is in Chinese; the English installation guide includes the corresponding button names. Recognition, translation, and synthesis run on your Mac. Initial installation downloads models and dependencies; routine inference needs no cloud account or API key.
 
 ## Documentation
 
 - [Detailed installation, updates, and troubleshooting](docs/en/INSTALLATION.md)
+- [Eight-language validation and limitations](docs/en/EIGHT-LANGUAGES.md)
 - [Phase 1 refactor validation](docs/en/PHASE1-VALIDATION.md)
 - [Architecture and reusable module boundaries](docs/en/ARCHITECTURE.md)
 - [Models, quantization, prompts, and licenses](docs/en/MODELS.md)
@@ -19,7 +20,7 @@ The App is named **同声传译**. Its current interface is in Chinese; the Engl
 
 ## Features
 
-- Chinese → English and English → Chinese, selected before starting a session.
+- Chinese, English, Japanese, French, Spanish, Italian, Portuguese and Hindi: 56 directed pairs, selected with source and target menus before starting.
 - Native system-audio capture, translation-only system playback, default input, or a specific microphone/audio interface.
 - Default output, a specific headset/speaker, or LAN listening without local playback.
 - Continuous PCM playback with automatic catch-up speed; Chinese synthesis favors complete sentences to reduce mid-sentence prosody resets.
@@ -42,13 +43,13 @@ Browser monitor ← source text, translations, and TTS status
 |---|---|---|
 | Speech recognition | [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B), 0.6B model variant | MLX 0.32.2 / mlx-qwen3-asr 0.4.0; INT8 weights, group size 64; Metal GPU |
 | Translation | [HY-MT1.5-1.8B](https://huggingface.co/tencent/HY-MT1.5-1.8B), 1.8B parameters | Official Q8_0 GGUF; llama.cpp b10809; Metal GPU; 4,096-token context |
-| English speech | [Kokoro-82M v1.0](https://huggingface.co/hexgrad/Kokoro-82M), approximately 82M parameters | ONNX Runtime CPU, voice `am_michael` |
+| Multilingual speech (seven languages) | [Kokoro-82M v1.0](https://huggingface.co/hexgrad/Kokoro-82M), approximately 82M parameters | One shared ONNX Runtime CPU model; English `am_michael`, six additional voices |
 | Chinese speech | [Kokoro-82M v1.1-zh](https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh), approximately 82M parameters | ONNX Runtime CPU, male voice `zm_029`; repaired floating-point speed input |
 | Speech activity | Silero VAD ONNX | CPU; assists silence handling and speech-boundary protection |
 
 ASR and translation share a GPU execution lock; TTS uses two CPU threads. This release uses Metal and does not deploy models to the Apple Neural Engine. The internal OpenAI-compatible translation endpoint is a **local llama.cpp service**, not a request to OpenAI.
 
-The [model guide](docs/en/MODELS.md) documents exact settings, fixed revisions, checksums, and separate model licenses. Installation downloads about **4.55 GB** of model/runtime assets, plus Python packages, and creates an additional **344 MB** Chinese speed-repair model.
+The [model guide](docs/en/MODELS.md) documents exact settings, fixed revisions, checksums, and separate model licenses. Installation downloads about **4.58 GB** of model/runtime assets, plus Python packages, and creates an additional **344 MB** Chinese speed-repair model.
 
 ## Minimum Mac configuration
 
@@ -95,7 +96,7 @@ No Homebrew, Docker, separately installed Python, virtual sound card, paid API, 
 
 ## Usage
 
-1. Choose **输入来源** (input), **朗读输出** (output), and translation direction in the App.
+1. Choose **输入来源** (input), **朗读输出** (output), and **识别 → 译音** (source → target) in the App.
 2. Optionally enter a few ASR context terms, then select **开始传译** (start interpretation). Allow the requested macOS audio permissions.
 3. Once capture is active, speak or play the source audio. **打开监控页** (open monitor) is optional.
 4. **结束传译** (end interpretation) stops capture and finishes the remaining speech. **停止服务** (stop services) unloads models. **停止服务并退出** (stop services and quit) fully exits.

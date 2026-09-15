@@ -2,6 +2,14 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## 1.6.0 · build 18 · 2026-09-14
+
+- Enable Chinese, English, Japanese, French, Spanish, Italian, Portuguese and Hindi across all 56 directed pairs.
+- Share one catalog between native source/target menus, Python pair validation and passive monitoring. Reject invalid pairs and missing speech resources before capture.
+- Add six Kokoro voice routes while sharing the existing multilingual ONNX model; add a pinned offline Japanese pronunciation frontend and dictionary.
+- Preserve Chinese/English prompts and speech behavior. Add script-aware validation, sentence boundaries, combining-mark-safe joins and spoken-prefix recovery.
+- See [validation and limitations](docs/en/EIGHT-LANGUAGES.md). Existing installations must rerun `./setup.sh` to install the Japanese dependency and dictionary.
+
 ## 1.5.2 · build 17 · 2026-09-14
 
 - Phase 1 modularization: language catalog, request contracts, translation service and queue, text rules, and speech policy/output interfaces.

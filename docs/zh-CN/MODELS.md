@@ -2,7 +2,7 @@
 
 [English](../en/MODELS.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [安装指南](INSTALLATION.md)
 
-本文对应 App 1.5.2/build 17。实际配置以 [macos_service.py](../../VoxBridge/tools/macos_service.py)、[MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py)和[资源清单](../../scripts/runtime-assets.json)为准。这里介绍本项目的实现，不代表上游模型系列的所有功能。
+本文对应 App 1.6.0/build 18。实际配置以 [macos_service.py](../../VoxBridge/tools/macos_service.py)、[MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py)和[资源清单](../../scripts/runtime-assets.json)为准。这里介绍本项目的实现，不代表上游模型系列的所有功能。
 
 ## 1. Qwen3-ASR 0.6B：语音识别
 
@@ -11,7 +11,7 @@
 - **精度：**先以 FP16 dtype 加载本地原始检查点，再由 MLX 将适用权重量化为 8 bit，group size 为 64。激活及未量化层仍为浮点。下载的约 1.88 GB 检查点不是预先压好的 INT8 文件，启动转换和临时分配也需要内存。
 - **输入：**16 kHz 单声道音频；原生客户端每 100 ms 发送一帧，约两秒触发一次识别。默认采用 12 秒边界阈值、0.8 秒候选静音和 0.32 秒重叠，并保留未完句保护及最终重解码。
 - **流式方式：**有界窗口重复解码与原文修订；不宣称使用上游 vLLM 流式实现或完整增量 KV 缓存。原文提交前可能发生变化。
-- **语言：**中译英使用中文 ASR，英译中使用英文 ASR。模型系列支持更多语言，但 App 当前只提供这两个方向。
+- **语言：**中文、英文、日语、法语、西班牙语、意大利语、葡萄牙语、印地语。所选源语言强制用于 Qwen 识别，其余七种均可作为翻译及朗读目标。
 - **提示词：**可填少量名称／专业术语；原生界面最多接受 24 项以空白分隔的词条，合计 160 字符。这些词条不替代独立翻译策略，也不保证识别正确。
 
 [官方模型卡](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)说明模型系列与 Apache-2.0 许可。中英混说、专名、口音和噪声仍需用实际场景评估。
@@ -35,6 +35,8 @@
 
 ### 翻译策略
 
+下面的既有中英双向策略保持不变。其他方向使用 HY-MT 官方短模板：任一端为中文时使用中文模板，其余使用英文模板；不套用中英教会术语表。脚本检查能发现明显错误的文字体系，但不能可靠区分都使用拉丁字母的不同语言。
+
 - 忠实于演讲者的实际原文，只输出译文本身。
 - 中译英在适用时采用项目内教会／ESV 术语策略；英译中使用通行的中文圣经译名和教会术语。
 - 不根据记忆重构经文、补齐段落、修正引文或增加神学解释。
@@ -51,8 +53,16 @@ Kokoro 是小型神经 TTS 模型，不承担文本翻译。两个约 8,200 万�
 |---|---|---|---|
 | 英文 | Kokoro v1.0 ONNX | `am_michael` | 既有自然语句分块 |
 | 中文 | Kokoro v1.1-zh ONNX，修复语速输入 | `zm_029` 男声 | 优先完整句子，超长文本按合成容量分批 |
+| 日语 | 共享 v1.0 ONNX | `jm_kumo` 男声 | Misaki + 本地 OpenJTalk，优先完整句子 |
+| 法语 | 共享 v1.0 ONNX | `ff_siwis` 女声 | eSpeak `fr-fr`，优先完整句子 |
+| 西班牙语 | 共享 v1.0 ONNX | `em_alex` 男声 | eSpeak `es`，优先完整句子 |
+| 意大利语 | 共享 v1.0 ONNX | `im_nicola` 男声 | eSpeak `it`，优先完整句子 |
+| 葡萄牙语 | 共享 v1.0 ONNX | `pm_alex` 男声 | eSpeak `pt-br`，巴西葡萄牙语 |
+| 印地语 | 共享 v1.0 ONNX | `hm_omega` 男声 | eSpeak `hi`，保留天城文组合字符 |
 
 本机通过 AVAudioEngine 播放 PCM；局域网通过 AAC/HLS 共享已生成语音。字幕跟随本机实际输出音频，而非译文到达时间。本机原生播放与局域网 HLS 可以具有不同缓冲延迟。
+
+七种非中文目标共享同一缓存模型，中文使用独立缓存模型。采集前校验音色及发音依赖；默认音色依据[官方列表](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md)。新增语言的队列时长估算仍属初始值，播放反馈采用实际 PCM 缓冲时长。
 
 ### 中文语速修复如何复现
 
@@ -83,6 +93,7 @@ Silero VAD ONNX 在 CPU 上运行，辅助语音活动、静音处理与边界�
 | HY-MT GGUF 与许可证 | 1.909 GB | 腾讯提交 `265b2e615a7dc9b06c435dc878829ad99a512ba2` |
 | Kokoro 模型、音色与中文配置 | 751 MB | 固定 release／校验值；中文镜像 `463d2d58c267a5c58b8989a73d171e153c50be20`；词表 `01e7505bd6a7a2ac4975463114c3a7650a9f7218` |
 | Silero VAD | 0.644 MB | sherpa-onnx 发行附件，固定 SHA-256 |
+| 日语词典 | 23.65 MB | OpenJTalk UTF-8 1.11；SHA-256 `fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a` |
 | llama.cpp 压缩包 | 11.1 MB | 官方 `b10809` macOS arm64 发行包 |
 
 安装器还会下载 uv 0.12.13、托管 Python 3.12.14 和[固定服务依赖](../../VoxBridge/deploy/macos/requirements.lock)。中文修复模型额外占约 344 MB，完整安装及临时空间建议预留 20 GB。
@@ -109,6 +120,7 @@ Silero VAD ONNX 在 CPU 上运行，辅助语音活动、静音处理与边界�
 | MLX ASR 适配／Kokoro 适配 | [mlx-qwen3-asr](https://github.com/moona3k/mlx-qwen3-asr)／[kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)，保留安装包各自许可 |
 | VAD／sherpa-onnx | [Silero VAD](https://github.com/snakers4/silero-vad)／[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)，保留上游许可 |
 | hls.js | Apache-2.0，随代码保留[来源声明](../../VoxBridge/voxbridge/tts/vendor/README.txt)和[许可](../../VoxBridge/voxbridge/tts/vendor/hls.LICENSE.txt) |
+| 日语发音前端 | [pyopenjtalk 0.4.1](https://pypi.org/project/pyopenjtalk/0.4.1/)，MIT；OpenJTalk 词典保留 BSD 3-clause `COPYING` 声明 |
 | FFmpeg、eSpeak NG、Misaki、uv、Python | 遵循各发行包许可和第三方声明，不因本仓库发布而更改 |
 
 HY-MT 公布的许可适用地域不包含欧盟、英国和韩国，并包含使用、署名、再分发等条件。安装器保留 `models/translation-experiments/gguf/License.txt`，使用前应阅读完整协议。本项目由 hellcatjack 独立维护，与腾讯没有关联、赞助或背书关系。对外提供服务的部署者应按模型协议披露其实际服务提供者。
