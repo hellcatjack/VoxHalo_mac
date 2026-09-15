@@ -82,3 +82,40 @@ def split_speech_chunks(text: str, target_language: str) -> tuple[str, ...]:
         return ()
     from .policy import speech_policy
     return speech_policy(target_language).split(text)
+
+
+_MULTILINGUAL_END = re.compile(r'(?:[。！？!?।॥]+|(?<!\d)\.(?![\d.]))' + _CLOSERS)
+_ABBREVIATIONS = {'m.', 'mme.', 'mlle.', 'dr.', 'mr.', 'mrs.', 'ms.', 'prof.',
+                  'sr.', 'sra.', 'srta.', 'sig.', 'sig.ra.', 'dott.', 'etc.', 'p.ex.'}
+
+
+def _split_multilingual_chunks(text: str) -> tuple[str, ...]:
+    """Sentence-first slices with a 240-codepoint soft cap at grapheme ends."""
+    import regex
+    if not text or not text.strip():
+        return ()
+    sentences = []
+    start = 0
+    for match in _MULTILINGUAL_END.finditer(text):
+        if text[match.start()] == '.':
+            token = text[:match.start() + 1].rsplit(None, 1)[-1].lower()
+            if token in _ABBREVIATIONS or regex.fullmatch(r'(?:\p{L}\.)+', token):
+                continue
+        sentences.append(text[start:match.end()])
+        start = match.end()
+    if start < len(text):
+        sentences.append(text[start:])
+    result = []
+    for sentence in sentences:
+        while len(sentence) > 240:
+            ends = [m.end() for m in regex.finditer(r'\X', sentence) if m.end() <= 240]
+            # A pathological grapheme may exceed the cap; retain it intact.
+            end = ends[-1] if ends else regex.match(r'\X', sentence).end()
+            spaces = [m.end() for m in re.finditer(r'\s+', sentence[:end]) if m.end() > end // 2]
+            if spaces:
+                end = spaces[-1]
+            result.append(sentence[:end])
+            sentence = sentence[end:]
+        if sentence:
+            result.append(sentence)
+    return tuple(result)

@@ -165,7 +165,7 @@ def test_adapter_rejects_unsupported_language_and_oversized_text(tmp_path):
     synth = KokoroOnnxSynthesizer(config=make_config(tmp_path), kokoro_factory=FakeFactory())
 
     with pytest.raises(TTSSynthesisError, match="target language"):
-        synth.synthesize("Stable.", "French")
+        synth.synthesize("Stable.", "German")
     with pytest.raises(TTSSynthesisError, match="1000"):
         synth.synthesize("x" * 1001, "English")
 

@@ -107,6 +107,12 @@
       "url": "https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh/resolve/01e7505bd6a7a2ac4975463114c3a7650a9f7218/config.json",
       "sha256": "bc333efa5ce4ceff433c8c8e5d027a1eca0166001e4e4a62bea2d26ff7a46890",
       "size": 3228
+    },
+    {
+      "path": "downloads/open_jtalk_dic_utf_8-1.11.tar.gz",
+      "url": "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz",
+      "sha256": "fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a",
+      "size": 23646843
     }
   ],
   "generated": {

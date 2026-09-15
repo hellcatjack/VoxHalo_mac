@@ -69,6 +69,32 @@ def install_llama(root: Path) -> None:
         extracted.rename(destination)
 
 
+def install_japanese_dictionary(root: Path) -> None:
+    """Populate pyopenjtalk's offline dictionary from the verified release."""
+    import pyopenjtalk
+    asset = next(a for a in json.loads(MANIFEST.read_text())['assets']
+                 if a['path'] == 'downloads/open_jtalk_dic_utf_8-1.11.tar.gz')
+    archive_path = asset_path(root, asset['path'])
+    if not verified(archive_path, asset):
+        raise RuntimeError('Japanese dictionary archive checksum mismatch')
+    destination = Path(os.fsdecode(pyopenjtalk.OPEN_JTALK_DICT_DIR))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix='.openjtalk-') as temp:
+        with tarfile.open(archive_path) as archive:
+            archive.extractall(temp, filter='data')
+        extracted = Path(temp) / 'open_jtalk_dic_utf_8-1.11'
+        if not (extracted / 'sys.dic').is_file():
+            raise RuntimeError('Unexpected Japanese dictionary archive layout')
+        if destination.exists():
+            for source in extracted.rglob('*'):
+                if source.is_file():
+                    installed = destination / source.relative_to(extracted)
+                    if not installed.is_file() or digest(source) != digest(installed):
+                        raise RuntimeError(f'Japanese dictionary differs; kept unchanged: {installed}')
+        else:
+            extracted.rename(destination)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=ROOT)
@@ -90,6 +116,7 @@ def main() -> None:
     for asset in manifest['assets']:
         install_asset(root, asset, cache)
     install_llama(root)
+    install_japanese_dictionary(root)
     repaired = asset_path(root, manifest['generated']['path'])
     if not repaired.exists():
         subprocess.run([str(args.repair_python), str(ROOT / 'VoxBridge/tools/repair_kokoro_speed.py'),

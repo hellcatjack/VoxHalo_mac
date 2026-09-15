@@ -51,11 +51,14 @@ class KokoroOnnxSynthesizer:
         config: KokoroTTSConfig,
         kokoro_factory: KokoroFactory | None = None,
         zh_g2p_factory: ChineseG2PFactory | None = None,
+        ja_g2p_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.config = config
         self._validate_config()
         self._kokoro_factory = kokoro_factory or self._create_cpu_kokoro
         self._zh_g2p_factory = zh_g2p_factory or self._create_chinese_g2p
+        self._ja_g2p_factory = ja_g2p_factory or self._create_japanese_g2p
+        self._ja_g2p: Any | None = None
         self._models: dict[str, Any] = {}
         self._zh_g2p: Any | None = None
         self._inference_lock = threading.Lock()
@@ -125,6 +128,7 @@ class KokoroOnnxSynthesizer:
                      self._model("Chinese").tokenizer.phonemize(text, "en-us"))
 
     def _model(self, language: str) -> Any:
+        language = "Chinese" if language == "Chinese" else "English"
         model = self._models.get(language)
         if model is not None:
             return model
@@ -145,6 +149,55 @@ class KokoroOnnxSynthesizer:
         )
         self._models[language] = model
         return model
+
+    @staticmethod
+    def _create_japanese_g2p() -> Any:
+        import os
+        import pyopenjtalk
+        from misaki.ja import JAG2P
+        dictionary = Path(os.fsdecode(pyopenjtalk.OPEN_JTALK_DICT_DIR))
+        if not (dictionary / "sys.dic").is_file():
+            raise TTSConfigurationError("Japanese OpenJTalk dictionary missing; run setup.sh")
+        return JAG2P(version="pyopenjtalk")
+
+    def _voice(self, language: str) -> str:
+        if language == "English":
+            return self.config.english_voice
+        if language == "Chinese":
+            return self.config.chinese_voice
+        return {"Japanese": "jm_kumo", "French": "ff_siwis", "Spanish": "em_alex",
+                "Italian": "im_nicola", "Portuguese": "pm_alex", "Hindi": "hm_omega"}[language]
+
+    def _g2p(self, language: str) -> Any:
+        if language == "Chinese":
+            if self._zh_g2p is None:
+                self._zh_g2p = self._zh_g2p_factory()
+            return self._zh_g2p
+        if self._ja_g2p is None:
+            self._ja_g2p = self._ja_g2p_factory()
+        return self._ja_g2p
+
+    def validate_language(self, target_language: str) -> None:
+        """Prepare assets and validate voice/G2P, without producing audio.
+
+        Raises TTSConfigurationError for unavailable assets or phonemizers and
+        TTSSynthesisError for unsupported language. Shares the inference lock.
+        """
+        language = self._normalize_language(target_language)
+        try:
+            with self._inference_lock:
+                model = self._model(language)
+                voice = self._voice(language)
+                if voice not in model.get_voices():
+                    raise TTSConfigurationError(f"{language} voice unavailable: {voice}")
+                if language in {"Chinese", "Japanese"}:
+                    self._g2p(language)
+                else:
+                    model.tokenizer.phonemize("test", speech_policy(language).phonemizer_language)
+        except TTSConfigurationError:
+            raise
+        except Exception as exc:
+            raise TTSConfigurationError(f"{language} TTS unavailable: {exc}") from exc
 
     @staticmethod
     def _normalize_language(target_language: str) -> str:
@@ -184,25 +237,16 @@ class KokoroOnnxSynthesizer:
         try:
             with self._inference_lock:
                 model = self._model(language)
-                if language == "English":
-                    model_input = text
-                    voice = self.config.english_voice
-                    lang = speech_policy(language).phonemizer_language
-                    is_phonemes = False
-                else:
-                    if self._zh_g2p is None:
-                        self._zh_g2p = self._zh_g2p_factory()
-                    phoneme_result = self._zh_g2p(text)
-                    model_input = (
-                        phoneme_result[0]
-                        if isinstance(phoneme_result, tuple)
-                        else phoneme_result
-                    )
-                    if not isinstance(model_input, str) or not model_input:
-                        raise TTSSynthesisError("Chinese G2P returned invalid phonemes")
-                    voice = self.config.chinese_voice
-                    lang = speech_policy(language).phonemizer_language
-                    is_phonemes = True
+                voice = self._voice(language)
+                lang = speech_policy(language).phonemizer_language
+                is_phonemes = language in {"Chinese", "Japanese"}
+                model_input = text
+                if is_phonemes:
+                    g2p = self._g2p(language)
+                    phoneme_result = g2p(text)
+                    model_input = phoneme_result[0] if isinstance(phoneme_result, tuple) else phoneme_result
+                    if not isinstance(model_input, str) or not model_input.strip():
+                        raise TTSSynthesisError(f"{language} G2P returned invalid phonemes")
                 samples, sample_rate = model.create(
                     model_input,
                     voice=voice,
