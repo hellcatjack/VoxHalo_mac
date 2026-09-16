@@ -10,7 +10,7 @@
 
 目前，VoxHalo 在 **Apple Silicon Mac** 上独立运行，支持 **8 种语言、56 个互译方向**，将语音识别、翻译、译音朗读与同步字幕连接成一套完整系统。全语言覆盖是项目的长期目标；我们会在识别、翻译、朗读和本机运行表现经过验证后，逐步开放更多语言。
 
-**当前 App：1.8.0 · build 22** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
+**最新可下载安装包：1.8.0 · build 22** · **当前源码／本地 App：1.8.2 · build 24** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
 
 [下载 App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [图形安装指南](docs/zh-CN/QUICKSTART.md) · [模型说明](docs/zh-CN/MODELS.md) · [语言验证](docs/zh-CN/EIGHT-LANGUAGES.md) · [版本记录](CHANGELOG.md) · [反馈问题](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
@@ -19,6 +19,20 @@
 ![VoxHalo 同声传译 1.7.1 中文界面：音频设备、英中方向、字幕与局域网听众入口](docs/images/app-ui-zh-CN.jpg)
 
 原生 macOS 控制台，截图为中文界面的空闲状态。
+
+### 模型管理
+
+![VoxHalo 同声传译 1.8.2 中文模型管理：已校验的模型文件、保存大小、本机路径、下载来源与修复入口](docs/images/model-manager-zh-CN.jpg)
+
+在 App 内直接查看每个模型的文件名、已保存大小、状态、保存位置、下载来源与 SHA-256。示例中的 **18 个文件全部校验通过**，共占用 **4.88 GB**。误删文件后，停止服务即可重新下载所选文件，也可一次补齐／修复全部缺失或损坏的文件。下载支持进度显示、暂停与续传，详见[模型管理指南](docs/zh-CN/MODEL-MANAGEMENT.md)。
+
+### 字幕设置
+
+![VoxHalo 同声传译 1.8.2 中文字幕设置：字体、字号、颜色、阴影、显示器、位置、宽度与放映快捷键](docs/images/subtitle-settings-zh-CN.jpg)
+
+可调整字幕字体、字号、文字与阴影颜色、阴影强度、显示器、位置和宽度。向下滚动可自定义[放映快捷键](docs/zh-CN/SUBTITLE-SHORTCUTS.md)，控制字幕显示、隐藏和上下移动。字幕控制独立于实际朗读。
+
+以上两张设置截图来自本地 **1.8.2 · build 24** App。截图中的路径与样式是本次源码安装的示例，App 会显示用户实际的模型保存位置。**模型管理和放映快捷键已包含在当前源码／本地 App 中，已发布的 1.8.0 安装包尚未包含这些功能。**
 
 ## 全面本地部署，离线也能沟通
 

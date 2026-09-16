@@ -10,7 +10,7 @@ We want people to express themselves in the language they know and understand vo
 
 Today, VoxHalo runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**Current App: 1.8.0 · build 22** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**Latest downloadable release: 1.8.0 · build 22** · **Current source / local App: 1.8.2 · build 24** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
 
 [Download App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [Graphical installation](docs/en/QUICKSTART.md) · [Models](docs/en/MODELS.md) · [Language validation](docs/en/EIGHT-LANGUAGES.md) · [Changelog](CHANGELOG.en.md) · [Report an issue](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
@@ -19,6 +19,20 @@ Today, VoxHalo runs independently on **Apple Silicon Macs**, supporting **8 lang
 ![VoxHalo Simultaneous Interpretation 1.7.1 in English: audio devices, English-to-Chinese direction, subtitles and LAN listening](docs/images/app-ui-en.jpg)
 
 The native macOS console, shown idle with the English interface.
+
+### Model Manager
+
+![VoxHalo 1.8.2 Model Manager in English: verified model files, stored sizes, local paths, download sources and repair controls](docs/images/model-manager-en.jpg)
+
+Inspect each model's filename, saved size, status, storage location, download source and SHA-256 directly in the App. The example shows all **18 files verified**, occupying **4.88 GB**. If a file is accidentally deleted, stop services and download the selected file again, or repair all missing/damaged files. Downloads support progress reporting, pause and resume. See the [model management guide](docs/en/MODEL-MANAGEMENT.md).
+
+### Subtitle settings
+
+![VoxHalo 1.8.2 subtitle settings in English: font, size, colors, shadow, display, position, width and presentation shortcuts](docs/images/subtitle-settings-en.jpg)
+
+Adjust subtitle font, size, text and shadow colors, shadow strength, display, position and width. Scroll down to customize the [presentation shortcuts](docs/en/SUBTITLE-SHORTCUTS.md) for showing, hiding and moving subtitles. Subtitle controls operate independently of spoken output.
+
+These two settings screenshots were captured from the local **1.8.2 · build 24** App. The paths and styles shown are examples from this source installation; the App displays each user's actual model location. **Model Manager and presentation shortcuts are in the current source/local App and are not included in the published 1.8.0 installer.**
 
 ## Fully local deployment. Interpretation works offline.
 
