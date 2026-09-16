@@ -1,38 +1,40 @@
-# VoxHalo · Simultaneous Interpretation
+# LingoCove · Simultaneous Interpretation
 
 **English** | [简体中文](README.zh-CN.md)
 
 ### Language should never stand in the way of human connection.
 
-**VoxHalo is a fully local, free, open-source simultaneous interpretation system with a goal of connecting people across every language. Once installed, speech recognition, translation, spoken output and subtitles work on your Mac without an internet connection.**
+**LingoCove is a fully local, free, open-source simultaneous interpretation system with a goal of connecting people across every language. Once installed, speech recognition, translation, spoken output and subtitles work on your Mac without an internet connection.**
 
 We want people to express themselves in the language they know and understand voices from another language. In classrooms, meetings and everyday conversations, language should help people connect.
 
-Today, VoxHalo runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
+Today, LingoCove runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**Latest downloadable release: 1.8.0 · build 22** · **Current source / local App: 1.8.2 · build 24** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**App: 1.0.0 · build 25** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+
+The App is named **LingoCove** in Finder, the Dock and every interface language. Previously named VoxHalo / 同声传译, it keeps existing preferences and model files. For older installations, see [upgrading from the previous App](docs/en/INSTALLATION.md#9-update-or-rebuild).
 
 [Download App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [Graphical installation](docs/en/QUICKSTART.md) · [Models](docs/en/MODELS.md) · [Language validation](docs/en/EIGHT-LANGUAGES.md) · [Changelog](CHANGELOG.en.md) · [Report an issue](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
 ## The App
 
-![VoxHalo Simultaneous Interpretation 1.7.1 in English: audio devices, English-to-Chinese direction, subtitles and LAN listening](docs/images/app-ui-en.jpg)
+![LingoCove 1.0.0 in English: audio devices, translation direction, subtitles and LAN listening](docs/images/app-ui-en.jpg)
 
 The native macOS console, shown idle with the English interface.
 
 ### Model Manager
 
-![VoxHalo 1.8.2 Model Manager in English: verified model files, stored sizes, local paths, download sources and repair controls](docs/images/model-manager-en.jpg)
+![LingoCove 1.0.0 Model Manager in English: verified model files, stored sizes, local paths, download sources and repair controls](docs/images/model-manager-en.jpg)
 
 Inspect each model's filename, saved size, status, storage location, download source and SHA-256 directly in the App. The example shows all **18 files verified**, occupying **4.88 GB**. If a file is accidentally deleted, stop services and download the selected file again, or repair all missing/damaged files. Downloads support progress reporting, pause and resume. See the [model management guide](docs/en/MODEL-MANAGEMENT.md).
 
 ### Subtitle settings
 
-![VoxHalo 1.8.2 subtitle settings in English: font, size, colors, shadow, display, position, width and presentation shortcuts](docs/images/subtitle-settings-en.jpg)
+![LingoCove 1.0.0 subtitle settings in English: font, size, colors, shadow, display, position, width and presentation shortcuts](docs/images/subtitle-settings-en.jpg)
 
 Adjust subtitle font, size, text and shadow colors, shadow strength, display, position and width. Scroll down to customize the [presentation shortcuts](docs/en/SUBTITLE-SHORTCUTS.md) for showing, hiding and moving subtitles. Subtitle controls operate independently of spoken output.
 
-These two settings screenshots were captured from the local **1.8.2 · build 24** App. The paths and styles shown are examples from this source installation; the App displays each user's actual model location. **Model Manager and presentation shortcuts are in the current source/local App and are not included in the published 1.8.0 installer.**
+Screenshots show **LingoCove 1.0.0 · build 25**. The paths and styles are examples from a source installation; the App displays each user's actual model location. Model Manager and presentation shortcuts are included in the downloadable App.
 
 ## Fully local deployment. Interpretation works offline.
 
@@ -48,7 +50,7 @@ Audio capture, Qwen recognition, HY-MT translation, Kokoro speech and desktop su
 
 Missing local model files produce an error instead of a cloud inference fallback. Browser monitoring is optional; the native App independently runs interpretation.
 
-## Why VoxHalo exists
+## Why LingoCove exists
 
 - **Free to use.** Application source is public, with no software subscription or per-minute inference charge from the project. No paid cloud API is needed. You provide your own hardware; models and dependencies retain their respective licenses.
 - **Local first.** Recognition, translation and speech synthesis run on your Mac. Once models and dependencies are installed, inference can work offline.
@@ -78,7 +80,7 @@ Interface language is independent, follows system/browser preferences by default
 
 - **Follow videos, classes and online meetings.** Capture the audio playing on your Mac. Translation-only mode suppresses source playback during interpretation and sends translated speech to your headphones or speakers.
 - **Translate live speech.** Select the default input or a specific microphone/audio interface, then continuously recognize and translate incoming speech.
-- **Read while you listen.** Desktop subtitles follow actual local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock. The current source adds [global subtitle shortcuts for presentations](docs/en/SUBTITLE-SHORTCUTS.md).
+- **Read while you listen.** Desktop subtitles follow actual local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock. Use [global subtitle shortcuts for presentations](docs/en/SUBTITLE-SHORTCUTS.md).
 - **Invite listeners on the same network.** The App detects your LAN IP and provides an address and QR code. Phones and tablets can scan it to hear the shared translation stream.
 - **Run interpretation entirely from the App.** Native controls handle devices, direction, start and stop. The browser monitor displays text and status; closing it does not interrupt interpretation.
 
@@ -115,8 +117,8 @@ Earlier M-series Macs, 16 GB configurations and macOS 14/15 have not completed t
 
 ## Installation — no Terminal required
 
-1. Download **VoxHalo-1.8.0-macOS-arm64.dmg** from [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest). Choose the desktop asset, not “Source code”.
-2. Open the DMG and drag **同声传译.app** into **Applications**.
+1. Download **LingoCove-1.0.0-macOS-arm64.dmg** from [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest). Choose the desktop asset, not “Source code”.
+2. Open the DMG and drag **LingoCove.app** into **Applications**.
 3. Open the App, review the model licenses, and install the models in its first-run window. Progress, cancellation and retry are built in; completed verified downloads are reused.
 4. Choose your input, output and language direction, then click **Start interpreting**. Allow the required macOS audio permission when prompted.
 
@@ -193,7 +195,7 @@ Read [AGENTS.md](AGENTS.md) before development. After installation, run from the
 cd VoxBridge
 ../.venv/bin/python -m pytest -q
 cd ..
-./build-app.sh --destination "$PWD/dist/同声传译.app"
+./build-app.sh --destination "$PWD/dist/LingoCove.app"
 ```
 
 Maintain English and Chinese documentation together. Keep models, media, virtual environments, logs and credentials out of Git.
@@ -202,4 +204,4 @@ Maintain English and Chinese documentation together. Keep models, media, virtual
 
 Application source is licensed under [Apache-2.0](LICENSE). **The project's goal of free access does not change third-party model and dependency license conditions.** HY-MT uses the Tencent HY Community License, whose territory excludes the EU, UK and South Korea and which includes other use/distribution conditions. Before installing or deploying it, read the [complete license for the pinned model](https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt) and the [model license guide](docs/en/MODELS.md#licenses-and-attribution).
 
-VoxHalo is independently maintained by **hellcatjack**, with no Tencent affiliation, sponsorship or endorsement. Thanks to Qwen, Tencent Hunyuan, MLX, llama.cpp, Kokoro, ONNX Runtime, sherpa-onnx, Silero VAD and the other upstream projects that make local interpretation possible.
+LingoCove is independently maintained by **hellcatjack**, with no Tencent affiliation, sponsorship or endorsement. Thanks to Qwen, Tencent Hunyuan, MLX, llama.cpp, Kokoro, ONNX Runtime, sherpa-onnx, Silero VAD and the other upstream projects that make local interpretation possible.

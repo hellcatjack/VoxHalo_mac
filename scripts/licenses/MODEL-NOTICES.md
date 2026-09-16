@@ -1,8 +1,8 @@
 # Model and component notices / 模型与组件许可
 
-VoxHalo is independently maintained by hellcatjack. It is not affiliated with, sponsored by, or endorsed by Tencent or the other model authors. Free public availability of the application does not change third-party license terms.
+LingoCove is independently maintained by hellcatjack. It is not affiliated with, sponsored by, or endorsed by Tencent or the other model authors. Free public availability of the application does not change third-party license terms.
 
-VoxHalo 由 hellcatjack 独立维护，不隶属于腾讯或其他模型作者，也不代表其赞助或认可。应用公开免费不改变第三方许可证。
+LingoCove 由 hellcatjack 独立维护，不隶属于腾讯或其他模型作者，也不代表其赞助或认可。应用公开免费不改变第三方许可证。
 
 | Component / 组件 | Version and attribution / 版本与署名 | License text in this folder / 本目录许可全文 |
 |---|---|---|

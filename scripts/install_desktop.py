@@ -1,4 +1,4 @@
-"""Resumable, checksum-pinned installation for the standalone VoxHalo desktop App.
+"""Resumable, checksum-pinned installation for the standalone LingoCove desktop App.
 
 The native App records explicit model consent in license-consent.json before
 launching this script. stdout is exclusively JSON lines with --events-json;
@@ -481,7 +481,7 @@ class Installer:
                 publish(partial, destination)
                 return
             offset = 0  # Only our unpublished partial may be restarted.
-        headers = {'Accept-Encoding': 'identity', 'User-Agent': 'VoxHalo/1.8.0'}
+        headers = {'Accept-Encoding': 'identity', 'User-Agent': 'LingoCove/1.0.0'}
         if offset:
             headers['Range'] = f'bytes={offset}-'
         self.events.emit('downloading', 'Downloading a pinned model asset.', asset['path'], offset, asset['size'])

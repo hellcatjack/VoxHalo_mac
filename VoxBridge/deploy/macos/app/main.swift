@@ -182,7 +182,7 @@ private final class ConsoleDocumentView: NSView {
     private func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 680),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "同声传译"; window.isReleasedWhenClosed = false; window.delegate = self
+        window.title = "LingoCove"; window.isReleasedWhenClosed = false; window.delegate = self
         window.minSize = NSSize(width: 740, height: 560)
         window.backgroundColor = .windowBackgroundColor
         let content = vertical([], spacing: 12); content.translatesAutoresizingMaskIntoConstraints = false
@@ -209,7 +209,7 @@ private final class ConsoleDocumentView: NSView {
             control.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
             return column
         }
-        let title = NSTextField(labelWithString: "同声传译")
+        let title = NSTextField(labelWithString: "LingoCove")
         title.font = .systemFont(ofSize: 20, weight: .semibold)
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版"
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
@@ -365,7 +365,7 @@ private final class ConsoleDocumentView: NSView {
     private func refreshInterfaceText() {
         guard let content = window?.contentView else { return }
         displayedLocale = NativeLocalization.locale
-        window.title = NativeLocalization.text("同声传译")
+        window.title = NativeLocalization.text("LingoCove")
         localizedViews.capture(content, excluding: [stateLabel, modelLabel, sessionLabel, ttsLabel, sourceLabel, translationLabel, addressLabel, detailLabel, interfacePopup])
         if let menu = NSApp.mainMenu { localizedViews.capture(menu) }
         if let menu = statusItem.menu { localizedViews.capture(menu) }
@@ -398,7 +398,7 @@ private final class ConsoleDocumentView: NSView {
         }
         edit.submenu = editMenu; main.addItem(edit); NSApp.mainMenu = main
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "同声传译")
+        statusItem.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "LingoCove")
         let menu = NSMenu(); menu.autoenablesItems = false
         menu.addItem(item("显示控制面板", #selector(showWindow)))
         startMenu = item("启动服务", #selector(startService)); stopMenu = item("停止服务", #selector(stopService))
@@ -539,7 +539,7 @@ private final class ConsoleDocumentView: NSView {
         detailLabel.stringValue = error.map { String(NativeLocalization.render($0).prefix(300)) } ?? "关闭窗口后传译继续运行，可从菜单栏返回。“停止服务并退出”会结束采集并释放模型。"
         detailLabel.stringValue = NativeLocalization.render(detailLabel.stringValue)
         detailLabel.textColor = error == nil ? .secondaryLabelColor : .systemRed; detailLabel.toolTip = error.map { NativeLocalization.render($0) }
-        statusItem.button?.toolTip = NativeLocalization.text("同声传译") + " · " + (sessionBusy ? NativeLocalization.render(session.message) : stateLabel.stringValue)
+        statusItem.button?.toolTip = NativeLocalization.text("LingoCove") + " · " + (sessionBusy ? NativeLocalization.render(session.message) : stateLabel.stringValue)
     }
 
     private func updateQR(_ address: String?) {

@@ -13,7 +13,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title data-i18n="listener.title">VoxHalo · Live Interpretation</title>
+  <title data-i18n="listener.title">LingoCove · Live Interpretation</title>
   <style>
     :root {
       color-scheme: light;
@@ -226,7 +226,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
         </svg>
       </div>
       <div class="brand-copy">
-        <strong>VoxHalo</strong>
+        <strong>LingoCove</strong>
         <span data-i18n="listener.brand">Live interpretation</span>
       </div>
       <div class="live-tag" data-i18n="listener.tag">LISTENER</div>
@@ -982,7 +982,7 @@ TTS_LISTENER_HTML = r"""<!doctype html>
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: ui.t("listener.title"),
-          artist: "VoxHalo",
+          artist: "LingoCove",
           album: ui.t("listener.album"),
         });
       } catch (error) {}

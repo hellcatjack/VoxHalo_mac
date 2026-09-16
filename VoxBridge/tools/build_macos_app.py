@@ -13,10 +13,10 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / 'deploy/macos/app'
-APP_NAME = '同声传译.app'
+APP_NAME = 'LingoCove.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
-APP_VERSION = '1.8.0'
-APP_BUILD = '22'
+APP_VERSION = '1.0.0'
+APP_BUILD = '25'
 
 
 def release_metadata(directory: Path) -> dict:
@@ -83,8 +83,8 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
             localized = resources / f'{"zh-Hans" if locale == "zh" else locale}.lproj'
             localized.mkdir()
             strings = {
-                'CFBundleName': translations['同声传译'][locale],
-                'CFBundleDisplayName': translations['同声传译'][locale],
+                'CFBundleName': translations['LingoCove'][locale],
+                'CFBundleDisplayName': translations['LingoCove'][locale],
                 'NSMicrophoneUsageDescription': translations['采集所选麦克风的语音，在本机执行识别和翻译。'][locale],
                 'NSAudioCaptureUsageDescription': translations['采集系统播放声音，在本机执行识别和翻译，并排除本 App 的朗读。'][locale],
             }
@@ -98,8 +98,8 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
             (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
-            'CFBundleName': '同声传译',
-            'CFBundleDisplayName': '同声传译',
+            'CFBundleName': 'LingoCove',
+            'CFBundleDisplayName': 'LingoCove',
             'CFBundleExecutable': 'VoxBridgeConsole',
             'CFBundlePackageType': 'APPL',
             'CFBundleShortVersionString': APP_VERSION,
@@ -113,7 +113,7 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
             'NSPrincipalClass': 'NSApplication',
             'NSMicrophoneUsageDescription': '采集所选麦克风的语音，在本机执行识别和翻译。',
             'NSAudioCaptureUsageDescription': '采集系统播放声音，在本机执行识别和翻译，并排除本 App 的朗读。',
-            'NSHumanReadableCopyright': 'PCCS · Local interpretation',
+            'NSHumanReadableCopyright': 'hellcatjack · LingoCove',
         }
         (contents/'Info.plist').write_bytes(plistlib.dumps(info))
         (contents/'PkgInfo').write_bytes(b'APPL????')

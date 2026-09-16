@@ -2,9 +2,9 @@
 
 [简体中文](../zh-CN/SUBTITLE-SHORTCUTS.md)
 
-This feature is available in the current source tree. The previously published **1.8.0 installer does not include these shortcuts**. Build the App from the current source to use them.
+Included in **LingoCove 1.0.0** and later.
 
-While interpretation is running, control desktop subtitles directly from a full-screen PowerPoint presentation without switching back to VoxHalo. Recognition, translation, spoken output and web monitoring continue independently.
+While interpretation is running, control desktop subtitles directly from a full-screen PowerPoint presentation without switching back to LingoCove. Recognition, translation, spoken output and web monitoring continue independently.
 
 | Default shortcut | Action |
 |---|---|

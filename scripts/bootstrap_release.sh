@@ -24,6 +24,6 @@ fi
   --output "$RELEASE_ROOT/dist/release-payload" --uv "$RELEASE_TOOLS/uv" \
   --python-home "$RELEASE_PYTHON_HOME" --cache-dir "$UV_CACHE_DIR" "${RELEASE_VALIDATION_ARGS[@]}"
 "$RELEASE_PYTHON" "$RELEASE_ROOT/VoxBridge/tools/build_macos_app.py" \
-  --destination "$RELEASE_ROOT/dist/同声传译.app" --release-payload "$RELEASE_ROOT/dist/release-payload"
+  --destination "$RELEASE_ROOT/dist/LingoCove.app" --release-payload "$RELEASE_ROOT/dist/release-payload"
 "$RELEASE_PYTHON" "$RELEASE_ROOT/scripts/build_desktop_release.py" package \
-  --app "$RELEASE_ROOT/dist/同声传译.app" --output "$RELEASE_ROOT/dist/release"
+  --app "$RELEASE_ROOT/dist/LingoCove.app" --output "$RELEASE_ROOT/dist/release"

@@ -20,8 +20,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_VERSION = '3.12.14'
 UV_VERSION = '0.12.13'
-VERSION = '1.8.0'
-BUILD = '22'
+VERSION = '1.0.0'
+BUILD = '25'
 MINIMUM_MACOS = '14.2'
 SERVICE_FILES = (
     'VoxBridge/macos.sh', 'VoxBridge/LICENSE', 'VoxBridge/README.md',
@@ -395,7 +395,7 @@ def package_app(app: Path, output: Path) -> None:
         raise ValueError('App embeds a runtime payload with a different SHA256')
     run(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', app])
     output.mkdir(parents=True, exist_ok=True)
-    stem = f"VoxHalo-{metadata['version']}-macOS-arm64"
+    stem = f"LingoCove-{metadata['version']}-macOS-arm64"
     zip_path, dmg_path = output / f'{stem}.zip', output / f'{stem}.dmg'
     if zip_path.exists() or dmg_path.exists():
         raise ValueError('Release ZIP or DMG already exists; choose a fresh output directory')
@@ -404,7 +404,7 @@ def package_app(app: Path, output: Path) -> None:
         volume = Path(directory)
         shutil.copytree(app, volume / app.name, symlinks=True)
         (volume / 'Applications').symlink_to('/Applications')
-        run(['/usr/bin/hdiutil', 'create', '-volname', f"VoxHalo {metadata['version']}",
+        run(['/usr/bin/hdiutil', 'create', '-volname', f"LingoCove {metadata['version']}",
              '-srcfolder', volume, '-ov', '-format', 'UDZO', dmg_path])
     run(['/usr/bin/hdiutil', 'verify', dmg_path])
     (output / 'SHA256SUMS.txt').write_text(''.join(f'{digest(path)}  {path.name}\n' for path in (zip_path, dmg_path)))

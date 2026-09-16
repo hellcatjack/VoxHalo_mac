@@ -1,38 +1,40 @@
-# VoxHalo · 同声传译
+# LingoCove · 同声传译
 
 [English](README.md) | **简体中文**
 
 ### 人类不应该让语言限制互相的沟通。
 
-**VoxHalo 是一个全面本地部署、以免费和全语言互通为目标的开源同声传译系统。安装完成后，无需联网即可在本机完成语音识别、翻译、朗读与字幕显示。**
+**LingoCove 是一个全面本地部署、以免费和全语言互通为目标的开源同声传译系统。安装完成后，无需联网即可在本机完成语音识别、翻译、朗读与字幕显示。**
 
 我们希望每个人都能用熟悉的语言表达自己，也能听懂来自另一种语言的声音。从课堂、会议到日常交流，语言应该帮助人与人建立联系。
 
-目前，VoxHalo 在 **Apple Silicon Mac** 上独立运行，支持 **8 种语言、56 个互译方向**，将语音识别、翻译、译音朗读与同步字幕连接成一套完整系统。全语言覆盖是项目的长期目标；我们会在识别、翻译、朗读和本机运行表现经过验证后，逐步开放更多语言。
+目前，LingoCove 在 **Apple Silicon Mac** 上独立运行，支持 **8 种语言、56 个互译方向**，将语音识别、翻译、译音朗读与同步字幕连接成一套完整系统。全语言覆盖是项目的长期目标；我们会在识别、翻译、朗读和本机运行表现经过验证后，逐步开放更多语言。
 
-**最新可下载安装包：1.8.0 · build 22** · **当前源码／本地 App：1.8.2 · build 24** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
+**当前 App：1.0.0 · build 25** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
+
+当前 App 在 Finder、Dock 和所有界面语言中统一显示为 **LingoCove**，中文产品名称为 **LingoCove · 同声传译**。原 VoxHalo／同声传译的偏好设置和模型文件继续沿用。旧版升级方法见[源码安装指南](docs/zh-CN/INSTALLATION.md)。
 
 [下载 App](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) · [图形安装指南](docs/zh-CN/QUICKSTART.md) · [模型说明](docs/zh-CN/MODELS.md) · [语言验证](docs/zh-CN/EIGHT-LANGUAGES.md) · [版本记录](CHANGELOG.md) · [反馈问题](https://github.com/hellcatjack/VoxHalo_mac/issues)
 
 ## App 界面
 
-![VoxHalo 同声传译 1.7.1 中文界面：音频设备、英中方向、字幕与局域网听众入口](docs/images/app-ui-zh-CN.jpg)
+![LingoCove 1.0.0 中文界面：音频设备、翻译方向、字幕与局域网听众入口](docs/images/app-ui-zh-CN.jpg)
 
 原生 macOS 控制台，截图为中文界面的空闲状态。
 
 ### 模型管理
 
-![VoxHalo 同声传译 1.8.2 中文模型管理：已校验的模型文件、保存大小、本机路径、下载来源与修复入口](docs/images/model-manager-zh-CN.jpg)
+![LingoCove 1.0.0 中文模型管理：已校验的模型文件、保存大小、本机路径、下载来源与修复入口](docs/images/model-manager-zh-CN.jpg)
 
 在 App 内直接查看每个模型的文件名、已保存大小、状态、保存位置、下载来源与 SHA-256。示例中的 **18 个文件全部校验通过**，共占用 **4.88 GB**。误删文件后，停止服务即可重新下载所选文件，也可一次补齐／修复全部缺失或损坏的文件。下载支持进度显示、暂停与续传，详见[模型管理指南](docs/zh-CN/MODEL-MANAGEMENT.md)。
 
 ### 字幕设置
 
-![VoxHalo 同声传译 1.8.2 中文字幕设置：字体、字号、颜色、阴影、显示器、位置、宽度与放映快捷键](docs/images/subtitle-settings-zh-CN.jpg)
+![LingoCove 1.0.0 中文字幕设置：字体、字号、颜色、阴影、显示器、位置、宽度与放映快捷键](docs/images/subtitle-settings-zh-CN.jpg)
 
 可调整字幕字体、字号、文字与阴影颜色、阴影强度、显示器、位置和宽度。向下滚动可自定义[放映快捷键](docs/zh-CN/SUBTITLE-SHORTCUTS.md)，控制字幕显示、隐藏和上下移动。字幕控制独立于实际朗读。
 
-以上两张设置截图来自本地 **1.8.2 · build 24** App。截图中的路径与样式是本次源码安装的示例，App 会显示用户实际的模型保存位置。**模型管理和放映快捷键已包含在当前源码／本地 App 中，已发布的 1.8.0 安装包尚未包含这些功能。**
+截图来自 **LingoCove 1.0.0 · build 25**。路径与样式是源码安装的示例，App 会显示用户实际的模型保存位置。可下载的正式安装包已包含模型管理和放映快捷键。
 
 ## 全面本地部署，离线也能沟通
 
@@ -48,7 +50,7 @@
 
 安装后本地模型缺失会报错，不会自动转向云端推理。浏览器监控是可选项，原生 App 独立负责传译。
 
-## 为什么做 VoxHalo
+## 为什么做 LingoCove
 
 - **免费使用。** 项目公开应用源码，不收取软件订阅或按时长计费的推理费用，无需购买云端 API。用户使用自己的设备，模型与依赖遵循各自许可证。
 - **本机优先。** 语音识别、翻译和合成都在 Mac 上完成。模型与依赖安装完成后，推理可以离线运行。
@@ -78,7 +80,7 @@
 
 - **听懂视频、课程与线上会议。** 直接采集系统正在播放的声音；“只听译音”模式可在传译时抑制原声，并将译音送往耳机或扬声器。
 - **翻译现场讲话。** 选择系统默认输入或指定麦克风、声卡，启动后持续识别并翻译。
-- **边听边看字幕。** 桌面字幕跟随本机实际朗读。可调整字体、字号、颜色、阴影、显示器、位置与宽度，也能覆盖 Dock 区域。当前源码新增[放映时可用的字幕全局快捷键](docs/zh-CN/SUBTITLE-SHORTCUTS.md)。
+- **边听边看字幕。** 桌面字幕跟随本机实际朗读。可调整字体、字号、颜色、阴影、显示器、位置与宽度，也能覆盖 Dock 区域。可使用[放映时的字幕全局快捷键](docs/zh-CN/SUBTITLE-SHORTCUTS.md)。
 - **让同一网络中的听众加入。** App 自动使用局域网 IP 生成地址和二维码。手机或平板扫码后即可收听共享译音。
 - **在 App 中独立完成传译。** 选择设备、切换方向、开始和结束传译均由原生 App 完成；监控网页用于查看文本和状态，关闭网页不会中断业务。
 
@@ -115,8 +117,8 @@
 
 ## 安装：无需终端命令
 
-1. 从 [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) 下载 **VoxHalo-1.8.0-macOS-arm64.dmg**，请选择桌面安装包，而非“Source code”。
-2. 打开 DMG，把**同声传译.app** 拖入**应用程序**。
+1. 从 [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest) 下载 **LingoCove-1.0.0-macOS-arm64.dmg**，请选择桌面安装包，而非“Source code”。
+2. 打开 DMG，把 **LingoCove.app** 拖入**应用程序**。
 3. 打开 App，在首次安装窗口阅读模型许可并安装模型。支持进度显示、取消和重试，已完成且校验通过的下载会复用。
 4. 选择输入、输出及翻译方向，点击**开始传译**，并按提示授予所需音频权限。
 
@@ -192,7 +194,7 @@
 cd VoxBridge
 ../.venv/bin/python -m pytest -q
 cd ..
-./build-app.sh --destination "$PWD/dist/同声传译.app"
+./build-app.sh --destination "$PWD/dist/LingoCove.app"
 ```
 
 请同步维护中英文文档，不要提交模型、媒体、虚拟环境、日志或凭据。
@@ -201,4 +203,4 @@ cd ..
 
 应用源码采用 [Apache-2.0](LICENSE)。**免费使用的项目目标不改变第三方模型与依赖的许可条件。** HY-MT 使用 Tencent HY Community License，其适用地域不包含欧盟、英国和韩国，并有其他使用与分发条件；安装或部署前请阅读[所用版本的完整许可证](https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/blob/265b2e615a7dc9b06c435dc878829ad99a512ba2/License.txt)及[模型许可说明](docs/zh-CN/MODELS.md#许可证与署名)。
 
-VoxHalo 由 **hellcatjack** 独立维护，与腾讯不存在关联、赞助或背书关系。感谢 Qwen、腾讯混元、MLX、llama.cpp、Kokoro、ONNX Runtime、sherpa-onnx、Silero VAD 及其他上游项目，让本地同声传译成为可能。
+LingoCove 由 **hellcatjack** 独立维护，与腾讯不存在关联、赞助或背书关系。感谢 Qwen、腾讯混元、MLX、llama.cpp、Kokoro、ONNX Runtime、sherpa-onnx、Silero VAD 及其他上游项目，让本地同声传译成为可能。

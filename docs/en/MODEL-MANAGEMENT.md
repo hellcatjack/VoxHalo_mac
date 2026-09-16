@@ -2,7 +2,7 @@
 
 [简体中文](../zh-CN/MODEL-MANAGEMENT.md) · [README](../../README.md)
 
-This feature is available in the current source and local update. The existing 1.8.0 download does not include this window.
+Included in **LingoCove 1.0.0** and later.
 
 Choose **Model Manager** in the main App or menu bar. The first-run installer also offers **View model files**; until initial installation finishes, downloads remain controlled by the installer.
 
@@ -13,6 +13,7 @@ The window lists Qwen3-ASR 0.6B, HY-MT1.5 1.8B Q8_0, multilingual and Chinese Ko
 Each row shows its model, filename, stored bytes, expected size and status. Select a file to inspect its actual location, pinned download URL and SHA-256. You can reveal it in Finder or open its download source.
 
 - Release installations normally use `~/Library/Application Support/VoxHalo/assets/models/`.
+- LingoCove keeps this existing folder name for upgrade compatibility; renaming the App does not move or redownload models.
 - Source installations use `models/` in the current service project's parent directory. The window resolves the actual location; it does not migrate existing models.
 - Qwen weights keep their downloaded precision on disk; inference still uses the verified MLX INT8 setting. Chinese `kokoro-v1.1-zh-float-speed.onnx` is generated locally from the verified original model, and the restored result must match its established SHA-256.
 

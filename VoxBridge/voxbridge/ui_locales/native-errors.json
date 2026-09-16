@@ -591,15 +591,15 @@
       "pt": "O dispositivo de entrada selecionado foi desconectado. Reconecte-o ou selecione um dispositivo de entrada.",
       "hi": "चुना गया इनपुट डिवाइस डिस्कनेक्ट हो गया है। उसे फिर से कनेक्ट करें या इनपुट डिवाइस चुनें।"
     },
-    "请在系统设置 → 隐私与安全性 → 麦克风中允许“同声传译” 访问麦克风。": {
-      "zh": "请在系统设置 → 隐私与安全性 → 麦克风中允许“同声传译” 访问麦克风。",
-      "en": "Allow “Simultaneous Interpretation” to access the microphone in System Settings → Privacy & Security → Microphone.",
-      "ja": "「システム設定 → プライバシーとセキュリティ → マイク」で「同時通訳」のマイクへのアクセスを許可してください。",
-      "fr": "Autorisez « Interprétation simultanée » à accéder au microphone dans Réglages Système → Confidentialité et sécurité → Microphone.",
-      "es": "Permite que «Interpretación simultánea» acceda al micrófono en Ajustes del Sistema → Privacidad y seguridad → Micrófono.",
-      "it": "Consenti a “Interpretazione simultanea” di accedere al microfono in Impostazioni di Sistema → Privacy e Sicurezza → Microfono.",
-      "pt": "Permita que “Interpretação simultânea” acesse o microfone em Ajustes do Sistema → Privacidade e Segurança → Microfone.",
-      "hi": "सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → माइक्रोफ़ोन में “समकालिक अनुवाद” को माइक्रोफ़ोन इस्तेमाल करने की अनुमति दें।"
+    "请在系统设置 → 隐私与安全性 → 麦克风中允许“LingoCove” 访问麦克风。": {
+      "zh": "请在系统设置 → 隐私与安全性 → 麦克风中允许“LingoCove” 访问麦克风。",
+      "en": "Allow “LingoCove” to access the microphone in System Settings → Privacy & Security → Microphone.",
+      "ja": "「システム設定 → プライバシーとセキュリティ → マイク」で「LingoCove」のマイクへのアクセスを許可してください。",
+      "fr": "Autorisez « LingoCove » à accéder au microphone dans Réglages Système → Confidentialité et sécurité → Microphone.",
+      "es": "Permite que «LingoCove» acceda al micrófono en Ajustes del Sistema → Privacidad y seguridad → Micrófono.",
+      "it": "Consenti a “LingoCove” di accedere al microfono in Impostazioni di Sistema → Privacy e Sicurezza → Microfono.",
+      "pt": "Permita que “LingoCove” acesse o microfone em Ajustes do Sistema → Privacidade e Segurança → Microfone.",
+      "hi": "सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → माइक्रोफ़ोन में “LingoCove” को माइक्रोफ़ोन इस्तेमाल करने की अनुमति दें।"
     },
     "所选输入设备不可用，请连接该设备后重试。": {
       "zh": "所选输入设备不可用，请连接该设备后重试。",
@@ -651,15 +651,15 @@
       "pt": "O dispositivo de entrada selecionado não tem canais de áudio disponíveis.",
       "hi": "चुने गए इनपुट डिवाइस में कोई ऑडियो चैनल उपलब्ध नहीं है।"
     },
-    "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。\n{0}": {
-      "zh": "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。\n{0}",
-      "en": "Unable to capture system audio. Allow “Simultaneous Interpretation” in System Settings → Privacy & Security → Screen & System Audio Recording.\n{0}",
-      "ja": "システム音声を取り込めません。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「同時通訳」を許可してください。\n{0}",
-      "fr": "Impossible de capturer le son système. Autorisez « Interprétation simultanée » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.\n{0}",
-      "es": "No se puede capturar el audio del sistema. Permite «Interpretación simultánea» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.\n{0}",
-      "it": "Impossibile acquisire l’audio di sistema. Autorizza “Interpretazione simultanea” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.\n{0}",
-      "pt": "Não foi possível capturar o áudio do sistema. Permita “Interpretação simultânea” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.\n{0}",
-      "hi": "सिस्टम ऑडियो कैप्चर नहीं हो सका। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “समकालिक अनुवाद” को अनुमति दें।\n{0}"
+    "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“LingoCove”。\n{0}": {
+      "zh": "无法采集系统音频。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“LingoCove”。\n{0}",
+      "en": "Unable to capture system audio. Allow “LingoCove” in System Settings → Privacy & Security → Screen & System Audio Recording.\n{0}",
+      "ja": "システム音声を取り込めません。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「LingoCove」を許可してください。\n{0}",
+      "fr": "Impossible de capturer le son système. Autorisez « LingoCove » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.\n{0}",
+      "es": "No se puede capturar el audio del sistema. Permite «LingoCove» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.\n{0}",
+      "it": "Impossibile acquisire l’audio di sistema. Autorizza “LingoCove” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.\n{0}",
+      "pt": "Não foi possível capturar o áudio do sistema. Permita “LingoCove” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.\n{0}",
+      "hi": "सिस्टम ऑडियो कैप्चर नहीं हो सका। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “LingoCove” को अनुमति दें।\n{0}"
     },
     "未找到可用于系统音频采集的显示器。": {
       "zh": "未找到可用于系统音频采集的显示器。",
@@ -681,25 +681,25 @@
       "pt": "Não foi possível excluir o áudio de voz deste app. A captura foi cancelada para evitar eco.",
       "hi": "इस ऐप की आवाज़ का ऑडियो कैप्चर से बाहर नहीं रखा जा सका। गूँज रोकने के लिए कैप्चर रद्द कर दिया गया है।"
     },
-    "同声传译 · 只听译音": {
-      "zh": "同声传译 · 只听译音",
-      "en": "Simultaneous Interpretation · Translation audio only",
-      "ja": "同時通訳 · 通訳音声のみ",
-      "fr": "Interprétation simultanée · Voix traduite uniquement",
-      "es": "Interpretación simultánea · Solo voz traducida",
-      "it": "Interpretazione simultanea · Solo voce tradotta",
-      "pt": "Interpretação simultânea · Somente voz traduzida",
-      "hi": "समकालिक अनुवाद · केवल अनूदित आवाज़"
+    "LingoCove · 只听译音": {
+      "zh": "LingoCove · 只听译音",
+      "en": "LingoCove · Translation audio only",
+      "ja": "LingoCove · 通訳音声のみ",
+      "fr": "LingoCove · Voix traduite uniquement",
+      "es": "LingoCove · Solo voz traducida",
+      "it": "LingoCove · Solo voce tradotta",
+      "pt": "LingoCove · Somente voz traduzida",
+      "hi": "LingoCove · केवल अनूदित आवाज़"
     },
-    "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。": {
-      "zh": "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“同声传译”。",
-      "en": "System audio capture failed ({0}: {1}). Allow “Simultaneous Interpretation” in System Settings → Privacy & Security → Screen & System Audio Recording.",
-      "ja": "システム音声の取り込みに失敗しました（{0}：{1}）。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「同時通訳」を許可してください。",
-      "fr": "La capture du son système a échoué ({0} : {1}). Autorisez « Interprétation simultanée » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.",
-      "es": "Ha fallado la captura del audio del sistema ({0}: {1}). Permite «Interpretación simultánea» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.",
-      "it": "Acquisizione dell’audio di sistema non riuscita ({0}: {1}). Autorizza “Interpretazione simultanea” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.",
-      "pt": "A captura do áudio do sistema falhou ({0}: {1}). Permita “Interpretação simultânea” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.",
-      "hi": "सिस्टम ऑडियो कैप्चर विफल हुआ ({0}: {1})। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “समकालिक अनुवाद” को अनुमति दें।"
+    "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“LingoCove”。": {
+      "zh": "系统声音采集失败（{0}：{1}）。请在系统设置 → 隐私与安全性 → 屏幕与系统音频录制中允许“LingoCove”。",
+      "en": "System audio capture failed ({0}: {1}). Allow “LingoCove” in System Settings → Privacy & Security → Screen & System Audio Recording.",
+      "ja": "システム音声の取り込みに失敗しました（{0}：{1}）。「システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音」で「LingoCove」を許可してください。",
+      "fr": "La capture du son système a échoué ({0} : {1}). Autorisez « LingoCove » dans Réglages Système → Confidentialité et sécurité → Enregistrement de l’écran et de l’audio du système.",
+      "es": "Ha fallado la captura del audio del sistema ({0}: {1}). Permite «LingoCove» en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla y del audio del sistema.",
+      "it": "Acquisizione dell’audio di sistema non riuscita ({0}: {1}). Autorizza “LingoCove” in Impostazioni di Sistema → Privacy e Sicurezza → Registrazione schermo e audio di sistema.",
+      "pt": "A captura do áudio do sistema falhou ({0}: {1}). Permita “LingoCove” em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e Áudio do Sistema.",
+      "hi": "सिस्टम ऑडियो कैप्चर विफल हुआ ({0}: {1})। सिस्टम सेटिंग्ज़ → गोपनीयता और सुरक्षा → स्क्रीन और सिस्टम ऑडियो रिकॉर्डिंग में “LingoCove” को अनुमति दें।"
     },
     "“只听译音”需要 macOS 14.2 或更新版本。": {
       "zh": "“只听译音”需要 macOS 14.2 或更新版本。",

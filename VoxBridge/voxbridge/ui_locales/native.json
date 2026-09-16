@@ -1,15 +1,15 @@
 {
   "version": 1,
   "messages": {
-    "同声传译": {
-      "zh": "同声传译",
-      "en": "Simultaneous Interpretation",
-      "ja": "同時通訳",
-      "fr": "Interprétation simultanée",
-      "es": "Interpretación simultánea",
-      "it": "Interpretazione simultanea",
-      "pt": "Interpretação simultânea",
-      "hi": "समकालिक अनुवाद"
+    "LingoCove": {
+      "zh": "LingoCove",
+      "en": "LingoCove",
+      "ja": "LingoCove",
+      "fr": "LingoCove",
+      "es": "LingoCove",
+      "it": "LingoCove",
+      "pt": "LingoCove",
+      "hi": "LingoCove"
     },
     "界面语言": {
       "zh": "界面语言",

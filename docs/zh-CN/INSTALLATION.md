@@ -72,7 +72,7 @@ cd VoxHalo_mac
 4. 为 ONNX 图修复建立独立 `runtime/model-tools` 环境。
 5. 下载并核对 `scripts/runtime-assets.json` 中的 Qwen、HY-MT、Kokoro、VAD 和 llama.cpp。
 6. 单独生成中文浮点语速模型，核对预期校验值。
-7. 检查本地资源，编译并签名 **同声传译.app**，安装到 `~/Applications`。
+7. 检查本地资源，编译并签名 **LingoCove.app**，安装到 `~/Applications`。
 
 安装器还会安装 `pyopenjtalk==0.4.1` 和按校验值固定的 OpenJTalk 1.11 日语词典。这项原生依赖需要前面安装的命令行编译工具；开始日语朗读时不会临时联网下载词典。
 
@@ -85,7 +85,7 @@ cd VoxHalo_mac
 默认 `~/Applications` 为当前用户目录；如果账号有写入权限，也可指定系统“应用程序”目录：
 
 ```sh
-VOXHALO_APP_PATH="/Applications/同声传译.app" ./setup.sh
+LINGOCOVE_APP_PATH="/Applications/LingoCove.app" ./setup.sh
 ```
 
 复用另一份安装的模型时，将下面路径替换为实际工作区根目录：
@@ -120,7 +120,7 @@ VOXHALO_ASSET_CACHE="/absolute/path/to/existing/VoxHalo_mac" ./setup.sh
 ## 6. 打开 App 并授权音频访问
 
 ```sh
-open "$HOME/Applications/同声传译.app"
+open "$HOME/Applications/LingoCove.app"
 ```
 
 若安装时选择了 `/Applications`，请从相应路径打开。当前构建使用临时签名，不是 Developer ID 公证应用；macOS 阻止本机构建副本时，按系统打开提示或“隐私与安全性”选项操作，不要全局关闭 Gatekeeper。
@@ -184,12 +184,12 @@ git pull --ff-only
 构建到独立验收目录，避免覆盖已安装 App：
 
 ```sh
-./build-app.sh --destination "$PWD/dist/同声传译.app"
+./build-app.sh --destination "$PWD/dist/LingoCove.app"
 ```
 
 以前选择过自定义 App 位置时，重建时也应明确指定；shell 脚本不会自动记住这个选择。音频及字幕偏好设置则独立保存在 macOS UserDefaults 中。
 
-从旧中文名称升级时，先退出旧 App。新入口为 `同声传译.app`，确认新版正常后移除旧应用副本和桌面快捷方式，避免打开早期构建。应用标识保持一致，可沿用既有偏好设置。
+从 `同声传译.app` 升级时，先退出旧 App。新入口为 `LingoCove.app`，名称不随界面语言改变。确认新版正常后，将旧应用副本和桌面快捷方式移到废纸篓，避免打开早期构建。应用标识和偏好设置键保持一致；发行版继续使用 `~/Library/Application Support/VoxHalo/`，源码安装继续使用既有模型目录。本次改名无需重新下载模型或重置设置。原有 `VOXHALO_APP_PATH` 环境变量仍兼容；同时设置时，优先采用 `LINGOCOVE_APP_PATH`。
 
 ## 10. 更换目录、迁移与卸载
 

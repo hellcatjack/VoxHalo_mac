@@ -72,7 +72,7 @@ The script performs these steps:
 4. Creates the isolated `runtime/model-tools` environment for ONNX graph repair.
 5. Downloads and checks the assets in `scripts/runtime-assets.json`, including Qwen, HY-MT, Kokoro, VAD, and llama.cpp.
 6. Generates the separate Chinese floating-point-speed model and checks its expected hash.
-7. Checks local resources and compiles/codesigns **同声传译.app** into `~/Applications`.
+7. Checks local resources and compiles/codesigns **LingoCove.app** into `~/Applications`.
 
 Setup also installs `pyopenjtalk==0.4.1` and the checksum-pinned OpenJTalk 1.11 dictionary for Japanese. This native dependency uses the command-line build tools installed above. Japanese speech never downloads a dictionary during a session.
 
@@ -85,7 +85,7 @@ The installer needs access to GitHub release assets, Hugging Face model files, a
 The default `~/Applications` destination is user-owned. To use the system Applications folder instead, if your account can write there:
 
 ```sh
-VOXHALO_APP_PATH="/Applications/同声传译.app" ./setup.sh
+LINGOCOVE_APP_PATH="/Applications/LingoCove.app" ./setup.sh
 ```
 
 To reuse matching assets from an existing installation, substitute its actual root directory below:
@@ -120,7 +120,7 @@ Both `app.ready` and `translation.ready` should be `true`. This starts models bu
 ## 6. Open the App and allow audio access
 
 ```sh
-open "$HOME/Applications/同声传译.app"
+open "$HOME/Applications/LingoCove.app"
 ```
 
 If you selected `/Applications`, open the App at that path instead. Current builds use an ad-hoc signature, not Developer ID notarization. If macOS blocks a locally built copy, follow the system's app-opening prompt or its Privacy & Security controls; do not disable Gatekeeper globally.
@@ -184,12 +184,12 @@ Save or commit local changes before pulling; do not discard them with a forced r
 To build a review copy without replacing the installed App:
 
 ```sh
-./build-app.sh --destination "$PWD/dist/同声传译.app"
+./build-app.sh --destination "$PWD/dist/LingoCove.app"
 ```
 
 If you previously chose a custom App destination, specify it again when rebuilding; it is not automatically remembered by the shell script. App audio/subtitle preferences are stored separately in macOS UserDefaults.
 
-When upgrading from the former Chinese App name, quit the old App first. The new entry is `同声传译.app`. After verifying the new copy, remove the old App copy and desktop shortcut to avoid opening the earlier build. The bundle identifier remains unchanged, so existing preferences can be reused.
+When upgrading from `同声传译.app`, quit the old App first. The new entry is `LingoCove.app`; its name stays English regardless of interface language. After verifying the new copy, move the old App and desktop shortcut to Trash to avoid opening the earlier build. The bundle identifier and preference keys remain unchanged. Release models still use `~/Library/Application Support/VoxHalo/`; source installations keep their existing model directories. No model download or preference reset is needed for this name change. The previous `VOXHALO_APP_PATH` override remains supported; `LINGOCOVE_APP_PATH` takes precedence when both are set.
 
 ## 10. Relocate, migrate, or uninstall
 

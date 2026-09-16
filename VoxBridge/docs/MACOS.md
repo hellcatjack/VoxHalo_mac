@@ -4,11 +4,11 @@
 
 ## 首次安装
 
-在仓库根目录运行 `./setup.sh`。完整环境要求、逐步安装和卸载方式见[中文安装指南](../../docs/zh-CN/INSTALLATION.md)；另有 [English guide](../../docs/en/INSTALLATION.md)。脚本准备项目内 Python、固定版本模型和 llama.cpp，并将 App 安装到 `~/Applications/同声传译.app`。
+在仓库根目录运行 `./setup.sh`。完整环境要求、逐步安装和卸载方式见[中文安装指南](../../docs/zh-CN/INSTALLATION.md)；另有 [English guide](../../docs/en/INSTALLATION.md)。脚本准备项目内 Python、固定版本模型和 llama.cpp，并将 App 安装到 `~/Applications/LingoCove.app`。
 
 ## 启动与使用
 
-双击“应用程序”或桌面的 **同声传译.app**，直接在原生控制面板完成操作。无需打开浏览器。
+双击“应用程序”或桌面的 **LingoCove.app**，直接在原生控制面板完成操作。无需打开浏览器。
 
 1. 选择 **输入来源**：系统播放声音、系统播放声音 · 只听译音、系统默认输入，或具体麦克风/声卡。
 2. 选择 **朗读输出**：系统默认输出、具体扬声器/耳机，或“本机不播放 · 保留局域网朗读”。选择具体输出不会修改 macOS 的全局输出设置。
@@ -69,8 +69,8 @@ App 的源码位于 `deploy/macos/app/`，使用系统 Swift / AppKit，不依�
 ../.venv/bin/python tools/build_macos_app.py --desktop-link
 ```
 
-默认安装到 `/Applications/同声传译.app`，桌面放置一个指向它的入口；可以通过
-`--destination "$HOME/Applications/同声传译.app"` 改为用户级安装。
+默认安装到 `/Applications/LingoCove.app`，桌面放置一个指向它的入口；可以通过
+`--destination "$HOME/Applications/LingoCove.app"` 改为用户级安装。
 重建前先退出 App。安装器校验已有应用标识，不覆盖其他应用或桌面同名文件。
 本机构建使用临时签名，未做 Developer ID 签名或 Apple 公证；这不是用于任意 Mac 分发的安装包。
 

@@ -2385,7 +2385,7 @@ def test_listener_page_uses_one_native_hls_element_without_sentence_blob_queue()
 
 def test_listener_page_uses_neutral_multilingual_branding_and_fits_viewport():
     assert '<html lang="en">' in TTS_LISTENER_HTML
-    assert "VoxHalo" in TTS_LISTENER_HTML
+    assert "LingoCove" in TTS_LISTENER_HTML
     assert "LIVE INTERPRETATION" in TTS_LISTENER_HTML
     for brand in ("pccs", "pittsburgh", "church", "christian", "worship", "教会", "主日"):
         assert brand not in TTS_LISTENER_HTML.lower()

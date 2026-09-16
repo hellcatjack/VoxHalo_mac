@@ -8,7 +8,7 @@ The complete build is:
 ./scripts/bootstrap_release.sh
 ```
 
-This bootstraps checksum-pinned uv 0.12.13 and managed Python, creates a fresh runtime, compiles the App in `dist/`, and packages it. It does not replace `/Applications/同声传译.app`.
+This bootstraps checksum-pinned uv 0.12.13 and managed Python, creates a fresh runtime, compiles the App in `dist/`, and packages it. It does not replace `/Applications/LingoCove.app`.
 
 To use an existing verified builder runtime:
 
@@ -21,11 +21,11 @@ To use an existing verified builder runtime:
   --keep-workspace
 
 .venv/bin/python VoxBridge/tools/build_macos_app.py \
-  --destination dist/同声传译.app \
+  --destination dist/LingoCove.app \
   --release-payload dist/release-payload
 
 .venv/bin/python scripts/build_desktop_release.py package \
-  --app dist/同声传译.app \
+  --app dist/LingoCove.app \
   --output dist/release
 ```
 
@@ -49,14 +49,14 @@ Release metadata includes version/build, Python version, archive SHA256 and comp
 
 The package command checks the embedded runtime checksum, matching App version/build, and code signature before producing:
 
-- `VoxHalo-1.8.0-macOS-arm64.zip`
-- `VoxHalo-1.8.0-macOS-arm64.dmg`, with an Applications shortcut
+- `LingoCove-1.0.0-macOS-arm64.zip`
+- `LingoCove-1.0.0-macOS-arm64.dmg`, with an Applications shortcut
 - `SHA256SUMS.txt`
 
 The command refuses to overwrite existing ZIP/DMG files and verifies the completed disk image. Ad-hoc signing is not Developer ID signing or notarization. Publication still requires the full service tests, installer failure tests, graphical first-run checks, clean installed model checks, and the release review described in the release plan.
 
 ## GitHub publication
 
-The `Standalone Mac release` workflow builds on the standard Apple Silicon `macos-14` runner. Pushes to `release/**` build and test an artifact without publishing a Release. A `v1.8.*` tag additionally runs a separate publish job with repository-scoped `contents: write` permission. That job verifies `SHA256SUMS.txt` and uses the built-in `GITHUB_TOKEN` to create the GitHub Release; no maintainer token is embedded in the App or source.
+The `Standalone Mac release` workflow builds on the standard Apple Silicon `macos-14` runner. Pushes to `release/**` build and test an artifact without publishing a Release. A `lingocove-v1.0.*` tag additionally runs a separate publish job with repository-scoped `contents: write` permission. That job verifies `SHA256SUMS.txt`, creates a draft with the built-in `GITHUB_TOKEN`, downloads and verifies the uploaded assets, then publishes it as the latest Release. The `lingocove-` tag namespace preserves the original VoxHalo `v1.0.0` source tag. The 1.0.0 launch also removes the previous v1.8.0 Release after verification while retaining its source tag. No maintainer token is embedded in the App or source.
 
-Run `./scripts/bootstrap_release.sh` to reproduce the same build locally. The current workflow intentionally publishes an **ad-hoc signed, unnotarized** App. Do not label it notarized without a successful Developer ID signing and Apple notarization result. Publishing future versions also requires updating the fixed version/build, tag pattern and release notes path together.
+Run `./scripts/bootstrap_release.sh` to reproduce the same build locally. The current workflow intentionally publishes an **ad-hoc signed, unnotarized** App. Do not label it notarized without a successful Developer ID signing and Apple notarization result. Publishing future versions requires updating both version/build constants and adding `docs/releases/<version>.md`; expand the tag pattern when releasing beyond 1.0.x.

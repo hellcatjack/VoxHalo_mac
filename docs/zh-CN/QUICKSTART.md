@@ -1,8 +1,10 @@
-# 在 Mac 上安装同声传译
+# 在 Mac 上安装 LingoCove · 同声传译
+
+**LingoCove 1.0.0** 安装为 **LingoCove.app**，所有界面语言均使用这一名称。它接替原 VoxHalo／同声传译名称，并沿用原来的偏好设置和模型文件。
 
 [English](../en/QUICKSTART.md) | **简体中文** · [README](../../README.zh-CN.md)
 
-**1.8.0 桌面发行版**内置 App、Python 和主要 AI 运行环境。使用者无需终端命令、Xcode、Homebrew、Docker、单独安装 Python，也不需要云端 API 密钥。
+**1.0.0 桌面发行版**内置 App、Python 和主要 AI 运行环境。使用者无需终端命令、Xcode、Homebrew、Docker、单独安装 Python，也不需要云端 API 密钥。
 
 ## 下载前确认
 
@@ -15,13 +17,13 @@
 
 ## 1. 下载桌面版
 
-打开 [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest)，在 **Assets** 中下载 **VoxHalo-1.8.0-macOS-arm64.dmg**。
+打开 [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest)，在 **Assets** 中下载 **LingoCove-1.0.0-macOS-arm64.dmg**。
 
 建议选择 DMG。ZIP 是同一 App 的另一种压缩格式；GitHub 自动生成的 **Source code** 是开发者使用的源码，不是可以直接打开的安装包。
 
 ## 2. 放入“应用程序”
 
-双击 DMG，把 **同声传译.app** 拖到 **Applications（应用程序）** 快捷方式。推出磁盘映像，再从“应用程序”打开同声传译。名称会跟随系统语言显示，英文系统中显示为 **Simultaneous Interpretation**。
+双击 DMG，把 **LingoCove.app** 拖到 **Applications（应用程序）** 快捷方式。推出磁盘映像，再从“应用程序”打开 LingoCove。应用名称保持英文，不随界面语言改变。升级时先退出旧的同声传译.app；确认 LingoCove 正常后，把旧 App 和旧快捷方式移到废纸篓。
 
 如果当前账户不能写入系统“应用程序”目录，也可以把 App 放入用户主目录内的“应用程序”文件夹。之后保持 App 的位置稳定，便于 macOS 记住音频权限。
 
@@ -73,7 +75,7 @@ App 会依次：
 - **更新：**停止服务并退出，再用新发行版替换 App。模型独立保存，校验一致时可复用；各版本拥有独立运行环境。
 - **已有源码安装：**建议先保留，确认下载版可用后再自行整理。桌面发行版使用自己的运行目录，不依赖、移动或删除旧项目；界面语言和音频偏好仍保存在 macOS 偏好设置中。
 - **重试：**重新打开安装窗口即可。已校验完成的文件会保留；发现已有文件损坏时会报告并保留。点击明确的修复操作后，安装器会保留具名备份并下载通过校验的替代文件。
-- **卸载：**退出后把 App 移到废纸篓。如需同时删除模型和运行环境，再删除 VoxHalo 的“应用程序支持”目录。只删除 App 会保留模型，以便以后重装。
+- **卸载：**退出后把 App 移到废纸篓。如需同时删除模型和运行环境，再删除 `~/Library/Application Support/VoxHalo/`。只删除 App 会保留模型，以便以后重装。
 
 ## 常见问题
 

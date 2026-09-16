@@ -1,8 +1,10 @@
-# Install VoxHalo on your Mac
+# Install LingoCove on your Mac
+
+**LingoCove 1.0.0** installs as **LingoCove.app**, with the same name in every interface language. It replaces the former VoxHalo / 同声传译 name while preserving existing preferences and models.
 
 **English** | [简体中文](../zh-CN/QUICKSTART.md) · [README](../../README.md)
 
-The **1.8.0 desktop release** includes the App and its Python/AI runtime. You do not need Terminal, Xcode, Homebrew, Docker, a Python installation, or a cloud API key.
+The **1.0.0 desktop release** includes the App and its Python/AI runtime. You do not need Terminal, Xcode, Homebrew, Docker, a Python installation, or a cloud API key.
 
 ## Before you download
 
@@ -15,13 +17,13 @@ The **1.8.0 desktop release** includes the App and its Python/AI runtime. You do
 
 ## 1. Download the desktop App
 
-Open [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest). Under **Assets**, download **VoxHalo-1.8.0-macOS-arm64.dmg**.
+Open [GitHub Releases](https://github.com/hellcatjack/VoxHalo_mac/releases/latest). Under **Assets**, download **LingoCove-1.0.0-macOS-arm64.dmg**.
 
 Use the DMG for the easiest installation. The ZIP is an alternative copy of the same App. GitHub's automatically generated **Source code** files are for developers and do not contain an installable App.
 
 ## 2. Move the App to Applications
 
-Open the DMG, then drag **同声传译.app** to the **Applications** shortcut. Eject the disk image and open the App from Applications. Its displayed name follows your system language, for example **Simultaneous Interpretation** in English.
+Open the DMG, then drag **LingoCove.app** to the **Applications** shortcut. Eject the disk image and open LingoCove from Applications. Its name stays English regardless of interface language. When upgrading, quit the old 同声传译.app first; after verifying LingoCove, move the old App and shortcut to Trash.
 
 If your account cannot write to the system Applications folder, copy the App to the **Applications** folder inside your home folder instead. Keep it at a stable location so macOS can remember its audio permissions.
 
@@ -73,7 +75,7 @@ The release App stores runtime versions and models in **~/Library/Application Su
 - **Update:** stop services and quit, then replace the App with the new release. Models are stored separately and can be reused when their checksums match. Each release has a separate runtime directory.
 - **Existing source installation:** keep it until you have tested the downloaded App. The desktop release uses its own managed runtime; it does not depend on, move, or delete your previous project folder. App language/audio preferences remain in macOS preferences.
 - **Retry:** reopen the installation window. Completed verified model downloads are retained. A corrupted existing file is reported and preserved. Use the explicit repair action to keep a named backup and download a verified replacement.
-- **Uninstall:** quit the App, move it to Trash, and remove the VoxHalo Application Support folder if you also want to delete its models and runtime. Removing only the App preserves models for reinstalling.
+- **Uninstall:** quit the App, move it to Trash, and remove `~/Library/Application Support/VoxHalo/` if you also want to delete its models and runtime. Removing only the App preserves models for reinstalling.
 
 ## If something fails
 
