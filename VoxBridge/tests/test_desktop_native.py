@@ -32,6 +32,7 @@ def test_installer_translations_are_complete():
             assert sorted(re.findall(r'\{\d+\}', value)) == sorted(re.findall(r'\{\d+\}', source))
     known = set(catalog['messages'])
     known.update(json.loads((ROOT / 'voxbridge/ui_locales/native.json').read_text())['messages'])
+    known.update(json.loads((ROOT / 'voxbridge/ui_locales/model-manager.json').read_text())['messages'])
     for name in ('DesktopInstallation.swift', 'InstallationWindow.swift'):
         source = (ROOT / 'deploy/macos/app' / name).read_text()
         for literal in re.findall(r'"([^"\n]*[\u4e00-\u9fff][^"\n]*)"', source):

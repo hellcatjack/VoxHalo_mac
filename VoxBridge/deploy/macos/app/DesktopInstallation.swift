@@ -94,7 +94,7 @@ struct DesktopInstallEvent: Decodable {
 
 /// All filesystem work, hashing and child-process reads run on one background queue.
 /// The lock allows cancellation while a process is running or between archive chunks.
-private final class DesktopInstallWorker: @unchecked Sendable {
+final class DesktopInstallWorker: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
     private var process: Process?
@@ -114,7 +114,7 @@ private final class DesktopInstallWorker: @unchecked Sendable {
         lock.lock(); let value = cancelled; lock.unlock()
         if value { throw DesktopInstallError.cancelled }
     }
-    private func run(_ executable: URL, _ arguments: [String], directory: URL? = nil,
+    func run(_ executable: URL, _ arguments: [String], directory: URL? = nil,
                      emitLines: Bool = false) throws -> String {
         try checkCancellation()
         let child = Process(), pipe = Pipe()
@@ -124,6 +124,7 @@ private final class DesktopInstallWorker: @unchecked Sendable {
         var environment = ProcessInfo.processInfo.environment
         for key in ["PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"] { environment.removeValue(forKey: key) }
         environment["PYTHONNOUSERSITE"] = "1"; environment["PYTHONUNBUFFERED"] = "1"
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
         child.environment = environment
         lock.lock()

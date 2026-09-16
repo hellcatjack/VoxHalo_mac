@@ -14,7 +14,7 @@ LOCALES = {'zh', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'}
 
 
 def test_native_catalogs_have_complete_messages_and_matching_arguments():
-    for name in ('native', 'native-errors'):
+    for name in ('native', 'native-errors', 'model-manager'):
         catalog = json.loads((ROOT / 'voxbridge/ui_locales' / f'{name}.json').read_text())
         assert catalog['version'] == 1
         assert catalog['messages']

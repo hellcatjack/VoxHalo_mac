@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "messages": {
+    "模型管理": {
+      "zh": "模型管理",
+      "en": "Model Manager",
+      "ja": "モデル管理",
+      "fr": "Gestion des modèles",
+      "es": "Gestor de modelos",
+      "it": "Gestione modelli",
+      "pt": "Gerenciador de modelos",
+      "hi": "मॉडल प्रबंधन"
+    },
+    "本机模型与下载": {
+      "zh": "本机模型与下载",
+      "en": "Local models & downloads",
+      "ja": "ローカルモデルとダウンロード",
+      "fr": "Modèles locaux et téléchargements",
+      "es": "Modelos locales y descargas",
+      "it": "Modelli locali e download",
+      "pt": "Modelos locais e downloads",
+      "hi": "स्थानीय मॉडल और डाउनलोड"
+    },
+    "Kokoro 1.0 · 多语言": {
+      "zh": "Kokoro 1.0 · 多语言",
+      "en": "Kokoro 1.0 · Multilingual",
+      "ja": "Kokoro 1.0 · 多言語",
+      "fr": "Kokoro 1.0 · Multilingue",
+      "es": "Kokoro 1.0 · Multilingüe",
+      "it": "Kokoro 1.0 · Multilingue",
+      "pt": "Kokoro 1.0 · Multilíngue",
+      "hi": "Kokoro 1.0 · बहुभाषी"
+    },
+    "Kokoro 1.1 · 中文": {
+      "zh": "Kokoro 1.1 · 中文",
+      "en": "Kokoro 1.1 · Chinese",
+      "ja": "Kokoro 1.1 · 中国語",
+      "fr": "Kokoro 1.1 · Chinois",
+      "es": "Kokoro 1.1 · Chino",
+      "it": "Kokoro 1.1 · Cinese",
+      "pt": "Kokoro 1.1 · Chinês",
+      "hi": "Kokoro 1.1 · चीनी"
+    },
+    "Qwen3-ASR 0.6B（本机 INT8）· HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD": {
+      "zh": "Qwen3-ASR 0.6B（本机 INT8）· HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "en": "Qwen3-ASR 0.6B (local INT8) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "ja": "Qwen3-ASR 0.6B（ローカル INT8）· HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "fr": "Qwen3-ASR 0.6B (INT8 local) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "es": "Qwen3-ASR 0.6B (INT8 local) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "it": "Qwen3-ASR 0.6B (INT8 locale) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "pt": "Qwen3-ASR 0.6B (INT8 local) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD",
+      "hi": "Qwen3-ASR 0.6B (स्थानीय INT8) · HY-MT1.5 1.8B Q8_0 · Kokoro · Silero VAD"
+    },
+    "下载已暂停，已完成和部分下载的文件均已保留。": {
+      "zh": "下载已暂停，已完成和部分下载的文件均已保留。",
+      "en": "Download paused. Completed and partial files are retained.",
+      "ja": "ダウンロードを一時停止しました。完了済み・途中のファイルは保持されます。",
+      "fr": "Téléchargement en pause. Les fichiers complets et partiels sont conservés.",
+      "es": "Descarga pausada. Se conservan los archivos completos y parciales.",
+      "it": "Download in pausa. I file completi e parziali vengono conservati.",
+      "pt": "Download pausado. Os arquivos completos e parciais são mantidos.",
+      "hi": "डाउनलोड रुका हुआ है। पूरे और आंशिक डाउनलोड सुरक्षित हैं।"
+    },
+    "下载或修复未完成，请查看详情后重试。": {
+      "zh": "下载或修复未完成，请查看详情后重试。",
+      "en": "Download or repair did not finish. View details and retry.",
+      "ja": "ダウンロードまたは修復が完了しませんでした。詳細を確認して再試行してください。",
+      "fr": "Le téléchargement ou la réparation a échoué. Consultez les détails et réessayez.",
+      "es": "La descarga o reparación no se completó. Revise los detalles y reintente.",
+      "it": "Download o riparazione non completati. Controlla i dettagli e riprova.",
+      "pt": "O download ou reparo não foi concluído. Veja os detalhes e tente novamente.",
+      "hi": "डाउनलोड या सुधार पूरा नहीं हुआ। विवरण देखें और फिर प्रयास करें।"
+    },
+    "下载详情": {
+      "zh": "下载详情",
+      "en": "Download details",
+      "ja": "ダウンロードの詳細",
+      "fr": "Détails du téléchargement",
+      "es": "Detalles de descarga",
+      "it": "Dettagli download",
+      "pt": "Detalhes do download",
+      "hi": "डाउनलोड विवरण"
+    },
+    "下载／修复所选文件": {
+      "zh": "下载／修复所选文件",
+      "en": "Download / repair selected file",
+      "ja": "選択したファイルをダウンロード／修復",
+      "fr": "Télécharger / réparer la sélection",
+      "es": "Descargar / reparar selección",
+      "it": "Scarica / ripara selezione",
+      "pt": "Baixar / reparar seleção",
+      "hi": "चयनित फ़ाइल डाउनलोड / सुधारें"
+    },
+    "保存位置：{0}\n下载来源：{1}\nSHA-256：{2}": {
+      "zh": "保存位置：{0}\n下载来源：{1}\nSHA-256：{2}",
+      "en": "Location: {0}\nDownload source: {1}\nSHA-256: {2}",
+      "ja": "保存先：{0}\nダウンロード元：{1}\nSHA-256：{2}",
+      "fr": "Emplacement : {0}\nSource : {1}\nSHA-256 : {2}",
+      "es": "Ubicación: {0}\nFuente: {1}\nSHA-256: {2}",
+      "it": "Posizione: {0}\nOrigine: {1}\nSHA-256: {2}",
+      "pt": "Local: {0}\nOrigem: {1}\nSHA-256: {2}",
+      "hi": "स्थान: {0}\nडाउनलोड स्रोत: {1}\nSHA-256: {2}"
+    },
+    "刷新状态": {
+      "zh": "刷新状态",
+      "en": "Refresh status",
+      "ja": "状態を更新",
+      "fr": "Actualiser l’état",
+      "es": "Actualizar estado",
+      "it": "Aggiorna stato",
+      "pt": "Atualizar status",
+      "hi": "स्थिति ताज़ा करें"
+    },
+    "可随时查看文件；请先结束传译并停止服务，再下载或修复。": {
+      "zh": "可随时查看文件；请先结束传译并停止服务，再下载或修复。",
+      "en": "View files anytime. End interpretation and stop services before downloading or repairing.",
+      "ja": "ファイルはいつでも確認できます。ダウンロードや修復の前に通訳とサービスを停止してください。",
+      "fr": "Consultation possible à tout moment. Arrêtez l’interprétation et les services avant de télécharger ou réparer.",
+      "es": "Puede consultar los archivos en cualquier momento. Detenga la interpretación y los servicios antes de descargar o reparar.",
+      "it": "Puoi consultare i file in qualsiasi momento. Ferma interpretazione e servizi prima di scaricare o riparare.",
+      "pt": "Consulte os arquivos a qualquer momento. Encerre a interpretação e os serviços antes de baixar ou reparar.",
+      "hi": "फ़ाइलें कभी भी देख सकते हैं। डाउनलोड या सुधार से पहले अनुवाद और सेवाएँ रोकें।"
+    },
+    "在 Finder 中显示": {
+      "zh": "在 Finder 中显示",
+      "en": "Show in Finder",
+      "ja": "Finder で表示",
+      "fr": "Afficher dans le Finder",
+      "es": "Mostrar en Finder",
+      "it": "Mostra nel Finder",
+      "pt": "Mostrar no Finder",
+      "hi": "Finder में दिखाएँ"
+    },
+    "已保存 {0} / {1} · {2} 个文件 · {3} 个需处理": {
+      "zh": "已保存 {0} / {1} · {2} 个文件 · {3} 个需处理",
+      "en": "Stored {0} / {1} · {2} files · {3} need attention",
+      "ja": "保存済み {0} / {1} · {2} ファイル · 要確認 {3}",
+      "fr": "Stockés {0} / {1} · {2} fichiers · {3} à traiter",
+      "es": "Guardado {0} / {1} · {2} archivos · {3} por revisar",
+      "it": "Salvati {0} / {1} · {2} file · {3} da verificare",
+      "pt": "Salvos {0} / {1} · {2} arquivos · {3} a verificar",
+      "hi": "सुरक्षित {0} / {1} · {2} फ़ाइलें · {3} पर ध्यान दें"
+    },
+    "已保存，未校验": {
+      "zh": "已保存，未校验",
+      "en": "Saved, not verified",
+      "ja": "保存済み・未検証",
+      "fr": "Enregistré, non vérifié",
+      "es": "Guardado, sin verificar",
+      "it": "Salvato, non verificato",
+      "pt": "Salvo, não verificado",
+      "hi": "सुरक्षित, सत्यापित नहीं"
+    },
+    "已保存／大小": {
+      "zh": "已保存／大小",
+      "en": "Stored / size",
+      "ja": "保存済み／サイズ",
+      "fr": "Stocké / taille",
+      "es": "Guardado / tamaño",
+      "it": "Salvato / dimensione",
+      "pt": "Salvo / tamanho",
+      "hi": "सुरक्षित / आकार"
+    },
+    "已校验": {
+      "zh": "已校验",
+      "en": "Verified",
+      "ja": "検証済み",
+      "fr": "Vérifié",
+      "es": "Verificado",
+      "it": "Verificato",
+      "pt": "Verificado",
+      "hi": "सत्यापित"
+    },
+    "所选模型文件已校验并恢复。": {
+      "zh": "所选模型文件已校验并恢复。",
+      "en": "Selected model files have been verified and restored.",
+      "ja": "選択したモデルファイルを検証し、復元しました。",
+      "fr": "Les modèles sélectionnés ont été vérifiés et restaurés.",
+      "es": "Los modelos seleccionados se han verificado y restaurado.",
+      "it": "I modelli selezionati sono stati verificati e ripristinati.",
+      "pt": "Os modelos selecionados foram verificados e restaurados.",
+      "hi": "चयनित मॉडल फ़ाइलें सत्यापित और बहाल कर दी गई हैं।"
+    },
+    "打开下载来源": {
+      "zh": "打开下载来源",
+      "en": "Open download source",
+      "ja": "ダウンロード元を開く",
+      "fr": "Ouvrir la source",
+      "es": "Abrir fuente",
+      "it": "Apri origine",
+      "pt": "Abrir origem",
+      "hi": "डाउनलोड स्रोत खोलें"
+    },
+    "打开模型文件夹": {
+      "zh": "打开模型文件夹",
+      "en": "Open model folder",
+      "ja": "モデルフォルダを開く",
+      "fr": "Ouvrir le dossier des modèles",
+      "es": "Abrir carpeta de modelos",
+      "it": "Apri cartella modelli",
+      "pt": "Abrir pasta de modelos",
+      "hi": "मॉडल फ़ोल्डर खोलें"
+    },
+    "文件损坏，可修复": {
+      "zh": "文件损坏，可修复",
+      "en": "Damaged, repair available",
+      "ja": "破損・修復可能",
+      "fr": "Endommagé, réparable",
+      "es": "Dañado, reparable",
+      "it": "Danneggiato, riparabile",
+      "pt": "Danificado, reparável",
+      "hi": "क्षतिग्रस्त, सुधार उपलब्ध"
+    },
+    "文件状态": {
+      "zh": "文件状态",
+      "en": "File status",
+      "ja": "ファイルの状態",
+      "fr": "État du fichier",
+      "es": "Estado del archivo",
+      "it": "Stato del file",
+      "pt": "Status do arquivo",
+      "hi": "फ़ाइल स्थिति"
+    },
+    "文件缺失": {
+      "zh": "文件缺失",
+      "en": "Missing",
+      "ja": "ファイルなし",
+      "fr": "Manquant",
+      "es": "Falta el archivo",
+      "it": "Mancante",
+      "pt": "Ausente",
+      "hi": "फ़ाइल अनुपलब्ध"
+    },
+    "无法访问": {
+      "zh": "无法访问",
+      "en": "Cannot access",
+      "ja": "アクセス不可",
+      "fr": "Inaccessible",
+      "es": "Inaccesible",
+      "it": "Non accessibile",
+      "pt": "Inacessível",
+      "hi": "पहुँच नहीं है"
+    },
+    "暂停下载": {
+      "zh": "暂停下载",
+      "en": "Pause download",
+      "ja": "ダウンロードを一時停止",
+      "fr": "Suspendre",
+      "es": "Pausar descarga",
+      "it": "Pausa download",
+      "pt": "Pausar download",
+      "hi": "डाउनलोड रोकें"
+    },
+    "有效文件会保留；损坏文件先备份再修复。关闭此窗口不暂停下载。": {
+      "zh": "有效文件会保留；损坏文件先备份再修复。关闭此窗口不暂停下载。",
+      "en": "Valid files are kept; damaged files are backed up before repair. Closing this window keeps downloads running.",
+      "ja": "正常なファイルは保持し、破損ファイルはバックアップして修復します。このウィンドウを閉じてもダウンロードは続きます。",
+      "fr": "Les fichiers valides sont conservés ; les fichiers endommagés sont sauvegardés avant réparation. Fermer cette fenêtre ne suspend pas le téléchargement.",
+      "es": "Se conservan los archivos válidos; los dañados se respaldan antes de repararlos. Cerrar esta ventana no pausa la descarga.",
+      "it": "I file validi vengono conservati; quelli danneggiati vengono salvati prima della riparazione. Chiudere la finestra non sospende il download.",
+      "pt": "Arquivos válidos são mantidos; os danificados são copiados antes do reparo. Fechar esta janela não pausa o download.",
+      "hi": "सही फ़ाइलें सुरक्षित रहती हैं; क्षतिग्रस्त फ़ाइलों का सुधार से पहले बैकअप बनता है। विंडो बंद करने से डाउनलोड नहीं रुकता।"
+    },
+    "查看模型文件": {
+      "zh": "查看模型文件",
+      "en": "View model files",
+      "ja": "モデルファイルを表示",
+      "fr": "Voir les fichiers des modèles",
+      "es": "Ver archivos de modelos",
+      "it": "Visualizza file dei modelli",
+      "pt": "Ver arquivos de modelos",
+      "hi": "मॉडल फ़ाइलें देखें"
+    },
+    "校验完整性": {
+      "zh": "校验完整性",
+      "en": "Verify integrity",
+      "ja": "整合性を検証",
+      "fr": "Vérifier l’intégrité",
+      "es": "Verificar integridad",
+      "it": "Verifica integrità",
+      "pt": "Verificar integridade",
+      "hi": "अखंडता सत्यापित करें"
+    },
+    "模型下载进度": {
+      "zh": "模型下载进度",
+      "en": "Model download progress",
+      "ja": "モデルのダウンロード進捗",
+      "fr": "Progression du téléchargement",
+      "es": "Progreso de descarga",
+      "it": "Avanzamento download",
+      "pt": "Progresso do download",
+      "hi": "मॉडल डाउनलोड प्रगति"
+    },
+    "模型保存位置：{0}": {
+      "zh": "模型保存位置：{0}",
+      "en": "Model storage: {0}",
+      "ja": "モデルの保存先：{0}",
+      "fr": "Stockage des modèles : {0}",
+      "es": "Almacenamiento de modelos: {0}",
+      "it": "Archivio modelli: {0}",
+      "pt": "Armazenamento de modelos: {0}",
+      "hi": "मॉडल संग्रह स्थान: {0}"
+    },
+    "模型文件下载状态": {
+      "zh": "模型文件下载状态",
+      "en": "Model file download status",
+      "ja": "モデルファイルのダウンロード状態",
+      "fr": "État des fichiers des modèles",
+      "es": "Estado de descarga de modelos",
+      "it": "Stato download dei modelli",
+      "pt": "Status de download dos modelos",
+      "hi": "मॉडल फ़ाइल डाउनलोड स्थिति"
+    },
+    "模型文件保存在本机，下载完成后可离线使用。": {
+      "zh": "模型文件保存在本机，下载完成后可离线使用。",
+      "en": "Models are stored on this Mac and work offline after downloading.",
+      "ja": "モデルはこの Mac に保存され、ダウンロード後はオフラインで使用できます。",
+      "fr": "Les modèles sont stockés sur ce Mac et fonctionnent hors ligne après téléchargement.",
+      "es": "Los modelos se guardan en este Mac y funcionan sin conexión tras descargarlos.",
+      "it": "I modelli sono salvati su questo Mac e funzionano offline dopo il download.",
+      "pt": "Os modelos ficam neste Mac e funcionam offline após o download.",
+      "hi": "मॉडल इस Mac पर सुरक्षित रहते हैं और डाउनलोड के बाद ऑफ़लाइन काम करते हैं।"
+    },
+    "模型／文件": {
+      "zh": "模型／文件",
+      "en": "Model / file",
+      "ja": "モデル／ファイル",
+      "fr": "Modèle / fichier",
+      "es": "Modelo / archivo",
+      "it": "Modello / file",
+      "pt": "Modelo / arquivo",
+      "hi": "मॉडल / फ़ाइल"
+    },
+    "正在下载…": {
+      "zh": "正在下载…",
+      "en": "Downloading…",
+      "ja": "ダウンロード中…",
+      "fr": "Téléchargement…",
+      "es": "Descargando…",
+      "it": "Download in corso…",
+      "pt": "Baixando…",
+      "hi": "डाउनलोड हो रहा है…"
+    },
+    "正在下载或修复模型…": {
+      "zh": "正在下载或修复模型…",
+      "en": "Downloading or repairing models…",
+      "ja": "モデルをダウンロードまたは修復中…",
+      "fr": "Téléchargement ou réparation…",
+      "es": "Descargando o reparando modelos…",
+      "it": "Download o riparazione in corso…",
+      "pt": "Baixando ou reparando modelos…",
+      "hi": "मॉडल डाउनलोड या सुधार जारी है…"
+    },
+    "正在暂停下载…": {
+      "zh": "正在暂停下载…",
+      "en": "Pausing download…",
+      "ja": "ダウンロードを一時停止中…",
+      "fr": "Suspension du téléchargement…",
+      "es": "Pausando descarga…",
+      "it": "Sospensione del download…",
+      "pt": "Pausando download…",
+      "hi": "डाउनलोड रोका जा रहा है…"
+    },
+    "正在本机生成…": {
+      "zh": "正在本机生成…",
+      "en": "Generating locally…",
+      "ja": "本機で生成中…",
+      "fr": "Génération locale…",
+      "es": "Generando localmente…",
+      "it": "Generazione locale…",
+      "pt": "Gerando localmente…",
+      "hi": "स्थानीय रूप से बनाया जा रहा है…"
+    },
+    "正在校验…": {
+      "zh": "正在校验…",
+      "en": "Verifying…",
+      "ja": "検証中…",
+      "fr": "Vérification…",
+      "es": "Verificando…",
+      "it": "Verifica…",
+      "pt": "Verificando…",
+      "hi": "सत्यापन जारी है…"
+    },
+    "正在校验模型文件…": {
+      "zh": "正在校验模型文件…",
+      "en": "Verifying model files…",
+      "ja": "モデルファイルを検証中…",
+      "fr": "Vérification des modèles…",
+      "es": "Verificando modelos…",
+      "it": "Verifica dei modelli…",
+      "pt": "Verificando modelos…",
+      "hi": "मॉडल फ़ाइलें सत्यापित की जा रही हैं…"
+    },
+    "由已校验的中文原始模型在本机生成": {
+      "zh": "由已校验的中文原始模型在本机生成",
+      "en": "Generated locally from the verified original Chinese model",
+      "ja": "検証済みの中国語原始モデルから本機で生成",
+      "fr": "Généré localement à partir du modèle chinois original vérifié",
+      "es": "Generado localmente a partir del modelo chino original verificado",
+      "it": "Generato localmente dal modello cinese originale verificato",
+      "pt": "Gerado localmente a partir do modelo chinês original verificado",
+      "hi": "सत्यापित मूल चीनी मॉडल से स्थानीय रूप से बनाया गया"
+    },
+    "补齐／修复全部模型": {
+      "zh": "补齐／修复全部模型",
+      "en": "Download / repair all models",
+      "ja": "全モデルをダウンロード／修復",
+      "fr": "Télécharger / réparer tout",
+      "es": "Descargar / reparar todo",
+      "it": "Scarica / ripara tutti",
+      "pt": "Baixar / reparar todos",
+      "hi": "सभी मॉडल डाउनलोड / सुधारें"
+    },
+    "请先结束传译并停止服务，再下载或修复模型。": {
+      "zh": "请先结束传译并停止服务，再下载或修复模型。",
+      "en": "End interpretation and stop services before downloading or repairing models.",
+      "ja": "モデルのダウンロードや修復の前に通訳とサービスを停止してください。",
+      "fr": "Arrêtez l’interprétation et les services avant de télécharger ou réparer les modèles.",
+      "es": "Detenga la interpretación y los servicios antes de descargar o reparar modelos.",
+      "it": "Ferma interpretazione e servizi prima di scaricare o riparare i modelli.",
+      "pt": "Encerre a interpretação e os serviços antes de baixar ou reparar modelos.",
+      "hi": "मॉडल डाउनलोड या सुधारने से पहले अनुवाद और सेवाएँ रोकें।"
+    },
+    "选择文件查看保存位置、下载来源与校验值。": {
+      "zh": "选择文件查看保存位置、下载来源与校验值。",
+      "en": "Select a file to view its location, download source and checksum.",
+      "ja": "ファイルを選択すると保存先、ダウンロード元、チェックサムを確認できます。",
+      "fr": "Sélectionnez un fichier pour voir son emplacement, sa source et sa somme de contrôle.",
+      "es": "Seleccione un archivo para ver su ubicación, fuente y suma de verificación.",
+      "it": "Seleziona un file per vedere posizione, origine e checksum.",
+      "pt": "Selecione um arquivo para ver local, origem e checksum.",
+      "hi": "स्थान, डाउनलोड स्रोत और चेकसम देखने के लिए फ़ाइल चुनें।"
+    },
+    "部分下载，可继续": {
+      "zh": "部分下载，可继续",
+      "en": "Partial, can resume",
+      "ja": "途中まで取得・再開可能",
+      "fr": "Partiel, reprise possible",
+      "es": "Parcial, reanudable",
+      "it": "Parziale, riprendibile",
+      "pt": "Parcial, pode continuar",
+      "hi": "आंशिक, जारी रख सकते हैं"
+    },
+    "首次安装正在进行，文件状态会自动更新。": {
+      "zh": "首次安装正在进行，文件状态会自动更新。",
+      "en": "First installation is in progress. File status updates automatically.",
+      "ja": "初回インストール中です。ファイルの状態は自動更新されます。",
+      "fr": "L’installation initiale est en cours. L’état des fichiers se met à jour automatiquement.",
+      "es": "La instalación inicial está en curso. El estado de los archivos se actualiza automáticamente.",
+      "it": "Prima installazione in corso. Lo stato dei file si aggiorna automaticamente.",
+      "pt": "A primeira instalação está em andamento. O status dos arquivos é atualizado automaticamente.",
+      "hi": "पहली स्थापना जारी है। फ़ाइल की स्थिति अपने आप अपडेट होती है।"
+    },
+    "请先在安装窗口完成首次模型安装。": {
+      "zh": "请先在安装窗口完成首次模型安装。",
+      "en": "Complete the first model installation in the installer window.",
+      "ja": "インストール画面で初回モデルインストールを完了してください。",
+      "fr": "Terminez l’installation initiale des modèles dans la fenêtre d’installation.",
+      "es": "Complete la primera instalación de modelos en la ventana de instalación.",
+      "it": "Completa la prima installazione dei modelli nella finestra di installazione.",
+      "pt": "Conclua a primeira instalação dos modelos na janela de instalação.",
+      "hi": "पहले इंस्टॉलर विंडो में मॉडल की प्रारंभिक स्थापना पूरी करें।"
+    }
+  }
+}

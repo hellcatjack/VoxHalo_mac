@@ -2,7 +2,11 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
-## Unreleased · Presentation subtitle shortcuts
+## Unreleased · Subtitle shortcuts and model management
+
+- Add an eight-language model manager with actual storage locations, 18 model/supporting files, sizes, pinned download sources, checksums, missing/partial/damaged states and download progress.
+- Restore selected files or all models, pause/resume downloads, preserve damaged-file backups, and regenerate the verified Chinese speed-control model. Inspection remains available during interpretation; writes exclude service startup and installation.
+- See [model management](docs/en/MODEL-MANAGEMENT.md). The existing 1.8.0 download does not include this window.
 
 - Control subtitles during interpretation with Control + Shift + Command and S, ↑, ↓, 9 or 0: show/hide, tap/hold movement, and top/bottom placement without taking presentation focus.
 - Add eight-language shortcut settings with enable/disable, final-key customization, reset, conflict warnings and keyboard-layout-aware labels. Release global keys when interpretation stops.

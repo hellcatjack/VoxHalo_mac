@@ -163,6 +163,7 @@
 |---|---|
 | [安装与故障排查](docs/zh-CN/INSTALLATION.md) | 安装、权限、维护、更新、迁移与卸载 |
 | [模型与许可证](docs/zh-CN/MODELS.md) | 大模型、量化、声音、提示词与第三方许可 |
+| [模型文件管理](docs/zh-CN/MODEL-MANAGEMENT.md) | 当前源码／本地更新版：保存位置、下载状态与误删恢复 |
 | [界面语言](docs/zh-CN/INTERFACE-LANGUAGES.md) | 八语言界面与自动／手动选择 |
 | [八语言验证](docs/zh-CN/EIGHT-LANGUAGES.md) | 已验证的能力、测试范围与限制 |
 | [朗读与字幕一致性](docs/zh-CN/SPEECH-CONSISTENCY.md) | 已提交语音、字幕同步和后续校订 |

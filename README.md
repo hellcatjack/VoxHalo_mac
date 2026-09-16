@@ -164,6 +164,7 @@ LAN features make monitoring text and translated audio available to devices that
 | [Desktop installation](docs/en/QUICKSTART.md) | Download, graphical model setup, permissions, updates and removal |
 | [Source installation](docs/en/INSTALLATION.md) | Developer setup, verification and maintenance |
 | [Models and licenses](docs/en/MODELS.md) | Models, quantization, voices, prompts and third-party licenses |
+| [Model file management](docs/en/MODEL-MANAGEMENT.md) | Current source/local update: storage, download status and recovery after deletion |
 | [Interface languages](docs/en/INTERFACE-LANGUAGES.md) | Eight-language interfaces and automatic/manual selection |
 | [Eight-language validation](docs/en/EIGHT-LANGUAGES.md) | Tested capabilities, scope and limitations |
 | [Speech and caption consistency](docs/en/SPEECH-CONSISTENCY.md) | Committed speech, synchronized captions and later corrections |

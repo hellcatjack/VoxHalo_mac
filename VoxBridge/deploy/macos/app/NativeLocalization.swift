@@ -30,7 +30,7 @@ enum NativeLocalization {
             .appendingPathComponent("voxbridge/ui_locales")
         let directory = Bundle.main.resourceURL?.appendingPathComponent("ui_locales")
         var result: [String: [String: String]] = [:]
-        for name in ["native", "native-errors", "installer"] {
+        for name in ["native", "native-errors", "installer", "model-manager"] {
             let bundled = directory?.appendingPathComponent(name + ".json")
             let url = bundled.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
                 ?? source.appendingPathComponent(name + ".json")

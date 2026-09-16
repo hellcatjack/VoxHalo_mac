@@ -20,6 +20,7 @@ import AppKit
     var onLanguageChange: (() -> Void)?
     var onWillStart: ((@escaping (Bool) -> Void) -> Void)?
     var onClosed: (() -> Void)?
+    var onManageModels: (() -> Void)?
     private var validationID: UUID?
     private var startError: String?
 
@@ -120,7 +121,7 @@ import AppKit
         logScroll.documentView = logView; logScroll.hasVerticalScroller = true
         logScroll.borderType = .bezelBorder; logScroll.heightAnchor.constraint(equalToConstant: 130).isActive = true
         append(logScroll); logScroll.isHidden = true
-        append(row([button("显示本机数据", #selector(revealData)), button("打开安装日志", #selector(openLog))]))
+        append(row([button("查看模型文件", #selector(showModels)), button("显示本机数据", #selector(revealData)), button("打开安装日志", #selector(openLog))]))
         localizedViews.capture(content, excluding: [language, sizeLabel, status, progressText, install, cancel, detailsButton, logView])
     }
     func show() {
@@ -197,6 +198,7 @@ import AppKit
     }
     @objc private func openLicenses() { NSWorkspace.shared.open(installation.resources.appendingPathComponent("licenses", isDirectory: true)) }
     @objc private func revealData() { NSWorkspace.shared.activateFileViewerSelecting([installation.dataHome]) }
+    @objc private func showModels() { onManageModels?() }
     @objc private func openLog() {
         if !installation.isRunning && FileManager.default.fileExists(atPath: installation.logURL.path) { NSWorkspace.shared.open(installation.logURL) }
         else { logScroll.isHidden = false; render(); fitWindow() }

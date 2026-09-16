@@ -63,7 +63,8 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
                            'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift',
                            'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleShortcuts.swift', 'SubtitleHotKeys.swift',
                            'SubtitleOverlay.swift', 'SubtitleShortcutSettings.swift', 'SubtitleSettings.swift', 'NativeSession.swift',
-                           'DesktopInstallation.swift', 'InstallationWindow.swift', 'main.swift')],
+                           'DesktopInstallation.swift', 'InstallationWindow.swift', 'ModelInventory.swift',
+                           'ModelManager.swift', 'ModelManagerWindow.swift', 'main.swift')],
                         '-o', str(executable_dir/'VoxBridgeConsole')], check=True)
         iconset = staging/'AppIcon.iconset'
         icon_builder = staging/'make-icon'
@@ -72,8 +73,11 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
         subprocess.run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o', str(resources/'AppIcon.icns')], check=True)
         shutil.copy2(ROOT/'voxbridge/language_catalog.json', resources/'language_catalog.json')
         (resources/'ui_locales').mkdir()
-        for catalog in ('native.json', 'native-errors.json', 'installer.json'):
+        for catalog in ('native.json', 'native-errors.json', 'installer.json', 'model-manager.json'):
             shutil.copy2(ROOT/'voxbridge/ui_locales'/catalog, resources/'ui_locales'/catalog)
+        (resources/'model-tools').mkdir()
+        for name in ('model_manager.py', 'install_desktop.py', 'runtime-assets.json'):
+            shutil.copy2(ROOT.parent/'scripts'/name, resources/'model-tools'/name)
         translations = json.loads((resources/'ui_locales/native.json').read_text())['messages']
         for locale in ('zh', 'en', 'ja', 'fr', 'es', 'it', 'pt', 'hi'):
             localized = resources / f'{"zh-Hans" if locale == "zh" else locale}.lproj'

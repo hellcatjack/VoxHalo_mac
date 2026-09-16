@@ -28,6 +28,8 @@ private final class ConsoleDocumentView: NSView {
     private var timer: Timer?
     private var desktopInstallation: DesktopInstallation?
     private var installationWindow: InstallationWindow?
+    private var modelManager: ModelManager?
+    private var modelManagerWindow: ModelManagerWindow?
     private var maintenanceWindowShown = false
     private var desktopReady: Bool { desktopInstallation?.isReady ?? true }
     private let stateLabel = NSTextField(labelWithString: "正在检查服务…")
@@ -71,6 +73,7 @@ private final class ConsoleDocumentView: NSView {
             installationWindow = InstallationWindow(installation: installation)
             installationWindow?.onLanguageChange = { [weak self] in self?.refreshInstallationMenu() }
             installationWindow?.onWillStart = { [weak self] completion in self?.validateModelMaintenance(completion) }
+            installationWindow?.onManageModels = { [weak self] in self?.manageModels() }
             installationWindow?.onClosed = { [weak self] in
                 guard let self else { return }
                 if !installation.isRunning { self.maintenanceWindowShown = false; self.render() }
@@ -333,8 +336,9 @@ private final class ConsoleDocumentView: NSView {
         detailLabel.textColor = .secondaryLabelColor
         folderButton = desktopInstallation == nil
             ? iconButton("选择服务文件夹…", symbol: "folder", action: #selector(chooseFolder))
-            : iconButton("检查或修复模型", symbol: "shippingbox", action: #selector(manageModels))
+            : iconButton("检查或修复模型", symbol: "shippingbox", action: #selector(manageInstallation))
         let utilities = row([button("字幕设置…", #selector(showSubtitleSettings)),
+                             button("模型管理", #selector(manageModels)),
                              iconButton("查看日志", symbol: "doc.text.magnifyingglass", action: #selector(openLogs)), folderButton], spacing: 7)
         utilities.setContentHuggingPriority(.required, for: .horizontal)
         let footer = row([detailLabel, NSView(), utilities], spacing: 16); footer.alignment = .centerY
@@ -370,6 +374,7 @@ private final class ConsoleDocumentView: NSView {
         interfacePopup.setAccessibilityLabel(NativeLocalization.text("界面语言"))
         subtitleSettings.refreshLocalization()
         subtitleOverlay.refreshLocalization()
+        modelManagerWindow?.refreshLocalization()
     }
 
     private func separator(in content: NSStackView) {
@@ -385,6 +390,7 @@ private final class ConsoleDocumentView: NSView {
         let main = NSMenu(), root = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(item("显示控制面板", #selector(showWindow)))
         appMenu.addItem(item("字幕设置…", #selector(showSubtitleSettings))); appMenu.addItem(.separator())
+        appMenu.addItem(item("模型管理", #selector(manageModels)))
         appMenu.addItem(item("停止服务并退出", #selector(quit), key: "q")); root.submenu = appMenu; main.addItem(root)
         let edit = NSMenuItem(title: "编辑", action: nil, keyEquivalent: ""), editMenu = NSMenu(title: "编辑")
         for (title, action, key) in [("剪切", #selector(NSText.cut(_:)), "x"), ("复制", #selector(NSText.copy(_:)), "c"), ("粘贴", #selector(NSText.paste(_:)), "v"), ("全选", #selector(NSText.selectAll(_:)), "a")] {
@@ -400,6 +406,7 @@ private final class ConsoleDocumentView: NSView {
         menu.addItem(startMenu); menu.addItem(captureMenu); menu.addItem(stopMenu)
         subtitleMenu = item("显示翻译字幕", #selector(toggleSubtitles))
         menu.addItem(subtitleMenu); menu.addItem(item("字幕设置…", #selector(showSubtitleSettings)))
+        menu.addItem(item("模型管理", #selector(manageModels)))
         menu.addItem(item("打开监控页", #selector(openOperator))); menu.addItem(.separator())
         menu.addItem(item("停止服务并退出", #selector(quit))); statusItem.menu = menu
     }
@@ -486,10 +493,11 @@ private final class ConsoleDocumentView: NSView {
     }
 
     private func render() {
+        syncModelManager()
         guard startButton != nil else { return }
         if displayedLocale != NativeLocalization.locale { refreshInterfaceText() }
         let installed = desktopReady && client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
-        let busy = maintenanceWindowShown || !desktopReady || operation != nil || snapshot?.busy == true || choosingFolder
+        let busy = maintenanceWindowShown || modelManager?.isRepairing == true || !desktopReady || operation != nil || snapshot?.busy == true || choosingFolder
         let sessionBusy = session.isActive
         subtitleHotKeys.setActive(!quitRequested && (session.phase == .running || session.phase == .stopping))
         subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, active: !quitRequested && (session.phase == .running || session.phase == .stopping))
@@ -577,6 +585,7 @@ private final class ConsoleDocumentView: NSView {
     @objc private func startService() { begin(capture: false) }
     @objc private func startInterpretation() { begin(capture: true) }
     private func begin(capture: Bool) {
+        guard modelManager?.isRepairing != true else { modelManagerWindow?.show(); return }
         guard desktopReady && !maintenanceWindowShown else { installationWindow?.show(); return }
         guard startTask == nil, stopTask == nil, operation == nil, !session.isActive, !choosingFolder, let client else { return }
         let selected: NativePreferences
@@ -639,6 +648,7 @@ private final class ConsoleDocumentView: NSView {
 
     @objc private func chooseFolder() {
         guard desktopInstallation == nil else { return }
+        guard modelManager?.isRepairing != true else { return }
         guard operation == nil, !choosingFolder, snapshot?.hasProcess != true, !session.isActive,
               snapshot != nil || client?.isInstalled != true else { return }
         choosingFolder = true; let originalClient = client; render()
@@ -665,14 +675,62 @@ private final class ConsoleDocumentView: NSView {
         }
     }
 
-    @objc private func manageModels() {
+    @objc private func manageInstallation() {
         guard let installation = desktopInstallation, !session.isActive, operation == nil,
-              snapshot != nil, snapshot?.hasProcess != true, !choosingFolder, !installation.isRunning else { return }
+              snapshot != nil, snapshot?.hasProcess != true, !choosingFolder, !installation.isRunning,
+              modelManager?.isRepairing != true else { return }
         maintenanceWindowShown = true; render(); installationWindow?.show()
     }
 
+    @objc private func manageModels() {
+        guard let resources = Bundle.main.resourceURL else { return }
+        let root: URL?
+        if let installation = desktopInstallation, let metadata = installation.metadata {
+            root = installation.dataHome.appendingPathComponent("versions/\(metadata.version)")
+        } else { root = client?.root.deletingLastPathComponent() }
+        guard let root else { showWindow(); return }
+        do {
+            if modelManager?.inventory.workspace != root.standardizedFileURL {
+                modelManagerWindow?.close()
+                let manager = try ModelManager(workspace: root, resources: resources)
+                manager.onActivityChange = { [weak self] in self?.render() }
+                manager.onWillRepair = { [weak self] completion in self?.validateModelDownload(completion) }
+                modelManager = manager; modelManagerWindow = ModelManagerWindow(manager: manager)
+                modelManagerWindow?.onRefreshContext = { [weak self] in self?.syncModelManager() }
+            }
+            syncModelManager(); modelManagerWindow?.show()
+        } catch { lastError = error.localizedDescription; render() }
+    }
+
+    private func syncModelManager() {
+        guard let manager = modelManager else { return }
+        manager.repairAvailable = desktopReady && snapshot != nil && snapshot?.hasProcess != true && snapshot?.busy != true &&
+            !session.isActive && operation == nil && startTask == nil && stopTask == nil && !choosingFolder && !maintenanceWindowShown
+        manager.externalBusy = desktopInstallation?.isRunning == true
+        manager.initialInstallationRequired = !desktopReady
+        manager.externalEvent = desktopInstallation?.event
+        modelManagerWindow?.render()
+    }
+
+    private func validateModelDownload(_ completion: @escaping (Bool) -> Void) {
+        guard desktopReady, !session.isActive, operation == nil, startTask == nil, stopTask == nil,
+              !choosingFolder, !maintenanceWindowShown, let client else { completion(false); return }
+        client.snapshot { [weak self, weak client] result in
+            guard let self, let client, self.client === client else { completion(false); return }
+            switch result {
+            case .success(let value):
+                self.snapshot = value
+                completion(!value.hasProcess && !value.busy && !self.session.isActive && self.operation == nil &&
+                           self.startTask == nil && self.stopTask == nil && !self.choosingFolder && !self.maintenanceWindowShown)
+            case .failure: completion(false)
+            }
+            self.render()
+        }
+    }
+
     private func validateModelMaintenance(_ completion: @escaping (Bool) -> Void) {
-        guard !session.isActive, operation == nil, startTask == nil, stopTask == nil, !choosingFolder else { completion(false); return }
+        guard !session.isActive, operation == nil, startTask == nil, stopTask == nil, !choosingFolder,
+              modelManager?.isRepairing != true else { completion(false); return }
         // First-run mode has never loaded a ServiceClient or started a backend.
         guard window != nil else { completion(true); return }
         guard maintenanceWindowShown, let client else { completion(false); return }
@@ -691,6 +749,12 @@ private final class ConsoleDocumentView: NSView {
 
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let manager = modelManager, manager.isRepairing {
+            quitRequested = true; lastError = nil
+            manager.onSettled = { [weak self] in self?.stop(allServices: true) }
+            manager.cancel()
+            return .terminateLater
+        }
         if let installation = desktopInstallation, !installation.isReady {
             guard installation.isRunning else { return .terminateNow }
             quitRequested = true
