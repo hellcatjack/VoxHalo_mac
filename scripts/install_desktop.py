@@ -26,7 +26,7 @@ import urllib.parse
 import uuid
 import zipfile
 
-VERSION = '1.8.0'
+VERSION = '1.0.0'
 MANIFEST = Path(__file__).with_name('runtime-assets.json')
 WHEEL_MANIFEST = Path(__file__).with_name('desktop-wheels.json')
 CHUNK = 256 * 1024
@@ -481,7 +481,7 @@ class Installer:
                 publish(partial, destination)
                 return
             offset = 0  # Only our unpublished partial may be restarted.
-        headers = {'Accept-Encoding': 'identity', 'User-Agent': 'LingoCove/1.0.0'}
+        headers = {'Accept-Encoding': 'identity', 'User-Agent': f'LingoCove/{VERSION}'}
         if offset:
             headers['Range'] = f'bytes={offset}-'
         self.events.emit('downloading', 'Downloading a pinned model asset.', asset['path'], offset, asset['size'])

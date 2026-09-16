@@ -11,6 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from tools.build_macos_app import APP_VERSION
+
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts/install_desktop.py'
 
 @pytest.fixture
@@ -74,7 +76,7 @@ def make_install(tmp_path, installer, server, monkeypatch):
     manifest.write_text(json.dumps({'assets': [{'path': 'models/tiny/model.bin',
         'url': url, 'size': len(state['payload']),
         'sha256': hashlib.sha256(state['payload']).hexdigest()}]}))
-    (root / 'license-consent.json').write_text(json.dumps({'version': '1.8.0',
+    (root / 'license-consent.json').write_text(json.dumps({'version': APP_VERSION,
         'manifest_sha256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
         'accepted': True, 'territory_eligible': True}))
     monkeypatch.setattr(installer, 'prepare_runtime', lambda *args: None)
@@ -93,7 +95,7 @@ def test_ready_is_atomic_after_verified_assets_and_health(tmp_path, installer, s
     monkeypatch.setattr(installer, 'check_runtime', health)
     instance.run()
     marker = json.loads((root / 'installed.json').read_text())
-    assert marker['version'] == '1.8.0'
+    assert marker['version'] == APP_VERSION
     assert marker['manifest_sha256'] == hashlib.sha256(instance.manifest_path.read_bytes()).hexdigest()
     assert (root / 'models').resolve() == assets / 'models'
     assert not list(assets.rglob('*.part'))
