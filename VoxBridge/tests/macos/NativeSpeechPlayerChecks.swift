@@ -24,7 +24,14 @@ import AVFoundation
         do { _ = try cursor.accept(packet(3,order:1,pcm:Data([1]))); assertionFailure("odd PCM accepted") } catch {}
         assert(cursor.receivedSequence == 2)
         let player = NativeSpeechPlayer()
-        try player.start(outputUID:"default",epoch:"epoch-a",cursor:0)
+        var playbackFailure: String?
+        player.onFailure = { playbackFailure = $0 }
+        let startupOutput = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "default"
+        try player.start(outputUID:startupOutput,epoch:"epoch-a",cursor:0)
+        // An explicit device can have a different sample rate from the system
+        // default; HAL completes that route change after start() returns.
+        try await Task.sleep(nanoseconds:250_000_000)
+        assert(playbackFailure == nil, "initial output-device negotiation must not fail interpretation: \(playbackFailure ?? "")")
         let silence = Data(repeating:0,count:96000)
         try player.accept(packet(1,pcm:silence))
         let before=player.bufferedMilliseconds

@@ -80,6 +80,22 @@ enum NativeSpeechSchedule {
     }
 }
 
+enum NativeSpeechStartupRecovery {
+    static func recover(deviceAvailable: Bool, isRunning: Bool, hasScheduledAudio: Bool,
+                        attempts: inout Int, restart: () throws -> Void) throws {
+        guard deviceAvailable else { throw ServiceError.message("所选朗读输出设备不可用。") }
+        guard !isRunning else { return }
+        // HAL may stop the engine while negotiating an explicitly selected
+        // device's format. Restart only before any PCM has ever been scheduled:
+        // rebuilding a live queue could otherwise discard or repeat speech.
+        guard !hasScheduledAudio, attempts < 2 else {
+            throw ServiceError.message("朗读输出设备配置已变化，请重新开始传译。")
+        }
+        attempts += 1
+        try restart()
+    }
+}
+
 @MainActor final class NativeSpeechPlayer {
     private var engine: AVAudioEngine?
     private var node: AVAudioPlayerNode?
@@ -88,6 +104,8 @@ enum NativeSpeechSchedule {
     private var scheduledEnd: AVAudioFramePosition = 0
     private var completed = Set<Int>()
     private var configurationObserver: NSObjectProtocol?
+    private var outputDeviceID: UInt32?
+    private var startupRecoveryAttempts = 0
     private struct Scheduled {
         let seq: Int
         let start: AVAudioFramePosition
@@ -141,16 +159,40 @@ enum NativeSpeechSchedule {
         audio.connect(player, to: audio.mainMixerNode, format: AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1))
         try audio.start()
         engine = audio; node = player
+        outputDeviceID = Self.currentOutputDevice(audio)
         let run = generation
         configurationObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: audio, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.generation == run else { return }
-                self.onFailure?("朗读输出设备配置已变化，请重新开始传译。")
+                do { try self.recoverInitialOutputConfiguration() }
+                catch { self.onFailure?(error.localizedDescription) }
             }
         }
     }
 
+    private static func currentOutputDevice(_ audio: AVAudioEngine) -> UInt32? {
+        guard let unit = audio.outputNode.audioUnit else { return nil }
+        var id: UInt32 = 0
+        var size = UInt32(MemoryLayout.size(ofValue: id))
+        guard AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice,
+                                   kAudioUnitScope_Global, 0, &id, &size) == noErr else { return nil }
+        return id
+    }
+
+    private func recoverInitialOutputConfiguration() throws {
+        guard let audio = engine, let selected = outputDeviceID else {
+            throw ServiceError.message("所选朗读输出设备不可用。")
+        }
+        let available = try AudioDevices.outputs().contains { $0.id == selected }
+        try NativeSpeechStartupRecovery.recover(
+            deviceAvailable: available && Self.currentOutputDevice(audio) == selected,
+            isRunning: audio.isRunning, hasScheduledAudio: !scheduledChunks.isEmpty,
+            attempts: &startupRecoveryAttempts) { try audio.start() }
+    }
+
     func accept(_ snapshot: NativeSpeechSnapshot) throws {
+        // A poll may arrive before the queued configuration notification.
+        if let engine, !engine.isRunning { try recoverInitialOutputConfiguration() }
         guard let node, let engine, engine.isRunning, var candidate = cursor else {
             throw ServiceError.message("本机朗读播放器尚未就绪。")
         }
@@ -210,6 +252,7 @@ enum NativeSpeechSchedule {
         if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
         configurationObserver = nil
         node?.stop(); engine?.stop(); node = nil; engine = nil; cursor = nil
+        outputDeviceID = nil; startupRecoveryAttempts = 0
         scheduledEnd = 0; playedSequence = 0; pending.removeAll(); completed.removeAll(); scheduledChunks.removeAll()
     }
 }
