@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.skipif(sys.platform != 'darwin' or not shutil.which('xcrun'), reason='requires macOS Swift')
-@pytest.mark.parametrize('check', ['SubtitleShortcutChecks', 'SubtitleHotKeyChecks', 'SubtitleShortcutOverlayChecks', 'SubtitleOverlayChecks'])
+@pytest.mark.parametrize('check', ['SubtitleShortcutChecks', 'SubtitleHotKeyChecks', 'SubtitleShortcutOverlayChecks', 'SubtitleOverlayChecks', 'SubtitleBackgroundChecks'])
 def test_subtitle_shortcut_behavior(check, tmp_path):
     source = ROOT / 'deploy/macos/app'
     names = ['NativeLocalization', 'SubtitlePreferences', 'SubtitleShortcuts']
@@ -19,7 +19,7 @@ def test_subtitle_shortcut_behavior(check, tmp_path):
     if check == 'SubtitleShortcutOverlayChecks':
         names += ['SubtitleState', 'SubtitleOverlay', 'ServiceClient', 'NativePreferences',
                   'AudioDevices', 'NativeSpeechPlayer']
-    if check == 'SubtitleOverlayChecks':
+    if check in ('SubtitleOverlayChecks', 'SubtitleBackgroundChecks'):
         names += ['SubtitleState', 'SubtitleOverlay']
     executable = tmp_path / check
     built = subprocess.run(['xcrun', 'swiftc', '-swift-version', '5', '-framework', 'AppKit',

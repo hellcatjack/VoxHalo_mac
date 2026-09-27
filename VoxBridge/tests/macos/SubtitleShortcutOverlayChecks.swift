@@ -30,6 +30,7 @@ import AVFoundation
         assert(overlay.textView.accessibilityValue() as? String == "Next currently spoken sentence.", "show must use the current playback caption")
         assert(overlay.panel.frame.minY == NSScreen.screens[0].frame.minY)
         for index in 0..<30 {
+            overlay.apply(preferences: overlay.adjustedPreferences(for: .background))
             overlay.apply(preferences: overlay.adjustedPreferences(for: index % 2 == 0 ? .up : .down))
             if index % 5 == 0 { overlay.apply(preferences: overlay.adjustedPreferences(for: .toggle)) }
             try await Task.sleep(nanoseconds: 20_000_000)

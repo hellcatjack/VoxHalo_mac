@@ -9,6 +9,7 @@ While interpretation is running, control desktop subtitles directly from a full-
 | Default shortcut | Action |
 |---|---|
 | Control + Shift + Command + S | Show / hide subtitles |
+| Control + Shift + Command + B | Show / hide the rectangular subtitle background |
 | Control + Shift + Command + ↑ | Move subtitles up |
 | Control + Shift + Command + ↓ | Move subtitles down |
 | Control + Shift + Command + 9 | Place subtitles at the top of the selected display |
@@ -17,6 +18,8 @@ While interpretation is running, control desktop subtitles directly from a full-
 Each arrow press moves **8 screen points**. Hold for about 0.3 seconds to move continuously; releasing stops movement. Subtitles stay within the display and their position is saved automatically. Top/bottom actions preserve horizontal position and the selected subtitle display.
 
 Hidden subtitles continue to follow current speech. Showing them restores the current caption without replaying old sentences. When local playback is off, long translations retain their page clock while hidden or moved. If there is no current translation, showing subtitles does not create preview text or start interpretation.
+
+In **Subtitle Settings…**, select **Enable rectangular background** to place a filled rectangle behind the current caption. It is off by default and shares **Shadow and background color** and **Shadow and background opacity** with the text shadow. The background also works when the shadow is disabled. Its width and height follow the actual text bounds with a small inset around the text. Each rendered line, including automatic wraps, has its own fitted rectangle with transparent space between lines. Empty lines and missing captions have no background. The subtitle width setting still controls wrapping, not the background width. Toggling it preserves the text, page clock and spoken output. Settings save automatically. If an older custom binding already uses B, the new action receives an unused key; check the settings page.
 
 ## Customize shortcuts
 

@@ -2,7 +2,7 @@ import Foundation
 import Carbon
 
 enum SubtitleShortcutAction: String, CaseIterable {
-    case toggle, up, down, top, bottom
+    case toggle, up, down, top, bottom, background
     var id: UInt32 { UInt32(Self.allCases.firstIndex(of: self)! + 1) }
     var repeats: Bool { self == .up || self == .down }
     var title: String {
@@ -12,6 +12,7 @@ enum SubtitleShortcutAction: String, CaseIterable {
         case .down: return "字幕向下移动"
         case .top: return "字幕移至顶部"
         case .bottom: return "字幕移至底部"
+        case .background: return "显示／隐藏字幕背景"
         }
     }
 }
@@ -29,7 +30,7 @@ struct SubtitleShortcutPreferences: Codable, Equatable {
     ]
     // Omit T (Finder: add to Dock), 3/4/5 (screenshots), and punctuation
     // including = (PowerPoint superscript). Escape/Space/Return/Fn aren't choices.
-    static let defaultKeys: [String: UInt32] = ["toggle": 1, "up": 126, "down": 125, "top": 25, "bottom": 29]
+    static let defaultKeys: [String: UInt32] = ["toggle": 1, "up": 126, "down": 125, "top": 25, "bottom": 29, "background": 11]
     var enabled = true
     private(set) var keys = defaultKeys
 
@@ -74,7 +75,15 @@ struct SubtitleShortcutPreferences: Codable, Equatable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         enabled = (try? values.decode(Bool.self, forKey: .enabled)) ?? true
         let saved = (try? values.decode([String: UInt32].self, forKey: .keys)) ?? Self.defaultKeys
-        let candidate = Self.defaultKeys.merging(saved, uniquingKeysWith: { _, new in new })
+        var candidate = Self.defaultKeys.merging(saved, uniquingKeysWith: { _, new in new })
+        // Preserve valid custom bindings from versions without a background key.
+        // If B is already assigned, choose an unused key for the new action only.
+        if saved["background"] == nil {
+            let used = Set(SubtitleShortcutAction.allCases.filter { $0 != .background }.map { candidate[$0.rawValue]! })
+            if used.contains(candidate["background"]!) {
+                candidate["background"] = Self.keyNames.keys.sorted().first { !used.contains($0) }
+            }
+        }
         let selected = SubtitleShortcutAction.allCases.map { candidate[$0.rawValue]! }
         if Set(selected).count == selected.count && selected.allSatisfy({ Self.keyNames[$0] != nil }) {
             keys = candidate.filter { Self.defaultKeys[$0.key] != nil }
@@ -92,6 +101,7 @@ extension SubtitlePreferences {
         var result = self
         switch action {
         case .toggle: result.enabled.toggle()
+        case .background: result.backgroundEnabled.toggle()
         case .top: result.verticalPosition = 0
         case .bottom: result.verticalPosition = 1
         case .up, .down:

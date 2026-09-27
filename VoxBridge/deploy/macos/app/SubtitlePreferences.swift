@@ -7,6 +7,7 @@ struct SubtitlePreferences: Codable, Equatable {
     var fontSize: Double = 36
     var textColorHex: String = "#FFFFFF"
     var shadowEnabled: Bool = true
+    var backgroundEnabled: Bool = false
     var shadowColorHex: String = "#000000"
     var shadowOpacity: Double = 0.9
     var shadowBlur: Double = 4
@@ -71,7 +72,7 @@ struct SubtitlePreferences: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, fontName, fontSize, textColorHex, shadowEnabled, shadowColorHex
+        case enabled, fontName, fontSize, textColorHex, shadowEnabled, backgroundEnabled, shadowColorHex
         case shadowOpacity, shadowBlur, shadowOffset, screenID
         case horizontalPosition, verticalPosition, widthFraction
     }
@@ -84,6 +85,7 @@ struct SubtitlePreferences: Codable, Equatable {
         fontSize = (try? values.decode(Double.self, forKey: .fontSize)) ?? defaults.fontSize
         textColorHex = (try? values.decode(String.self, forKey: .textColorHex)) ?? defaults.textColorHex
         shadowEnabled = (try? values.decode(Bool.self, forKey: .shadowEnabled)) ?? defaults.shadowEnabled
+        backgroundEnabled = (try? values.decode(Bool.self, forKey: .backgroundEnabled)) ?? defaults.backgroundEnabled
         shadowColorHex = (try? values.decode(String.self, forKey: .shadowColorHex)) ?? defaults.shadowColorHex
         shadowOpacity = (try? values.decode(Double.self, forKey: .shadowOpacity)) ?? defaults.shadowOpacity
         shadowBlur = (try? values.decode(Double.self, forKey: .shadowBlur)) ?? defaults.shadowBlur

@@ -33,6 +33,11 @@ import Carbon
         try await Task.sleep(nanoseconds: 30_000_000)
         assert(fired == [.toggle, .toggle])
         send(kEventHotKeyReleased, id: 1)
+        send(kEventHotKeyPressed, id: SubtitleShortcutAction.background.id)
+        send(kEventHotKeyPressed, id: SubtitleShortcutAction.background.id)
+        try await Task.sleep(nanoseconds: 30_000_000)
+        assert(fired == [.toggle, .toggle, .background], "background hotkey must fire once per press")
+        send(kEventHotKeyReleased, id: SubtitleShortcutAction.background.id)
         var probe: EventHotKeyRef?
         assert(RegisterEventHotKey(126, SubtitleShortcutPreferences.modifiers,
             EventHotKeyID(signature: 0x54455354, id: 2), GetApplicationEventTarget(), UInt32(kEventHotKeyExclusive), &probe) != noErr)

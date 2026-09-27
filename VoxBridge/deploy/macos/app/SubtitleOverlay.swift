@@ -61,6 +61,39 @@ extension NSColor {
     static func padding(_ p: SubtitlePreferences) -> CGFloat {
         p.shadowEnabled ? ceil(p.shadowBlur * 2 + p.shadowOffset + 6) : 8
     }
+    static func backgroundRects(for frame: CTFrame, fontSize: CGFloat, in bounds: CGRect) -> [CGRect] {
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        guard !lines.isEmpty else { return [] }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        let pathOrigin = CTFrameGetPath(frame).boundingBoxOfPath.origin
+        let inkRects: [CGRect] = zip(lines, origins).compactMap { line, origin in
+            let rect = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+            guard !rect.isNull, !rect.isEmpty else { return nil }
+            return rect.offsetBy(dx: pathOrigin.x + origin.x, dy: pathOrigin.y + origin.y)
+        }
+        // Each rendered line (including automatic wraps) gets its own box.
+        // Only the paint changes; text wrapping, position and page timing do not.
+        let horizontal = min(12, max(4, fontSize * 0.2))
+        let vertical = min(8, max(3, fontSize * 0.1))
+        return inkRects.enumerated().compactMap { index, ink in
+            var bottom = ink.minY - vertical, top = ink.maxY + vertical
+            // Keep a gap between adjacent boxes even at very small fitted sizes.
+            // Never shrink into the glyphs or double-paint translucent backgrounds.
+            if index > 0 {
+                let gap = inkRects[index - 1].minY - ink.maxY
+                if gap > 0 { top = min(top, ink.maxY + max(0, (gap - 1) / 2)) }
+            }
+            if index + 1 < inkRects.count {
+                let gap = ink.minY - inkRects[index + 1].maxY
+                if gap > 0 { bottom = max(bottom, ink.minY - max(0, (gap - 1) / 2)) }
+            }
+            let box = CGRect(x: floor(ink.minX - horizontal), y: bottom,
+                             width: ceil(ink.maxX + horizontal) - floor(ink.minX - horizontal),
+                             height: top - bottom).intersection(bounds)
+            return box.isNull || box.isEmpty ? nil : box
+        }
+    }
     static func layout(text: String, preferences: SubtitlePreferences, screen: CGRect, fitCompleteText: Bool = false) -> Layout? {
         var style = preferences.normalized()
         let safe = SubtitlePreferences.frame(in: screen, size: screen.size, horizontal: 0, vertical: 0)
@@ -117,6 +150,11 @@ extension NSColor {
     }
     override var acceptsFirstResponder: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    func setBackgroundEnabled(_ enabled: Bool) {
+        guard preferences.backgroundEnabled != enabled else { return }
+        preferences.backgroundEnabled = enabled
+        needsDisplay = true
+    }
     func apply(text: String, preferences: SubtitlePreferences) {
         var normalized = preferences.normalized()
         // Layout may reduce the rendered size to keep a whole spoken unit on
@@ -136,6 +174,14 @@ extension NSColor {
         let path = CGPath(rect: bounds.insetBy(dx: padding, dy: padding), transform: nil)
         let frame = CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), path, nil)
         context.saveGState(); context.textMatrix = .identity
+        let backgrounds = preferences.backgroundEnabled
+            ? SubtitleTextLayout.backgroundRects(for: frame, fontSize: preferences.fontSize, in: bounds) : []
+        if !backgrounds.isEmpty {
+            context.setFillColor(NSColor(subtitleHex: preferences.shadowColorHex)
+                .withAlphaComponent(preferences.shadowOpacity).cgColor)
+            context.addRects(backgrounds)
+            context.fillPath()
+        }
         if preferences.shadowEnabled {
             context.setShadow(offset: CGSize(width: preferences.shadowOffset, height: -preferences.shadowOffset),
                               blur: preferences.shadowBlur,
@@ -233,14 +279,16 @@ extension NSColor {
            previous.synchronized == key.synchronized, previous.screen == key.screen {
             var appearance = previous.preferences
             appearance.enabled = preferences.enabled
+            appearance.backgroundEnabled = preferences.backgroundEnabled
             appearance.horizontalPosition = preferences.horizontalPosition
             appearance.verticalPosition = preferences.verticalPosition
             if appearance == preferences {
-                // Visibility/position are presentation-only. Preserve the current
+                // Visibility/position/background are presentation-only. Preserve the current
                 // page and its deadline, including while the window is hidden.
                 let frame = SubtitlePreferences.frame(in: screen.frame, size: panel.frame.size,
                     horizontal: preferences.horizontalPosition, vertical: preferences.verticalPosition)
                 if panel.frame != frame { panel.setFrame(frame, display: false) }
+                textView.setBackgroundEnabled(preferences.backgroundEnabled)
                 lastLayout = key; updateVisibility(); return
             }
         }
@@ -259,7 +307,9 @@ extension NSColor {
                     do { try await Task.sleep(nanoseconds: UInt64(SubtitleTextLayout.readingSeconds(pages[index - 1]) * 1_000_000_000)) }
                     catch { return }
                     guard let self, self.generation == run else { return }
-                    self.textView.apply(text: pages[index], preferences: style)
+                    var pageStyle = style
+                    pageStyle.backgroundEnabled = self.preferences.backgroundEnabled
+                    self.textView.apply(text: pages[index], preferences: pageStyle)
                 }
             }
         }

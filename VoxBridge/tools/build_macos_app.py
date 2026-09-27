@@ -16,7 +16,7 @@ SOURCES = ROOT / 'deploy/macos/app'
 APP_NAME = 'LingoCove.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
 APP_VERSION = '1.0.0'
-APP_BUILD = '25'
+APP_BUILD = '29'
 
 
 def release_metadata(directory: Path) -> dict:

@@ -20,6 +20,7 @@ import AppKit
     private let shadowColor = NSColorWell()
     private let shadowHex = NSTextField(string: "")
     private let shadow = NSButton(checkboxWithTitle: "启用文字阴影", target: nil, action: nil)
+    private let background = NSButton(checkboxWithTitle: "启用矩形背景", target: nil, action: nil)
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     private var sliders: [String: NSSlider] = [:]
     private var values: [String: NSTextField] = [:]
@@ -94,10 +95,10 @@ import AppKit
         addSlider("fontSize", label: "字号", range: 12...144, to: add)
         configureColor(color, hex: colorHex, label: "字幕颜色")
         add("文字颜色", row([color, colorHex]))
-        body.addArrangedSubview(shadow)
-        configureColor(shadowColor, hex: shadowHex, label: "阴影颜色")
-        add("阴影颜色", row([shadowColor, shadowHex]))
-        addSlider("shadowOpacity", label: "阴影浓度", range: 0...1, to: add)
+        body.addArrangedSubview(row([shadow, background]))
+        configureColor(shadowColor, hex: shadowHex, label: "阴影与背景颜色")
+        add("阴影与背景颜色", row([shadowColor, shadowHex]))
+        addSlider("shadowOpacity", label: "阴影与背景浓度", range: 0...1, to: add)
         addSlider("shadowBlur", label: "阴影模糊", range: 0...30, to: add)
         addSlider("shadowOffset", label: "阴影距离", range: 0...20, to: add)
         displays.setAccessibilityLabel("字幕显示器"); add("显示器", displays)
@@ -120,7 +121,7 @@ import AppKit
         let divider = NSBox(); divider.boxType = .separator
         body.addArrangedSubview(divider); divider.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         body.addArrangedSubview(shortcuts); shortcuts.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
-        for control in [enabled, shadow, font, displays, position, color, shadowColor, colorHex, shadowHex] as [NSControl] {
+        for control in [enabled, shadow, background, font, displays, position, color, shadowColor, colorHex, shadowHex] as [NSControl] {
             control.target = self; control.action = #selector(changed(_:))
         }
         preview.target = self; preview.action = #selector(previewChanged); preview.isEnabled = !active
@@ -166,6 +167,7 @@ import AppKit
         syncing = true; defer { syncing = false }
         let p = preferences
         enabled.state = p.enabled ? .on : .off; shadow.state = p.shadowEnabled ? .on : .off
+        background.state = p.backgroundEnabled ? .on : .off
         if !font.itemArray.contains(where: { $0.representedObject as? String == p.fontName }) {
             font.addItem(withTitle: "\(p.fontName)（未安装，使用系统字体）"); font.lastItem?.representedObject = p.fontName
         }
@@ -187,7 +189,10 @@ import AppKit
         else if abs(p.verticalPosition - 1) < 0.001 { selected = 2 }
         else { selected = 3 }
         position.selectItem(at: selected)
-        for view in [shadowColor, shadowHex, sliders["shadowOpacity"]!, sliders["shadowBlur"]!, sliders["shadowOffset"]!] as [NSControl] {
+        for view in [shadowColor, shadowHex, sliders["shadowOpacity"]!] as [NSControl] {
+            view.isEnabled = p.shadowEnabled || p.backgroundEnabled
+        }
+        for view in [sliders["shadowBlur"]!, sliders["shadowOffset"]!] {
             view.isEnabled = p.shadowEnabled
         }
         refreshLocalization()
@@ -196,6 +201,7 @@ import AppKit
         guard !syncing else { return }
         var p = preferences
         p.enabled = enabled.state == .on; p.shadowEnabled = shadow.state == .on
+        p.backgroundEnabled = background.state == .on
         p.fontName = font.selectedItem?.representedObject as? String ?? p.fontName
         p.screenID = displays.selectedItem?.representedObject as? String ?? ""
         p.textColorHex = sender === color ? color.color.subtitleHex : colorHex.stringValue

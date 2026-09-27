@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON_VERSION = '3.12.14'
 UV_VERSION = '0.12.13'
 VERSION = '1.0.0'
-BUILD = '25'
+BUILD = '29'
 MINIMUM_MACOS = '14.2'
 SERVICE_FILES = (
     'VoxBridge/macos.sh', 'VoxBridge/LICENSE', 'VoxBridge/README.md',

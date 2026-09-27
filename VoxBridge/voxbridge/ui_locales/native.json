@@ -1300,6 +1300,56 @@
       "it": "Alcune scorciatoie non sono disponibili. Modificale nelle impostazioni dei sottotitoli.",
       "pt": "Alguns atalhos estão indisponíveis. Altere-os nas configurações de legendas.",
       "hi": "कुछ उपशीर्षक शॉर्टकट उपलब्ध नहीं हैं। उपशीर्षक सेटिंग में उन्हें बदलें।"
+    },
+    "启用矩形背景": {
+      "zh": "启用矩形背景",
+      "en": "Enable rectangular background",
+      "ja": "長方形の背景を表示",
+      "fr": "Activer le fond rectangulaire",
+      "es": "Activar fondo rectangular",
+      "it": "Attiva sfondo rettangolare",
+      "pt": "Ativar fundo retangular",
+      "hi": "आयताकार पृष्ठभूमि चालू करें"
+    },
+    "阴影与背景颜色": {
+      "zh": "阴影与背景颜色",
+      "en": "Shadow and background color",
+      "ja": "影と背景の色",
+      "fr": "Couleur de l’ombre et du fond",
+      "es": "Color de sombra y fondo",
+      "it": "Colore di ombra e sfondo",
+      "pt": "Cor da sombra e do fundo",
+      "hi": "छाया और पृष्ठभूमि का रंग"
+    },
+    "阴影与背景颜色十六进制": {
+      "zh": "阴影与背景颜色十六进制",
+      "en": "Shadow and background hex color",
+      "ja": "影と背景の色（16進数）",
+      "fr": "Couleur hexadécimale de l’ombre et du fond",
+      "es": "Color hexadecimal de sombra y fondo",
+      "it": "Colore esadecimale di ombra e sfondo",
+      "pt": "Cor hexadecimal da sombra e do fundo",
+      "hi": "छाया और पृष्ठभूमि का हेक्स रंग"
+    },
+    "阴影与背景浓度": {
+      "zh": "阴影与背景浓度",
+      "en": "Shadow and background opacity",
+      "ja": "影と背景の不透明度",
+      "fr": "Opacité de l’ombre et du fond",
+      "es": "Opacidad de sombra y fondo",
+      "it": "Opacità di ombra e sfondo",
+      "pt": "Opacidade da sombra e do fundo",
+      "hi": "छाया और पृष्ठभूमि की अपारदर्शिता"
+    },
+    "显示／隐藏字幕背景": {
+      "zh": "显示／隐藏字幕背景",
+      "en": "Show / hide subtitle background",
+      "ja": "字幕の背景を表示／非表示",
+      "fr": "Afficher / masquer le fond des sous-titres",
+      "es": "Mostrar / ocultar fondo de subtítulos",
+      "it": "Mostra / nascondi sfondo sottotitoli",
+      "pt": "Mostrar / ocultar fundo das legendas",
+      "hi": "उपशीर्षक पृष्ठभूमि दिखाएँ / छिपाएँ"
     }
   }
 }
