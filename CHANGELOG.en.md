@@ -2,6 +2,14 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 39 · 2026-09-29
+
+- Add global subtitle font-size shortcuts: Control + Shift + Command + ← decreases and → increases by 2 pt, within 12–144 pt. Hold to repeat; changes save automatically.
+- Localize the new controls in all eight interface languages and allow final-key customization. Preserve valid custom bindings when upgrading.
+- Manual resizing reflows captions, preserves hidden state and grants reading-first pages their full reading time. It does not change speech rate or audio scheduling.
+- Refresh English/Chinese READMEs, shortcut guides and macOS instructions, distinguishing the current source build from existing release downloads.
+- Validation: 1,389 tests passed, 32 skipped; persistent-signature build and local interpretation startup passed. Physical-keyboard behavior across applications still needs manual acceptance.
+
 ## LingoCove 1.0.0 · build 38 · 2026-09-29
 
 Consolidates local improvements from builds 26–38:

@@ -56,7 +56,7 @@ import Carbon
     }
     func refreshLocalization() {
         enabled.title = NativeLocalization.text("传译时启用全局快捷键")
-        hint.stringValue = NativeLocalization.text("固定使用 Control + Shift + Command；可修改末尾按键。短按移动 8 点，长按连续移动。")
+        hint.stringValue = NativeLocalization.text("固定使用 Control + Shift + Command；可修改末尾按键。移动每次 8 点，字号每次 2 点；长按连续调整。")
         reset.title = NativeLocalization.text("恢复默认快捷键")
         for action in SubtitleShortcutAction.allCases {
             labels[action]?.stringValue = NativeLocalization.text(action.title)

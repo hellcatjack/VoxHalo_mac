@@ -1221,16 +1221,6 @@
       "pt": "Ativar atalhos globais durante a interpretação",
       "hi": "अनुवाद के दौरान ग्लोबल शॉर्टकट चालू करें"
     },
-    "固定使用 Control + Shift + Command；可修改末尾按键。短按移动 8 点，长按连续移动。": {
-      "zh": "固定使用 Control + Shift + Command；可修改末尾按键。短按移动 8 点，长按连续移动。",
-      "en": "Hold Control + Shift + Command; customize the final key. Tap to move 8 points, hold to move continuously.",
-      "ja": "Control + Shift + Command を押したまま使用します。最後のキーを変更できます。短押しで 8 ポイント、長押しで連続移動します。",
-      "fr": "Maintenez Control + Shift + Command ; la dernière touche est personnalisable. Appuyez pour déplacer de 8 points, maintenez pour un déplacement continu.",
-      "es": "Mantén Control + Shift + Command; puedes cambiar la última tecla. Pulsa para mover 8 puntos o mantén para mover continuamente.",
-      "it": "Tieni premuti Control + Shift + Command; puoi cambiare l’ultimo tasto. Premi per spostare di 8 punti, tieni premuto per uno spostamento continuo.",
-      "pt": "Mantenha Control + Shift + Command; personalize a última tecla. Toque para mover 8 pontos ou mantenha para mover continuamente.",
-      "hi": "Control + Shift + Command दबाकर रखें; अंतिम कुंजी बदल सकते हैं। एक बार दबाने पर 8 पॉइंट खिसकाएँ, दबाए रखने पर लगातार खिसकाएँ।"
-    },
     "恢复默认快捷键": {
       "zh": "恢复默认快捷键",
       "en": "Restore default shortcuts",
@@ -1430,6 +1420,36 @@
       "it": "Impossibile tradurre questa frase. Consulta il monitor.",
       "pt": "Não foi possível traduzir esta frase. Consulte o monitor.",
       "hi": "इस वाक्य का अनुवाद नहीं हो सका। मॉनिटर देखें।"
+    },
+    "固定使用 Control + Shift + Command；可修改末尾按键。移动每次 8 点，字号每次 2 点；长按连续调整。": {
+      "zh": "固定使用 Control + Shift + Command；可修改末尾按键。移动每次 8 点，字号每次 2 点；长按连续调整。",
+      "en": "Control + Shift + Command stays fixed; customize the final key. Move by 8 pt or resize by 2 pt per press; hold to keep adjusting.",
+      "ja": "Control + Shift + Command は固定です。末尾のキーを変更できます。1 回で位置を 8 pt、文字サイズを 2 pt 調整し、長押しで連続調整します。",
+      "fr": "Control + Shift + Command reste fixe ; personnalisez la dernière touche. Chaque pression déplace de 8 pt ou redimensionne de 2 pt ; maintenez pour continuer.",
+      "es": "Control + Shift + Command es fijo; personaliza la última tecla. Cada pulsación mueve 8 pt o cambia el tamaño 2 pt; mantén pulsado para continuar.",
+      "it": "Control + Shift + Command resta fisso; personalizza il tasto finale. Ogni pressione sposta di 8 pt o ridimensiona di 2 pt; tieni premuto per continuare.",
+      "pt": "Control + Shift + Command é fixo; personalize a tecla final. Cada toque move 8 pt ou altera o tamanho em 2 pt; mantenha premido para continuar.",
+      "hi": "Control + Shift + Command तय हैं; अंतिम कुंजी बदल सकते हैं। हर बार दबाने पर स्थिति 8 pt या अक्षर आकार 2 pt बदलता है; लगातार बदलने के लिए दबाए रखें।"
+    },
+    "缩小字幕字号": {
+      "zh": "缩小字幕字号",
+      "en": "Decrease subtitle font size",
+      "ja": "字幕の文字を小さく",
+      "fr": "Réduire la taille du texte",
+      "es": "Reducir tamaño del texto",
+      "it": "Riduci dimensione testo",
+      "pt": "Diminuir tamanho do texto",
+      "hi": "उपशीर्षक का अक्षर आकार घटाएँ"
+    },
+    "放大字幕字号": {
+      "zh": "放大字幕字号",
+      "en": "Increase subtitle font size",
+      "ja": "字幕の文字を大きく",
+      "fr": "Agrandir la taille du texte",
+      "es": "Aumentar tamaño del texto",
+      "it": "Aumenta dimensione testo",
+      "pt": "Aumentar tamanho do texto",
+      "hi": "उपशीर्षक का अक्षर आकार बढ़ाएँ"
     }
   }
 }

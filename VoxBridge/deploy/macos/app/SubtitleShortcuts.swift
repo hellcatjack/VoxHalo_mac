@@ -2,9 +2,10 @@ import Foundation
 import Carbon
 
 enum SubtitleShortcutAction: String, CaseIterable {
-    case toggle, up, down, top, bottom, background
+    case toggle, up, down, top, bottom, background, fontSmaller, fontLarger
     var id: UInt32 { UInt32(Self.allCases.firstIndex(of: self)! + 1) }
-    var repeats: Bool { self == .up || self == .down }
+    var repeats: Bool { self == .up || self == .down || self == .fontSmaller || self == .fontLarger }
+    var repeatInterval: Double { self == .fontSmaller || self == .fontLarger ? 0.12 : 0.04 }
     var title: String {
         switch self {
         case .toggle: return "显示／隐藏字幕"
@@ -13,6 +14,8 @@ enum SubtitleShortcutAction: String, CaseIterable {
         case .top: return "字幕移至顶部"
         case .bottom: return "字幕移至底部"
         case .background: return "显示／隐藏字幕背景"
+        case .fontSmaller: return "缩小字幕字号"
+        case .fontLarger: return "放大字幕字号"
         }
     }
 }
@@ -26,11 +29,12 @@ struct SubtitleShortcutPreferences: Codable, Equatable {
         0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
         11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 31: "O", 32: "U", 34: "I",
         35: "P", 37: "L", 38: "J", 40: "K", 45: "N", 46: "M",
-        18: "1", 19: "2", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0", 126: "↑", 125: "↓"
+        18: "1", 19: "2", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0", 126: "↑", 125: "↓", 123: "←", 124: "→"
     ]
     // Omit T (Finder: add to Dock), 3/4/5 (screenshots), and punctuation
     // including = (PowerPoint superscript). Escape/Space/Return/Fn aren't choices.
-    static let defaultKeys: [String: UInt32] = ["toggle": 1, "up": 126, "down": 125, "top": 25, "bottom": 29, "background": 11]
+    static let defaultKeys: [String: UInt32] = ["toggle": 1, "up": 126, "down": 125, "top": 25, "bottom": 29, "background": 11,
+                                               "fontSmaller": 123, "fontLarger": 124]
     var enabled = true
     private(set) var keys = defaultKeys
 
@@ -46,7 +50,7 @@ struct SubtitleShortcutPreferences: Codable, Equatable {
         return "⌃⇧⌘ " + keyName(for: key, layoutData: data)
     }
     static func keyName(for key: UInt32, layoutData: Data?) -> String {
-        guard key != 125, key != 126, let layoutData else { return keyNames[key] ?? "?" }
+        guard !(123...126).contains(key), let layoutData else { return keyNames[key] ?? "?" }
         return layoutData.withUnsafeBytes { bytes in
             guard let address = bytes.baseAddress else { return keyNames[key] ?? "?" }
             let layout = address.assumingMemoryBound(to: UCKeyboardLayout.self)
@@ -75,19 +79,20 @@ struct SubtitleShortcutPreferences: Codable, Equatable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         enabled = (try? values.decode(Bool.self, forKey: .enabled)) ?? true
         let saved = (try? values.decode([String: UInt32].self, forKey: .keys)) ?? Self.defaultKeys
-        var candidate = Self.defaultKeys.merging(saved, uniquingKeysWith: { _, new in new })
-        // Preserve valid custom bindings from versions without a background key.
-        // If B is already assigned, choose an unused key for the new action only.
-        if saved["background"] == nil {
-            let used = Set(SubtitleShortcutAction.allCases.filter { $0 != .background }.map { candidate[$0.rawValue]! })
-            if used.contains(candidate["background"]!) {
-                candidate["background"] = Self.keyNames.keys.sorted().first { !used.contains($0) }
-            }
+        var candidate = saved.filter { Self.defaultKeys[$0.key] != nil }
+        var used = Set(candidate.values)
+        guard used.count == candidate.count, used.allSatisfy({ Self.keyNames[$0] != nil }) else { return }
+        // Add new actions without overwriting valid custom bindings from older builds.
+        // Reserve other missing defaults before selecting a fallback for a collision.
+        let missing = SubtitleShortcutAction.allCases.filter { candidate[$0.rawValue] == nil }
+        let reserved = Set(missing.map { Self.defaultKeys[$0.rawValue]! })
+        for action in missing {
+            let preferred = Self.defaultKeys[action.rawValue]!
+            let key = !used.contains(preferred) ? preferred
+                : Self.keyNames.keys.sorted().first { !used.contains($0) && !reserved.contains($0) }!
+            candidate[action.rawValue] = key; used.insert(key)
         }
-        let selected = SubtitleShortcutAction.allCases.map { candidate[$0.rawValue]! }
-        if Set(selected).count == selected.count && selected.allSatisfy({ Self.keyNames[$0] != nil }) {
-            keys = candidate.filter { Self.defaultKeys[$0.key] != nil }
-        }
+        keys = candidate
     }
     static func load(from defaults: UserDefaults = .standard) -> Self {
         guard let data = defaults.data(forKey: storageKey), let value = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
@@ -102,6 +107,8 @@ extension SubtitlePreferences {
         switch action {
         case .toggle: result.enabled.toggle()
         case .background: result.backgroundEnabled.toggle()
+        case .fontSmaller, .fontLarger:
+            result.fontSize = min(144, max(12, normalized().fontSize + (action == .fontSmaller ? -2 : 2)))
         case .top: result.verticalPosition = 0
         case .bottom: result.verticalPosition = 1
         case .up, .down:
@@ -114,7 +121,7 @@ extension SubtitlePreferences {
 }
 
 /// Separate press/release state makes toggle idempotent during OS key repeat and
-/// lets movement stop immediately even when a key-up was lost during a Space change.
+/// stops repeated adjustments when a key-up was lost during a Space change.
 struct SubtitleShortcutGesture {
     private var pressed: Set<SubtitleShortcutAction> = []
     private(set) var repeating: SubtitleShortcutAction?
@@ -131,7 +138,7 @@ struct SubtitleShortcutGesture {
     mutating func repeatAction(at time: Double, stillHeld: Bool) -> SubtitleShortcutAction? {
         guard stillHeld else { reset(); return nil }
         guard let action = repeating, time >= nextRepeat else { return nil }
-        nextRepeat = time + 0.04; return action
+        nextRepeat = time + action.repeatInterval; return action
     }
     mutating func reset() { pressed.removeAll(); repeating = nil }
 }

@@ -17,6 +17,7 @@ import Carbon
         if let foreign { UnregisterEventHotKey(foreign) }
         controller.setActive(true)
         assert(controller.failures.isEmpty, "restarting interpretation should retry released shortcuts")
+        assert(controller.registeredActions.contains(.fontSmaller) && controller.registeredActions.contains(.fontLarger))
         var fired: [SubtitleShortcutAction] = []
         controller.onAction = { fired.append($0) }
         func send(_ kind: Int, id: UInt32) {
@@ -38,6 +39,13 @@ import Carbon
         try await Task.sleep(nanoseconds: 30_000_000)
         assert(fired == [.toggle, .toggle, .background], "background hotkey must fire once per press")
         send(kEventHotKeyReleased, id: SubtitleShortcutAction.background.id)
+        for action in [SubtitleShortcutAction.fontSmaller, .fontLarger] {
+            let previousCount = fired.count
+            send(kEventHotKeyPressed, id: action.id); send(kEventHotKeyPressed, id: action.id)
+            try await Task.sleep(nanoseconds: 10_000_000)
+            assert(fired.count == previousCount + 1 && fired.last == action, "font shortcuts must reach the production handler once per press")
+            send(kEventHotKeyReleased, id: action.id)
+        }
         var probe: EventHotKeyRef?
         assert(RegisterEventHotKey(126, SubtitleShortcutPreferences.modifiers,
             EventHotKeyID(signature: 0x54455354, id: 2), GetApplicationEventTarget(), UInt32(kEventHotKeyExclusive), &probe) != noErr)

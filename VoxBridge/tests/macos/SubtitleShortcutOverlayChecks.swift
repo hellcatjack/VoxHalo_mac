@@ -26,12 +26,17 @@ import AVFoundation
         overlay.setLiveText("Next currently spoken sentence.", identity: .init(sentenceID: "two", revision: 1), synchronized: true, active: true)
         overlay.apply(preferences: overlay.adjustedPreferences(for: .bottom))
         assert(!overlay.panel.isVisible, "moving a hidden caption must not reveal it")
+        let hiddenSize = overlay.adjustedPreferences(for: .fontLarger).fontSize
+        overlay.apply(preferences: overlay.adjustedPreferences(for: .fontLarger))
+        assert(!overlay.panel.isVisible, "resizing a hidden caption must not reveal it")
+        assert(overlay.adjustedPreferences(for: .fontSmaller).fontSize == hiddenSize - 2)
         overlay.apply(preferences: overlay.adjustedPreferences(for: .toggle))
         assert(overlay.textView.accessibilityValue() as? String == "Next currently spoken sentence.", "show must use the current playback caption")
         assert(overlay.panel.frame.minY == NSScreen.screens[0].frame.minY)
         for index in 0..<30 {
             overlay.apply(preferences: overlay.adjustedPreferences(for: .background))
             overlay.apply(preferences: overlay.adjustedPreferences(for: index % 2 == 0 ? .up : .down))
+            overlay.apply(preferences: overlay.adjustedPreferences(for: index % 2 == 0 ? .fontLarger : .fontSmaller))
             if index % 5 == 0 { overlay.apply(preferences: overlay.adjustedPreferences(for: .toggle)) }
             try await Task.sleep(nanoseconds: 20_000_000)
         }

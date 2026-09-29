@@ -10,7 +10,7 @@ We want people to express themselves in the language they know and understand vo
 
 Today, LingoCove runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**App: 1.0.0 · build 25** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**Current source build: 1.0.0 · build 39** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
 
 The App is named **LingoCove** in Finder, the Dock and every interface language. Previously named VoxHalo / 同声传译, it keeps existing preferences and model files. For older installations, see [upgrading from the previous App](docs/en/INSTALLATION.md#9-update-or-rebuild).
 
@@ -32,9 +32,9 @@ Inspect each model's filename, saved size, status, storage location, download so
 
 ![LingoCove 1.0.0 subtitle settings in English: font, size, colors, shadow, display, position, width and presentation shortcuts](docs/images/subtitle-settings-en.jpg)
 
-Adjust subtitle font, size, text and shadow colors, shadow strength, display, position and width. Scroll down to customize the [presentation shortcuts](docs/en/SUBTITLE-SHORTCUTS.md) for showing, hiding and moving subtitles. Subtitle controls operate independently of spoken output.
+Adjust subtitle font, size, text and shadow colors, shadow strength, display, position and width. Scroll down to customize the [presentation shortcuts](docs/en/SUBTITLE-SHORTCUTS.md) for showing, hiding, moving and resizing subtitles. **Control + Shift + Command + ← / →** decreases/increases the subtitle font by 2 pt (build 39+). Subtitle controls operate independently of spoken output.
 
-Screenshots show **LingoCove 1.0.0 · build 25**. The paths and styles are examples from a source installation; the App displays each user's actual model location. Model Manager and presentation shortcuts are included in the downloadable App.
+Screenshots show **LingoCove 1.0.0 · build 25**. The paths and styles are examples from a source installation; the App displays each user's actual model location. The release download may precede the current source build; check its release notes for included features.
 
 ## Fully local deployment. Interpretation works offline.
 
@@ -84,7 +84,7 @@ Interface language is independent, follows system/browser preferences by default
 - **Invite listeners on the same network.** The App detects your LAN IP and provides an address and QR code. Phones and tablets can scan it to hear the shared translation stream.
 - **Run interpretation entirely from the App.** Native controls handle devices, direction, start and stop. The browser monitor displays text and status; closing it does not interrupt interpretation.
 
-Subtitle settings offer **Reading first** and **Follow speech**. Reading first shows completed translations early, grouping available short sentences before each page appears. Each displayed page stays unchanged for its full text-length-based reading time, with a minimum of 3 seconds; new text and corrections wait for the next page. Visual pacing adapts to measured speech duration without replaying identical revisions. Long text is paginated. Follow speech keeps captions synchronized with actual playback. Captions keep the selected font size and contain translation only; lines wrap naturally without inserted headings or paragraph breaks. Display timing never controls the audio queue.
+Subtitle settings offer **Reading first** and **Follow speech**. Reading first shows completed translations early, grouping available short sentences before a page appears. Each page stays unchanged for its full reading time. Chinese and Japanese use character-based timing with a 3-second minimum. English, French, Spanish, Italian, Portuguese and Hindi use word-based timing with a 3.5-second minimum, independent of TTS catch-up speed. Long text is paginated and hidden reading captions pause their clock. New text and corrections wait for the next page; source coverage prevents verified overlap from appearing twice. Follow speech synchronizes captions with actual playback. Captions keep the selected font size, show translation only and wrap naturally without inserted headings or paragraph breaks. Display timing never controls the audio queue. See [reading-caption behavior](VoxBridge/docs/READING-SUBTITLES.md).
 
 Speech supports continuous playback and automatic catch-up. Chinese synthesis favors complete sentences, with an automatic speed range of **1.2–1.5×**. In Follow speech mode, a newer translation does not replace a sentence that is still being spoken.
 

@@ -2,7 +2,7 @@
 
 [简体中文](../zh-CN/SUBTITLE-SHORTCUTS.md)
 
-Included in **LingoCove 1.0.0** and later.
+Included in **LingoCove 1.0.0** and later. Font-size shortcuts require **build 39 or later**; older release downloads may not include them.
 
 While interpretation is running, control desktop subtitles directly from a full-screen PowerPoint presentation without switching back to LingoCove. Recognition, translation, spoken output and web monitoring continue independently.
 
@@ -12,14 +12,18 @@ While interpretation is running, control desktop subtitles directly from a full-
 | Control + Shift + Command + B | Show / hide the rectangular subtitle background |
 | Control + Shift + Command + ↑ | Move subtitles up |
 | Control + Shift + Command + ↓ | Move subtitles down |
+| Control + Shift + Command + ← | Decrease subtitle font size by 2 pt |
+| Control + Shift + Command + → | Increase subtitle font size by 2 pt |
 | Control + Shift + Command + 9 | Place subtitles at the top of the selected display |
 | Control + Shift + Command + 0 | Place subtitles at the bottom, including over the Dock |
 
-Each arrow press moves **8 screen points**. Hold for about 0.3 seconds to move continuously; releasing stops movement. Subtitles stay within the display and their position is saved automatically. Top/bottom actions preserve horizontal position and the selected subtitle display.
+Each Up/Down Arrow press moves **8 screen points**. Hold for about 0.3 seconds to move continuously; releasing stops movement. Subtitles stay within the display and their position is saved automatically. Top/bottom actions preserve horizontal position and the selected subtitle display.
 
-Hidden subtitles continue to follow current speech. Showing them restores the current caption without replaying old sentences. When local playback is off, long translations retain their page clock while hidden or moved. If there is no current translation, showing subtitles does not create preview text or start interpretation.
+**Left/Right Arrow** changes subtitle size by **2 pt** within **12–144 pt**. Hold for 0.3 seconds to repeat at a controlled pace (one step every 0.12 seconds). Changes save automatically and update the settings slider. Resizing a hidden caption does not reveal it. In Reading first mode, resizing reflows the current and unread text and gives the new page its full reading time. It never changes TTS speed or audio scheduling.
 
-In **Subtitle Settings…**, select **Enable rectangular background** to place a filled rectangle behind the current caption. It is off by default and shares **Shadow and background color** and **Shadow and background opacity** with the text shadow. The background also works when the shadow is disabled. Its width and height follow the actual text bounds with a small inset around the text. Each rendered line, including automatic wraps, has its own fitted rectangle with transparent space between lines. Empty lines and missing captions have no background. The subtitle width setting still controls wrapping, not the background width. Toggling it preserves the text, page clock and spoken output. Settings save automatically. If an older custom binding already uses B, the new action receives an unused key; check the settings page.
+Hidden **Reading first** captions pause their reading clock and resume when shown. In **Follow speech**, hidden subtitles continue following playback and restore the currently spoken caption when shown. Moving subtitles preserves their page clock. If there is no current translation, showing subtitles does not create preview text or start interpretation.
+
+In **Subtitle Settings…**, select **Enable rectangular background** to place a filled rectangle behind the current caption. It is off by default and shares **Shadow and background color** and **Shadow and background opacity** with the text shadow. The background also works when the shadow is disabled. Its width and height follow the actual text bounds with a small inset around the text. Each rendered line, including automatic wraps, has its own fitted rectangle with transparent space between lines. Empty lines and missing captions have no background. The subtitle width setting still controls wrapping, not the background width. Toggling it preserves the text, page clock and spoken output. Settings save automatically. Upgrades preserve valid existing custom bindings. New actions receive their default key or an unused key if that default is occupied; check the settings page.
 
 ## Customize shortcuts
 
@@ -29,13 +33,15 @@ The table uses US keyboard labels. For other layouts, use the labels displayed i
 
 Global keys are registered while interpretation is running or finishing queued audio. They are released after stopping, disabling shortcuts or quitting. The App checks system-reserved keys and requests exclusive registration. If a key cannot be registered, the console and subtitle settings display a warning; other available keys continue working. Choose a different key, or close the conflicting app and restart interpretation.
 
-The defaults avoid Microsoft's published [PowerPoint for Mac presentation shortcuts](https://support.microsoft.com/en-US/accessibility/powerpoint/use-keyboard-shortcuts-to-deliver-powerpoint-presentations). Custom app shortcuts, PowerPoint add-ins and user overrides cannot all be discovered automatically. Check the keys before a live presentation.
+The defaults avoid Microsoft's published [PowerPoint for Mac presentation shortcuts](https://support.microsoft.com/en-US/accessibility/powerpoint/use-keyboard-shortcuts-to-deliver-powerpoint-presentations) and [editing shortcuts](https://support.microsoft.com/en-us/accessibility/powerpoint/use-keyboard-shortcuts-to-create-powerpoint-presentations). Custom app shortcuts, PowerPoint add-ins and user overrides cannot all be discovered automatically. Check the keys before a live presentation.
 
 ## Developer verification
 
-From `VoxBridge/`, run `../.venv/bin/python -m pytest tests/test_subtitle_shortcuts.py tests/test_native_localization.py -q`. Coverage includes occupied-key detection and release, hold/release behavior, display boundaries, French keyboard labels, current-caption restoration, pagination without local speech, and real PCM output draining normally during rapid subtitle changes. The audio check plays a silent fixture without connecting to model services.
+From `VoxBridge/`, run `../.venv/bin/python -m pytest tests/test_subtitle_shortcuts.py tests/test_native_localization.py -q`. Coverage includes occupied-key detection and release, hold/release behavior, font-size limits, migration of custom bindings, display boundaries, French keyboard labels, current-caption restoration, pagination without local speech, and real PCM output draining normally during rapid subtitle changes. The audio check plays a silent fixture without connecting to model services.
 
-`tests/macos/SubtitleShortcutPresentationAcceptance.swift` is a time-bounded manual acceptance harness for a disposable PowerPoint deck. It records actual OS-delivered hotkey actions, the foreground app, visibility and movement. It does not capture audio, connect to models or save user preferences.
+Build 39 validation on 2026-09-29: **1,389 tests passed, 32 skipped**, with one third-party deprecation warning. Added coverage for font steps and bounds, controlled hold repeat, older-binding migration, Carbon font-action callbacks and uninterrupted silent PCM during resizing. Installed build 39 with the existing signing identity; English/Chinese settings rendered correctly and all eight global keys registered during interpretation. Tool-generated font shortcuts did not trigger the system callback; physical-keyboard behavior across applications still requires manual acceptance. PowerPoint slideshow and model endurance tests were not repeated for this change.
+
+`tests/macos/SubtitleShortcutPresentationAcceptance.swift` is a time-bounded manual acceptance harness for a disposable PowerPoint deck. It records actual OS-delivered hotkey actions, the foreground app, visibility, movement and font size. It does not capture audio, connect to models or save user preferences.
 
 Local verification on 2026-09-15 used macOS 26.6.2 and PowerPoint 16.112.4: **1,241 tests passed, 32 skipped**, with one third-party Starlette/AnyIO deprecation warning. App compilation and signature verification passed. Native settings were checked for customization, persistence, reset, disable and English/Chinese switching. Automated tests cover real Carbon event handling, key registration/release, pagination and continuous playback of a silent PCM fixture.
 

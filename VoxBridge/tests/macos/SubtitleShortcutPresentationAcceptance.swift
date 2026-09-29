@@ -11,7 +11,7 @@ import AppKit
         var style = SubtitlePreferences(), sequence = 1
         let began = ProcessInfo.processInfo.systemUptime
         overlay.apply(preferences: style)
-        overlay.setLiveText("VoxHalo · Subtitle shortcut test 1", identity: .init(sentenceID: "1", revision: 1), synchronized: true, active: true)
+        overlay.setLiveText("LingoCove · Subtitle shortcut test 1", identity: .init(sentenceID: "1", revision: 1), synchronized: true, active: true)
         hotkeys.configure(SubtitleShortcutPreferences())
         hotkeys.onAction = { action in
             let previous = overlay.panel.frame.minY
@@ -19,6 +19,7 @@ import AppKit
             let record: [String: Any] = ["action": action.rawValue, "seconds": ProcessInfo.processInfo.systemUptime - began,
                 "frontmost": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "visible": overlay.panel.isVisible,
                 "previous_y": previous, "y": overlay.panel.frame.minY, "vertical": style.verticalPosition,
+                "font_size": style.fontSize,
                 "text": overlay.textView.accessibilityValue() as? String ?? ""]
             print(String(data: try! JSONSerialization.data(withJSONObject: record, options: .sortedKeys), encoding: .utf8)!); fflush(stdout)
         }
@@ -27,7 +28,7 @@ import AppKit
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
             MainActor.assumeIsolated {
                 sequence += 1
-                overlay.setLiveText("VoxHalo · Subtitle shortcut test \(sequence)", identity: .init(sentenceID: String(sequence), revision: 1), synchronized: true, active: true)
+                overlay.setLiveText("LingoCove · Subtitle shortcut test \(sequence)", identity: .init(sentenceID: String(sequence), revision: 1), synchronized: true, active: true)
             }
         }
         let duration = CommandLine.arguments.dropFirst().first.flatMap(Double.init) ?? 180
