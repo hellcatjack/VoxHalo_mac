@@ -88,6 +88,7 @@ class _RevisionStableEntry:
     text: str | None = None
     translation_ready_at: float | None = None
     confirmed: bool = False
+    confirmed_since: float | None = None
     sealed: bool = False
     allow_urgent: bool = True
     offered: bool = False
@@ -270,16 +271,31 @@ class RevisionStableTTSBuffer:
                     entry.confirmed = True
             return changed
 
-    def confirm_revision(self, sentence_id: str, revision: int, *, allow_urgent: bool = True) -> bool:
+    def confirm_revision(self, sentence_id: str, revision: int, *, allow_urgent: bool = True,
+                         evidence_age_sec: float | None = None) -> bool:
         """Confirmation belongs to an exact source revision, never future edits."""
+        if evidence_age_sec is not None and (not math.isfinite(evidence_age_sec) or evidence_age_sec < 0):
+            raise ValueError('evidence age must be finite and non-negative')
         with self._lock:
             entry = self._current_entry(sentence_id, revision)
             if entry is None:
                 return False
             changed = not entry.confirmed or entry.allow_urgent != allow_urgent
+            if evidence_age_sec is not None:
+                since = self._clock() - min(120.0, evidence_age_sec)
+                if entry.confirmed_since is None or since < entry.confirmed_since:
+                    entry.confirmed_since = since
+                    changed = True
             entry.confirmed = True
             entry.allow_urgent = allow_urgent
             return changed
+
+    @staticmethod
+    def _stable_since(entry: _RevisionStableEntry) -> float:
+        # Reuse only the validated word AND boundary history for this revision.
+        # A new revision or a withdrawn boundary cannot inherit this evidence.
+        return min(entry.changed_at, entry.confirmed_since) if (
+            entry.confirmed and entry.confirmed_since is not None) else entry.changed_at
 
     def commit(self, sentence_id: str, revision: int) -> bool:
         """The synchronous first shared PCM commit makes this revision immutable."""
@@ -301,7 +317,7 @@ class RevisionStableTTSBuffer:
             if entry is None or not entry.offered or entry.status != "ready":
                 return False
             required_sec, _, _, _ = self._release_policy(entry)
-            return required_sec is not None and self._clock() >= entry.changed_at + required_sec
+            return required_sec is not None and self._clock() >= self._stable_since(entry) + required_sec
 
     def revoke_confirmation(self, sentence_id: str, revision: int) -> bool:
         with self._lock:
@@ -309,6 +325,7 @@ class RevisionStableTTSBuffer:
             if entry is None or entry.sealed or not entry.confirmed:
                 return False
             entry.confirmed = False
+            entry.confirmed_since = None
             entry.changed_at = self._clock()
             return True
 
@@ -418,7 +435,7 @@ class RevisionStableTTSBuffer:
             entry = self._entries.get(order) if order is not None else None
             if entry is None or entry.status != "ready" or entry.offered:
                 return None
-            quiet_age_ms = self._elapsed_ms(entry.changed_at, now)
+            quiet_age_ms = self._elapsed_ms(self._stable_since(entry), now)
             (
                 required_sec,
                 _,
@@ -450,7 +467,27 @@ class RevisionStableTTSBuffer:
             required_sec, _, _, _ = self._release_policy(entry)
             if required_sec is None:
                 return None
-            return float(entry.changed_at + required_sec)
+            return float(self._stable_since(entry) + required_sec)
+
+    def diagnostics(self, limit: int = 32) -> list[dict]:
+        """Read-only phase timing; never drain, confirm, or refresh a clock."""
+        now = self._clock()
+        with self._lock:
+            result = []
+            for order in sorted(self._entries)[:max(0, min(limit, 128))]:
+                entry = self._entries[order]
+                required, policy, _, _ = self._release_policy(entry)
+                age = self._elapsed_ms(self._stable_since(entry), now)
+                result.append(dict(
+                    sentence_id=entry.sentence_id, revision=entry.revision,
+                    source_order=order, status=entry.status,
+                    confirmed=entry.confirmed, sealed=entry.sealed, offered=entry.offered,
+                    blocked_by_earlier=order != self._next_order,
+                    release_policy=policy, source_quiet_age_ms=age,
+                    remaining_ms=None if required is None else max(0, round(required * 1000) - age),
+                    translation_ready_age_ms=None if entry.translation_ready_at is None
+                    else self._elapsed_ms(entry.translation_ready_at, now)))
+            return result
 
     def drain(self, *, force: bool = False) -> list[TTSReadyItem]:
         now = self._clock()
@@ -473,7 +510,7 @@ class RevisionStableTTSBuffer:
                     continue
                 required_sec, release_reason, _, _ = self._release_policy(entry)
                 if not force and (
-                    required_sec is None or now < entry.changed_at + required_sec
+                    required_sec is None or now < self._stable_since(entry) + required_sec
                 ):
                     break
                 entry.offered = True
@@ -487,7 +524,7 @@ class RevisionStableTTSBuffer:
                         target_language=str(entry.target_language or ""),
                         text=str(entry.text or ""),
                         release_reason="final_force" if force else release_reason,
-                        source_quiet_age_ms=self._elapsed_ms(entry.changed_at, now),
+                        source_quiet_age_ms=self._elapsed_ms(self._stable_since(entry), now),
                         translation_ready_age_ms=self._elapsed_ms(
                             entry.translation_ready_at
                             if entry.translation_ready_at is not None

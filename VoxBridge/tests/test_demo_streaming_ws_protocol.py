@@ -22,6 +22,51 @@ from voxbridge.tts.kokoro_onnx import SynthesizedAudio
 from voxbridge.streaming.vad_support import SileroShadowObserver
 
 
+@pytest.mark.parametrize("live_source", [False, True])
+def test_short_source_grouping_preserves_live_boundaries_and_final_words(live_source):
+    source = "They agreed. We continued. It worked."
+
+    class ShortASR(_FakeASR):
+        def streaming_transcribe(self, wav, state):
+            state.audio_accum = np.concatenate((state.audio_accum, wav))
+            state.language = "English"
+            state.text = source if live_source else "They"
+            return state
+
+        def finish_streaming_transcribe(self, state):
+            state.language, state.text = "English", source
+            return state
+
+    args = _args()
+    args.final_redecode_on_stop = False
+    args.early_translation_stable_sec = 0
+    args.early_translation_stable_hits = 2
+    translator = _FakeTranslator()
+    app = _create_app(args, ShortASR(), translator=translator)
+    events = []
+    with TestClient(app).websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "translation_direction": "en2zh"})
+        _receive_until_type(ws, "started")
+        for _ in range(3):
+            ws.send_bytes(np.full(3200, 1000, dtype="<i2").tobytes())
+            while True:
+                event = ws.receive_json()
+                events.append(event)
+                if event.get("type") == "partial":
+                    break
+        before_stop = [e["text"] for e in events if e.get("type") == "sentence_committed"]
+        assert before_stop == (["They agreed.", "We continued."] if live_source else [])
+        ws.send_json({"type": "finish", "mode": "stop"})
+        events.extend(_collect_through_final(ws))
+    committed = [e["text"] for e in events if e.get("type") == "sentence_committed"]
+    expected = (["They agreed.", "We continued.", "It worked."] if live_source
+                else ["They agreed. We continued.", "It worked."])
+    assert committed == expected
+    assert re.sub(r"\s+", "", "".join(committed)) == re.sub(r"\s+", "", source)
+    assert [call[0] for call in translator.calls] == expected
+
+
 @pytest.mark.parametrize("mode,direction,expected_call", [
     ("adaptive", "zh2en", 5), ("shadow", "zh2en", 2),
     ("off", "zh2en", 2), ("adaptive", "en2zh", 2),
@@ -3274,6 +3319,10 @@ def test_ws_tts_defaults_off_and_marks_translation_stable():
     translations = [event for event in events if event.get("type") == "sentence_translation"]
     assert translations
     assert all(event.get("is_stable") is True for event in translations)
+    assert all("source_token_ids" in event for event in translations)
+    assert any(event["source_token_ids"] for event in translations)
+    assert all(event["source_token_ids"] is None or all(type(token) is int and token >= 0
+               for token in event["source_token_ids"]) for event in translations)
     assert not [event for event in events if event.get("type") == "tts_job"]
 
 
@@ -5951,6 +6000,79 @@ def test_ws_does_not_early_commit_incomplete_short_english_tail():
     assert [msg for msg in events if msg.get("type") == "sentence_committed"] == []
     assert [msg for msg in events if msg.get("type") == "sentence_translation"] == []
     assert translator.calls == []
+
+
+@pytest.mark.parametrize("sentence", [
+    "Thank you.",
+    "Yes.",
+    "We can begin now",
+    "A completed English sentence with enough words ends here. Thank you.",
+])
+@pytest.mark.parametrize("silence_mode", ["pcm", "client"])
+@pytest.mark.parametrize("hard_cut", [False, True])
+@pytest.mark.parametrize("buffered", [False, True])
+def test_ws_english_terminal_silence_translates_without_more_speech(sentence, silence_mode, hard_cut, buffered, tmp_path):
+    class EndpointASR(_FakeASR):
+        def streaming_transcribe(self, wav, state):
+            state.audio_accum = np.concatenate((state.audio_accum, wav))
+            state.language, state.text = "English", "" if buffered else sentence
+            return state
+
+        def finish_streaming_transcribe(self, state):
+            self.finish_calls += 1
+            if np.any(state.audio_accum):
+                self.speech_finishes = getattr(self, "speech_finishes", 0) + 1
+                state.text = sentence
+            return state
+
+    args = _args()
+    args.backend = "mlx"
+    args.translation_source_language = "English"
+    args.translation_target_language = "Chinese"
+    args.vad_silence_sec = 0.7
+    args.vad_force_cut_sec = 1.8
+    args.vad_min_slice_sec = 0.5
+    args.vad_min_active_sec = 0.2
+    args.segment_overlap_sec = 0.0
+    args.segment_hard_cut_sec = 3.0 if hard_cut else 30.0
+    args.subtitle_trace_log = True
+    args.subtitle_trace_log_file = str(tmp_path / "endpoint.jsonl")
+    args.early_translation_stable_hits = 99
+    translator = _FakeTranslator()
+    asr = EndpointASR()
+    events = []
+    with TestClient(_create_app(args, asr, translator=translator)).websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start", "translation_direction": "en2zh", "language": "English"})
+        _receive_until_type(ws, "started")
+        if hard_cut:
+            time.sleep(3.1)
+        ws.send_bytes(np.full(6400, 20_000, dtype="<i2").tobytes())
+        if not buffered:
+            _receive_until_type(ws, "partial")
+        time.sleep(0.55)
+        sample_index = 6400
+        for duration in (900, 1100):
+            sample_index += duration * 16
+            if silence_mode == "client":
+                ws.send_json({"type": "audio_silence", "duration_ms": duration,
+                              "capture_sample_index": sample_index})
+            else:
+                ws.send_bytes(bytes(duration * 16 * 2))
+            # Let the first endpoint run before sending the rest of the silence.
+            time.sleep(0.08)
+        _poll_ws_with_ping(ws, events, lambda event: (
+            event.get("type") == "sentence_translation"
+            and event.get("translation", "").endswith(sentence.split(". ")[-1])
+        ))
+        assert asr.speech_finishes == 1
+        assert translator.calls
+        assert all(call[1:] == ("English", "Chinese") for call in translator.calls)
+        translated_count = len(translator.calls)
+        ws.send_json({"type": "audio_silence", "duration_ms": 2000,
+                      "capture_sample_index": sample_index + 32000})
+        time.sleep(0.1)
+        assert len(translator.calls) == translated_count
 
 
 def test_ws_segment_finalize_does_not_slice_commit_short_english_completed_sentence():

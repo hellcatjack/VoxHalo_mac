@@ -72,7 +72,47 @@ App 的源码位于 `deploy/macos/app/`，使用系统 Swift / AppKit，不依�
 默认安装到 `/Applications/LingoCove.app`，桌面放置一个指向它的入口；可以通过
 `--destination "$HOME/Applications/LingoCove.app"` 改为用户级安装。
 重建前先退出 App。安装器校验已有应用标识，不覆盖其他应用或桌面同名文件。
-本机构建使用临时签名，未做 Developer ID 签名或 Apple 公证；这不是用于任意 Mac 分发的安装包。
+未配置证书时，本机构建仍使用临时签名并输出警告。需要持续保留本机隐私授权时，
+请使用下述固定签名身份。开发机的自签名证书不等于 Developer ID 签名或 Apple 公证，
+不能代替面向任意 Mac 公开分发时的签名与公证流程。
+
+### 本机更新时保留签名身份
+
+临时签名（`codesign --sign -`）的指定要求绑定具体代码哈希，重新编译会改变身份。
+固定证书签名可让新版满足旧版的身份要求；是否继续授予某项隐私权限最终仍由 macOS 决定。
+参见 Apple 的 [代码身份说明](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)
+及 [自签名身份说明](https://developer.apple.com/library/archive/technotes/tn2206/)。
+
+构建脚本依次使用 `--signing-identity`、`LINGOCOVE_SIGNING_IDENTITY` 环境变量，
+或 `~/Library/Application Support/LingoCove/build-signing.json` 中保存的证书。
+本机配置格式如下，`identity` 使用证书的 40 位 SHA-1 指纹；私钥只保存在钥匙串中：
+
+```json
+{
+  "version": 1,
+  "identity": "填写签名证书的40位SHA1指纹",
+  "keychain": "/Users/your-user/Library/Keychains/login.keychain-db"
+}
+```
+
+可以使用现有 Apple 代码签名证书，或通过“钥匙串访问”的证书助理创建本机专用
+代码签名证书。私钥首次供 `/usr/bin/codesign` 使用时，macOS 可能要求在系统窗口
+授权。不要将钥匙串密码、私钥或 PKCS#12 文件放入仓库。已保存的证书配置无效，
+或对应私钥不可用时，构建会失败，不会静默退回临时签名。
+
+先在独立目录构建，服务路径必须在签名前写入；不要在签名后复制或修改 App 资源：
+
+```bash
+../.venv/bin/python tools/build_macos_app.py \
+  --destination ../dist/local/LingoCove.app \
+  --service-root /absolute/path/to/VoxBridge
+```
+
+首次从临时签名切换到固定证书后，通常仍需为这个新身份授权一次。后续更新加上
+`--require-same-identity-as /Applications/LingoCove.app`，构建器会拒绝不满足旧版
+证书身份要求的新包。退出旧 App 后替换整个已签名包，不要重新临时签名。
+`--ad-hoc` 仅用于明确需要临时签名的测试。此流程不修改 TCC 数据库，不关闭
+SIP/Gatekeeper，也不自动点击受保护的授权窗口。
 
 本仓库只提供当前完整系统，未包含早期 Zipformer 网页原型。旧 VoxHalo 字幕客户端保存在 Git 历史和 `backup/pre-local-system-2026-09-14` 分支。
 

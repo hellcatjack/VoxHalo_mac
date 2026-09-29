@@ -78,7 +78,7 @@ extension NSColor {
         let vertical = min(8, max(3, fontSize * 0.1))
         return inkRects.enumerated().compactMap { index, ink in
             var bottom = ink.minY - vertical, top = ink.maxY + vertical
-            // Keep a gap between adjacent boxes even at very small fitted sizes.
+            // Keep a gap between adjacent boxes at small user-selected sizes.
             // Never shrink into the glyphs or double-paint translucent backgrounds.
             if index > 0 {
                 let gap = inkRects[index - 1].minY - ink.maxY
@@ -95,44 +95,22 @@ extension NSColor {
         }
     }
     static func layout(text: String, preferences: SubtitlePreferences, screen: CGRect, fitCompleteText: Bool = false) -> Layout? {
-        var style = preferences.normalized()
+        let style = preferences.normalized()
         let safe = SubtitlePreferences.frame(in: screen, size: screen.size, horizontal: 0, vertical: 0)
         let inset = padding(style)
         guard safe.width > 2 * inset + 24, safe.height > 2 * inset + 24 else { return nil }
-        // Preserve the chosen size whenever possible, while fitting a complete line
-        // even with a large shadow or after moving to a smaller monitor.
-        style.fontSize = min(style.fontSize, max(12, min((safe.height - 2 * inset) / 2, (safe.width - 2 * inset) / 2)))
-        var font = font(style)
-        var width = min(safe.width, max(2 * inset + font.pointSize * 2, safe.width * style.widthFraction))
-        var textWidth = width - 2 * inset
+        // Font size is exclusively the user's setting. Grow the caption frame
+        // or paginate when text is long; never shrink typography to fit content.
+        let font = font(style)
+        let width = min(safe.width, max(2 * inset + font.pointSize * 2, safe.width * style.widthFraction))
+        let textWidth = width - 2 * inset
         let lineHeight = font.ascender - font.descender + font.leading + 4
         let availableHeight = safe.height - 2 * inset
-        var textHeight = min(availableHeight, max(lineHeight, min(safe.height * 0.35, height(text: text, font: font, width: textWidth))))
-        if fitCompleteText {
-            func fittingSize(width: CGFloat, height limit: CGFloat) -> CGFloat {
-                var lower: CGFloat = 1, upper = style.fontSize
-                for _ in 0..<14 {
-                    let middle = (lower + upper) / 2
-                    var candidate = style; candidate.fontSize = middle
-                    if height(text: text, font: Self.font(candidate), width: width) <= limit { lower = middle }
-                    else { upper = middle }
-                }
-                return lower
-            }
-            let limit = min(availableHeight, max(lineHeight, safe.height * 0.35))
-            if height(text: text, font: font, width: textWidth) > limit {
-                var size = fittingSize(width: textWidth, height: limit)
-                if size < 12 {
-                    width = safe.width; textWidth = width - 2 * inset
-                    size = fittingSize(width: textWidth, height: availableHeight)
-                }
-                style.fontSize = size; font = Self.font(style)
-            }
-            textHeight = min(availableHeight, height(text: text, font: font, width: textWidth))
-        }
+        let limit = fitCompleteText ? availableHeight : min(availableHeight, max(lineHeight, safe.height * 0.35))
+        let textHeight = min(limit, height(text: text, font: font, width: textWidth))
         let frame = SubtitlePreferences.frame(in: screen, size: CGSize(width: width, height: textHeight + 2 * inset),
                                               horizontal: style.horizontalPosition, vertical: style.verticalPosition)
-        let pages = fitCompleteText ? [text] : pages(text: text, font: font, width: frame.width - 2 * inset, height: frame.height - 2 * inset)
+        let pages = pages(text: text, font: font, width: frame.width - 2 * inset, height: frame.height - 2 * inset)
         return Layout(preferences: style, frame: frame, pages: pages)
     }
     static func readingSeconds(_ text: String) -> Double {
@@ -156,10 +134,7 @@ extension NSColor {
         needsDisplay = true
     }
     func apply(text: String, preferences: SubtitlePreferences) {
-        var normalized = preferences.normalized()
-        // Layout may reduce the rendered size to keep a whole spoken unit on
-        // screen. The user's saved font-size preference remains untouched.
-        if preferences.fontSize.isFinite { normalized.fontSize = min(normalized.fontSize, max(1, preferences.fontSize)) }
+        let normalized = preferences.normalized()
         guard self.text != text || self.preferences != normalized else { return }
         self.text = text; self.preferences = normalized
         setAccessibilityElement(true); setAccessibilityRole(.staticText)
@@ -223,6 +198,7 @@ extension NSColor {
     private var liveText = ""
     private var identity: CompletedSubtitleState.Identity?
     private var synchronized = false
+    private var readingManaged = false
     private var active = false
     private var preview = false
     private var observer: NSObjectProtocol?
@@ -249,12 +225,13 @@ extension NSColor {
         // Calculate from the current caption even when hidden; moving a hidden
         // subtitle must not restore an old frame or disturb playback identity.
         let layout = SubtitleTextLayout.layout(text: liveText, preferences: preferences,
-            screen: screen.frame, fitCompleteText: synchronized && !preview)
+            screen: screen.frame, fitCompleteText: (synchronized || readingManaged) && !preview)
         return preferences.adjusted(for: action, screenHeight: Double(screen.frame.height), captionHeight: Double(layout?.frame.height ?? 0))
     }
-    func setLiveText(_ text: String, identity: CompletedSubtitleState.Identity?, synchronized: Bool = false, active: Bool) {
-        guard text != liveText || identity != self.identity || synchronized != self.synchronized || active != self.active else { return }
-        liveText = text; self.identity = identity; self.synchronized = synchronized; self.active = active
+    func setLiveText(_ text: String, identity: CompletedSubtitleState.Identity?, synchronized: Bool = false, readingManaged: Bool = false, active: Bool) {
+        guard text != liveText || identity != self.identity || synchronized != self.synchronized || readingManaged != self.readingManaged || active != self.active else { return }
+        if readingManaged != self.readingManaged { lastLayout = nil }
+        liveText = text; self.identity = identity; self.synchronized = synchronized; self.readingManaged = readingManaged; self.active = active
         if active { preview = false }
         render()
     }
@@ -271,7 +248,8 @@ extension NSColor {
         if panel.isVisible { panel.orderOut(nil) }
     }
     private func render() {
-        let text = preview ? NativeLocalization.text("字幕样式预览") + "\n" + NativeLocalization.text("这是翻译字幕的显示效果。") : (active ? liveText : "")
+        let content = active ? liveText : ""
+        let text = SubtitlePresentation.singleLine(preview ? NativeLocalization.text("这是翻译字幕的显示效果。") : content)
         guard !text.isEmpty, let screen = SubtitleDisplays.selected(preferences.screenID) else { hide(); return }
         let key = LayoutKey(text: text, identity: identity, synchronized: synchronized, preferences: preferences, screen: screen.frame)
         guard lastLayout != key else { return }
@@ -295,13 +273,13 @@ extension NSColor {
         lastLayout = key
         generation = UUID(); let run = generation
         pageTask?.cancel(); pageTask = nil
-        guard let layout = SubtitleTextLayout.layout(text: text, preferences: preferences, screen: screen.frame, fitCompleteText: synchronized && !preview) else { hide(); return }
+        guard let layout = SubtitleTextLayout.layout(text: text, preferences: preferences, screen: screen.frame, fitCompleteText: (synchronized || readingManaged) && !preview) else { hide(); return }
         let style = layout.preferences, frame = layout.frame, pages = layout.pages
         if panel.frame != frame { panel.setFrame(frame, display: false) }
         textView.frame = CGRect(origin: .zero, size: frame.size)
         textView.apply(text: pages.first ?? "", preferences: style)
         updateVisibility()
-        if pages.count > 1 && (!synchronized || preview) {
+        if pages.count > 1 && (!readingManaged || preview) {
             pageTask = Task { [weak self] in
                 for index in 1..<pages.count {
                     do { try await Task.sleep(nanoseconds: UInt64(SubtitleTextLayout.readingSeconds(pages[index - 1]) * 1_000_000_000)) }

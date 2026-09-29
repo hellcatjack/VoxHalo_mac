@@ -19,6 +19,25 @@ class FakeClock:
         self.value += seconds
 
 
+def test_diagnostics_do_not_change_release_or_source_clock():
+    clock = FakeClock(0)
+    buffer = RevisionStableTTSBuffer(stable_sec=3, require_confirmation=True, clock=clock)
+    buffer.register('s', 1, 0)
+    clock.advance(1)
+    buffer.mark_ready('s', 1, '译文。', 'Chinese')
+    clock.advance(2)
+    for _ in range(5):
+        row = buffer.diagnostics()[0]
+        assert row['release_policy'] == 'revision_confirmation'
+        assert row['source_quiet_age_ms'] == 3000
+        assert row['translation_ready_age_ms'] == 2000
+        assert row['remaining_ms'] is None
+        assert not row['offered']
+    assert buffer.drain() == []
+    buffer.confirm_revision('s', 1)
+    assert buffer.drain()[0].sentence_id == 's'
+
+
 @pytest.mark.parametrize('seal', [False, True])
 def test_new_revision_cannot_inherit_confirmation_or_final_seal(seal):
     clock = FakeClock(0)
@@ -545,3 +564,48 @@ def test_stability_buffer_reset_discards_all_session_state():
     clock.advance(3.0)
 
     assert [item.sentence_id for item in buffer.drain()] == ["s2"]
+
+
+def test_confirmed_word_and_boundary_history_is_reused_before_translation_registration():
+    clock = FakeClock(10)
+    buffer = RevisionStableTTSBuffer(stable_sec=3, require_confirmation=True,
+                                    defer_commit=True, clock=clock)
+    buffer.register('s', 1, 0)
+    buffer.mark_ready('s', 1, '完整译文。', 'Chinese')
+    buffer.confirm_revision('s', 1, evidence_age_sec=2.5)
+    assert buffer.next_deadline() == pytest.approx(10.5)
+    assert not buffer.drain()
+    clock.advance(.5)
+    assert [x.sentence_id for x in buffer.drain()] == ['s']
+    assert buffer.can_commit('s', 1)
+    assert buffer.commit('s', 1)
+
+
+def test_revised_or_withdrawn_source_never_inherits_old_history():
+    clock = FakeClock(10)
+    buffer = RevisionStableTTSBuffer(stable_sec=3, require_confirmation=True,
+                                    defer_commit=True, clock=clock)
+    buffer.register('s', 1, 0)
+    buffer.mark_ready('s', 1, '旧译文。', 'Chinese')
+    buffer.confirm_revision('s', 1, evidence_age_sec=8)
+    assert buffer.drain()
+    buffer.revoke_confirmation('s', 1)
+    assert not buffer.can_commit('s', 1)
+    buffer.retry_pending('s', 1)
+    buffer.confirm_revision('s', 1, evidence_age_sec=0)
+    assert not buffer.drain()
+    buffer.register('s', 2, 0)
+    buffer.mark_ready('s', 2, '新译文，保留所有尾部。', 'Chinese')
+    clock.advance(10)
+    assert not buffer.drain()
+    assert not buffer.confirm_revision('s', 1, evidence_age_sec=20)
+    assert not buffer.drain()
+    buffer.confirm_revision('s', 2, evidence_age_sec=0)
+    assert [x.revision for x in buffer.drain()] == [2]
+
+
+@pytest.mark.parametrize('age', [-1, float('inf'), float('nan')])
+def test_invalid_confirmation_history_is_rejected(age):
+    buffer = RevisionStableTTSBuffer(stable_sec=3)
+    with pytest.raises(ValueError):
+        buffer.confirm_revision('s', 1, evidence_age_sec=age)

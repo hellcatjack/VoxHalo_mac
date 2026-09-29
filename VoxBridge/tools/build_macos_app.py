@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -16,7 +17,58 @@ SOURCES = ROOT / 'deploy/macos/app'
 APP_NAME = 'LingoCove.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
 APP_VERSION = '1.0.0'
-APP_BUILD = '29'
+APP_BUILD = '38'
+
+
+def signing_configuration(identity: str | None = None, ad_hoc: bool = False) -> tuple[str, str | None]:
+    """Keep local signing identity stable; never silently downgrade a saved key."""
+    explicit = identity or os.environ.get('LINGOCOVE_SIGNING_IDENTITY')
+    if ad_hoc:
+        if explicit:
+            raise ValueError('--ad-hoc cannot be combined with a signing identity')
+        return '-', None
+    if explicit:
+        if explicit == '-':
+            raise ValueError('Use --ad-hoc explicitly for temporary test signatures')
+        return explicit, None
+    path = Path.home() / 'Library/Application Support/LingoCove/build-signing.json'
+    if path.exists():
+        config = json.loads(path.read_text())
+        fingerprint = config.get('identity', '')
+        if config.get('version') != 1 or not isinstance(fingerprint, str) or not re.fullmatch(r'[0-9A-Fa-f]{40}', fingerprint):
+            raise ValueError(f'Invalid signing configuration: {path}')
+        keychain = config.get('keychain')
+        if keychain is not None and (not isinstance(keychain, str) or not Path(keychain).is_absolute()):
+            raise ValueError(f'Invalid signing keychain: {path}')
+        return fingerprint, keychain
+    print('Warning: no persistent signing identity configured; this ad-hoc build may require privacy permission again after updates.')
+    return '-', None
+
+
+def designated_requirement(app: Path) -> str:
+    result = subprocess.run(['/usr/bin/codesign', '-dr', '-', str(app)],
+                            capture_output=True, text=True, check=True)
+    for line in (result.stdout + '\n' + result.stderr).splitlines():
+        if line.startswith('designated => '):
+            requirement = line.removeprefix('designated => ').strip()
+            if 'cdhash ' in requirement or not any(term in requirement for term in ('anchor ', 'certificate ')):
+                raise ValueError('The reference App needs a certificate-backed stable signing identity first.')
+            return requirement
+    raise ValueError(f'No certificate-backed designated requirement found in {app}')
+
+
+def sign_bundle(bundle: Path, identity: str, keychain: str | None,
+                requirement: str | None = None) -> None:
+    command = ['/usr/bin/codesign', '--force', '--sign', identity]
+    if keychain:
+        command += ['--keychain', keychain]
+    # A local self-signed identity has no Apple timestamp service requirement.
+    # Developer ID signing keeps codesign's normal timestamp behavior.
+    command.append(str(bundle))
+    subprocess.run(command, check=True)
+    subprocess.run(['/usr/bin/codesign', '--verify', '--strict', str(bundle)], check=True)
+    if requirement:
+        subprocess.run(['/usr/bin/codesign', '--verify', '--strict', '-R', '=' + requirement, str(bundle)], check=True)
 
 
 def release_metadata(directory: Path) -> dict:
@@ -33,8 +85,17 @@ def release_metadata(directory: Path) -> dict:
     return metadata
 
 
-def build(destination: Path, desktop_link: bool, release_payload: Path | None = None):
+def build(destination: Path, desktop_link: bool, release_payload: Path | None = None,
+          signing_identity: str | None = None, ad_hoc: bool = False,
+          service_root: Path | None = None, require_same_identity_as: Path | None = None):
     metadata = release_metadata(release_payload) if release_payload else None
+    if release_payload and service_root:
+        raise ValueError('--service-root applies only to local development Apps')
+    root = (service_root or ROOT).expanduser().resolve()
+    if not release_payload and not (root / 'macos.sh').is_file():
+        raise ValueError(f'Invalid service root: {root}')
+    identity, keychain = signing_configuration(signing_identity, ad_hoc)
+    requirement = designated_requirement(require_same_identity_as) if require_same_identity_as else None
     destination = destination.expanduser().absolute()
     if destination.suffix != '.app':
         raise ValueError('目标路径必须以 .app 结尾。')
@@ -95,7 +156,7 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
                 shutil.copy2(release_payload / name, resources / name)
             shutil.copytree(release_payload / 'licenses', resources / 'licenses')
         else:
-            (resources/'installation.json').write_text(json.dumps({'service_root': str(ROOT)}, ensure_ascii=False))
+            (resources/'installation.json').write_text(json.dumps({'service_root': str(root)}, ensure_ascii=False))
         info = {
             'CFBundleIdentifier': BUNDLE_ID,
             'CFBundleName': 'LingoCove',
@@ -117,8 +178,7 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
         }
         (contents/'Info.plist').write_bytes(plistlib.dumps(info))
         (contents/'PkgInfo').write_bytes(b'APPL????')
-        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(bundle)], check=True)
-        subprocess.run(['/usr/bin/codesign', '--verify', '--strict', str(bundle)], check=True)
+        sign_bundle(bundle, identity, keychain, requirement)
         previous = staging/'previous.app'
         if destination.exists():
             destination.rename(previous)
@@ -136,7 +196,8 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
         else:
             link.symlink_to(destination, target_is_directory=True)
     print(f'已安装：{destination}')
-    print('首次打开后在 App 内安装模型。' if metadata else f'本地模型与服务：{ROOT}')
+    print('首次打开后在 App 内安装模型。' if metadata else f'本地模型与服务：{root}')
+    print(f'签名身份：{identity}')
 
 
 def main():
@@ -145,8 +206,14 @@ def main():
     parser.add_argument('--desktop-link', action='store_true')
     parser.add_argument('--release-payload', type=Path,
                         help='Verified standalone runtime.tar.gz, release.json and licenses directory')
+    parser.add_argument('--signing-identity', help='Persistent code-signing identity name or certificate SHA-1')
+    parser.add_argument('--ad-hoc', action='store_true', help='Explicit temporary test signing; may reset privacy permissions')
+    parser.add_argument('--service-root', type=Path, help='Local service folder, recorded before the App is signed')
+    parser.add_argument('--require-same-identity-as', type=Path,
+                        help='Reject a build that fails the previous signed App identity requirement')
     args = parser.parse_args()
-    build(args.destination, args.desktop_link, args.release_payload)
+    build(args.destination, args.desktop_link, args.release_payload, args.signing_identity,
+          args.ad_hoc, args.service_root, args.require_same_identity_as)
 
 
 if __name__ == '__main__':

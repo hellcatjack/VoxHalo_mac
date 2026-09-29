@@ -13,6 +13,7 @@ import AppKit
     private let enabled = NSButton(checkboxWithTitle: "显示翻译字幕", target: nil, action: nil)
     private let preview = NSButton(checkboxWithTitle: "预览字幕样式（仅在未传译时可用）", target: nil, action: nil)
     private let font = NSPopUpButton()
+    private let mode = NSPopUpButton()
     private let displays = NSPopUpButton()
     private let position = NSPopUpButton()
     private let color = NSColorWell()
@@ -84,6 +85,11 @@ import AppKit
             line.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
             view.widthAnchor.constraint(equalToConstant: 420).isActive = true
         }
+        mode.addItems(withTitles: ["阅读优先", "跟随朗读"])
+        mode.setAccessibilityLabel("字幕节奏"); add("字幕节奏", mode)
+        let readingHint = NSTextField(wrappingLabelWithString: "阅读优先：完整译文提前显示，可随后修订；短句合屏，每屏至少 3 秒，长文本按阅读量分页。朗读独立运行。")
+        readingHint.font = .systemFont(ofSize: 11); readingHint.textColor = .secondaryLabelColor
+        body.addArrangedSubview(readingHint); readingHint.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         for name in NSFontManager.shared.availableFonts.sorted(by: {
             (NSFont(name: $0, size: 12)?.displayName ?? $0).localizedStandardCompare(NSFont(name: $1, size: 12)?.displayName ?? $1) == .orderedAscending
         }) {
@@ -108,7 +114,7 @@ import AppKit
         addSlider("verticalPosition", label: "垂直位置", range: 0...1, to: add)
         addSlider("widthFraction", label: "字幕宽度", range: 0.25...1, to: add)
         body.addArrangedSubview(preview)
-        let hint = NSTextField(wrappingLabelWithString: "垂直 100% 可覆盖 Dock。字幕跟随本机实际朗读，语音段整段显示，空间不足时自动缩小；本机不播放时显示最新完整译文。")
+        let hint = NSTextField(wrappingLabelWithString: "垂直 100% 可覆盖 Dock。跟随朗读模式按实际音频切换；阅读优先模式按原文顺序显示，积压时保留全部内容。")
         hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
         body.addArrangedSubview(hint); hint.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         errorLabel.font = .systemFont(ofSize: 11); errorLabel.textColor = .systemRed
@@ -121,7 +127,7 @@ import AppKit
         let divider = NSBox(); divider.boxType = .separator
         body.addArrangedSubview(divider); divider.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         body.addArrangedSubview(shortcuts); shortcuts.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
-        for control in [enabled, shadow, background, font, displays, position, color, shadowColor, colorHex, shadowHex] as [NSControl] {
+        for control in [enabled, mode, shadow, background, font, displays, position, color, shadowColor, colorHex, shadowHex] as [NSControl] {
             control.target = self; control.action = #selector(changed(_:))
         }
         preview.target = self; preview.action = #selector(previewChanged); preview.isEnabled = !active
@@ -166,6 +172,7 @@ import AppKit
     private func sync() {
         syncing = true; defer { syncing = false }
         let p = preferences
+        mode.selectItem(at: p.mode == .reading ? 0 : 1)
         enabled.state = p.enabled ? .on : .off; shadow.state = p.shadowEnabled ? .on : .off
         background.state = p.backgroundEnabled ? .on : .off
         if !font.itemArray.contains(where: { $0.representedObject as? String == p.fontName }) {
@@ -200,6 +207,7 @@ import AppKit
     @objc private func changed(_ sender: NSControl) {
         guard !syncing else { return }
         var p = preferences
+        p.mode = mode.indexOfSelectedItem == 1 ? .playback : .reading
         p.enabled = enabled.state == .on; p.shadowEnabled = shadow.state == .on
         p.backgroundEnabled = background.state == .on
         p.fontName = font.selectedItem?.representedObject as? String ?? p.fontName

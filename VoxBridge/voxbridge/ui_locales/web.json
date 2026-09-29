@@ -94,7 +94,8 @@
     "login.username": "Username",
     "login.password": "Password",
     "login.submit": "Sign in",
-    "login.error": "Incorrect username or password."
+    "login.error": "Incorrect username or password.",
+    "monitor.translationFailed": "This sentence could not be translated. See the monitor."
   },
   "zh": {
     "common.interface": "界面语言",
@@ -191,7 +192,8 @@
     "login.username": "用户名",
     "login.password": "密码",
     "login.submit": "登录",
-    "login.error": "用户名或密码错误。"
+    "login.error": "用户名或密码错误。",
+    "monitor.translationFailed": "此句翻译失败，请查看监控记录。"
   },
   "ja": {
     "common.interface": "表示言語",
@@ -288,7 +290,8 @@
     "login.username": "ユーザー名",
     "login.password": "パスワード",
     "login.submit": "ログイン",
-    "login.error": "ユーザー名またはパスワードが正しくありません。"
+    "login.error": "ユーザー名またはパスワードが正しくありません。",
+    "monitor.translationFailed": "この文は翻訳できませんでした。モニターを確認してください。"
   },
   "fr": {
     "common.interface": "Langue de l’interface",
@@ -385,7 +388,8 @@
     "login.username": "Nom d’utilisateur",
     "login.password": "Mot de passe",
     "login.submit": "Se connecter",
-    "login.error": "Nom d’utilisateur ou mot de passe incorrect."
+    "login.error": "Nom d’utilisateur ou mot de passe incorrect.",
+    "monitor.translationFailed": "Cette phrase n’a pas pu être traduite. Consultez le moniteur."
   },
   "es": {
     "common.interface": "Idioma de la interfaz",
@@ -482,7 +486,8 @@
     "login.username": "Nombre de usuario",
     "login.password": "Contraseña",
     "login.submit": "Iniciar sesión",
-    "login.error": "Nombre de usuario o contraseña incorrectos."
+    "login.error": "Nombre de usuario o contraseña incorrectos.",
+    "monitor.translationFailed": "No se pudo traducir esta frase. Consulte el monitor."
   },
   "it": {
     "common.interface": "Lingua dell’interfaccia",
@@ -579,7 +584,8 @@
     "login.username": "Nome utente",
     "login.password": "Password",
     "login.submit": "Accedi",
-    "login.error": "Nome utente o password errati."
+    "login.error": "Nome utente o password errati.",
+    "monitor.translationFailed": "Impossibile tradurre questa frase. Consulta il monitor."
   },
   "pt": {
     "common.interface": "Idioma da interface",
@@ -676,7 +682,8 @@
     "login.username": "Nome de usuário",
     "login.password": "Senha",
     "login.submit": "Entrar",
-    "login.error": "Nome de usuário ou senha incorretos."
+    "login.error": "Nome de usuário ou senha incorretos.",
+    "monitor.translationFailed": "Não foi possível traduzir esta frase. Consulte o monitor."
   },
   "hi": {
     "common.interface": "इंटरफ़ेस की भाषा",
@@ -773,6 +780,7 @@
     "login.username": "उपयोगकर्ता नाम",
     "login.password": "पासवर्ड",
     "login.submit": "साइन इन करें",
-    "login.error": "उपयोगकर्ता नाम या पासवर्ड गलत है।"
+    "login.error": "उपयोगकर्ता नाम या पासवर्ड गलत है।",
+    "monitor.translationFailed": "इस वाक्य का अनुवाद नहीं हो सका। मॉनिटर देखें।"
   }
 }

@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 
 struct SubtitlePreferences: Codable, Equatable {
+    enum Mode: String, Codable { case reading, playback }
+    var mode: Mode = .reading
     var enabled: Bool = true
     var fontName: String = "PingFangSC-Semibold"
     var fontSize: Double = 36
@@ -72,6 +74,7 @@ struct SubtitlePreferences: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case mode
         case enabled, fontName, fontSize, textColorHex, shadowEnabled, backgroundEnabled, shadowColorHex
         case shadowOpacity, shadowBlur, shadowOffset, screenID
         case horizontalPosition, verticalPosition, widthFraction
@@ -80,6 +83,7 @@ struct SubtitlePreferences: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let defaults = SubtitlePreferences()
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        mode = (try? values.decode(Mode.self, forKey: .mode)) ?? defaults.mode
         enabled = (try? values.decode(Bool.self, forKey: .enabled)) ?? defaults.enabled
         fontName = (try? values.decode(String.self, forKey: .fontName)) ?? defaults.fontName
         fontSize = (try? values.decode(Double.self, forKey: .fontSize)) ?? defaults.fontSize

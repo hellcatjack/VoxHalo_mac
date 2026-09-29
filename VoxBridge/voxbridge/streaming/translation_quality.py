@@ -20,7 +20,7 @@ def translation_output_issue(source: str, output: str) -> str:
     policy_markers = (
         r"(?:翻译时|翻译原则|翻译要求|翻译后的结果|翻译后的文本)",
         r"(?:忠实[于於]?原文|不添加任何内容|不得增删|不删除任何信息)",
-        r"(?:无需[进进行]*解释|不要额外解释|只[需需要]*输出|仅为翻译)",
+        r"(?:无需(?:进行)?(?:任何|额外)?解释|不要额外解释|只[需需要]*输出|仅为翻译)",
         r"(?:according to (?:the )?(?:requirements|instructions)|translation principles)",
         r"(?:faithful to the (?:original|source)|without (?:adding|omitting))",
         r"(?:only (?:output|provide) the translat|without additional explanation)",

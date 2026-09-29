@@ -24,6 +24,7 @@ import CoreText
                 let text = String(repeating: "完整译文。Complete translation. ", count: 10)
                 let layout = SubtitleTextLayout.layout(text: text, preferences: style, screen: CGRect(origin: .zero, size: size))!
                 assert(layout.pages.joined() == text)
+                assert(layout.preferences.fontSize == pointSize, "Content and display size must never change the selected font size")
                 let inset = SubtitleTextLayout.padding(layout.preferences)
                 for page in layout.pages {
                     let attributes = SubtitleTextLayout.attributed(page, font: SubtitleTextLayout.font(layout.preferences))
@@ -116,17 +117,24 @@ import CoreText
         assert(overlay.textView.accessibilityValue() as? String == expected[0], "a repeated sentence must restart on page one")
         overlay.setLiveText("", identity: nil, active: false)
         assert(!overlay.panel.isVisible && overlay.textView.accessibilityValue() as? String == "")
+        let fitted = SubtitleTextLayout.layout(text: long, preferences: large, screen: NSScreen.screens[0].frame, fitCompleteText: true)!
+        assert(fitted.preferences.fontSize == 144 && fitted.pages.count > 1)
+        assert(fitted.pages.joined() == long, "Fixed-size overflow pagination must preserve all text")
         overlay.setLiveText(long, identity: .init(sentenceID: "spoken", revision: 1), synchronized: true, active: true)
         overlay.panel.orderOut(nil)
-        assert(overlay.textView.accessibilityValue() as? String == long, "the entire audible chunk must be visible without timed pagination")
-        try await Task.sleep(nanoseconds: 3_100_000_000)
-        assert(overlay.textView.accessibilityValue() as? String == long, "a slow or paused TTS must not lose its caption to a wall-clock timer")
-        let fitted = SubtitleTextLayout.layout(text: long, preferences: large, screen: NSScreen.screens[0].frame, fitCompleteText: true)!
-        assert(fitted.pages == [long])
+        assert(overlay.textView.accessibilityValue() as? String == fitted.pages[0])
         let inset = SubtitleTextLayout.padding(fitted.preferences)
-        let setter = CTFramesetterCreateWithAttributedString(SubtitleTextLayout.attributed(long, font: SubtitleTextLayout.font(fitted.preferences)))
-        let fittedPath = CGPath(rect: CGRect(origin: .zero, size: CGSize(width: fitted.frame.width - 2 * inset, height: fitted.frame.height - 2 * inset)), transform: nil)
-        assert(CTFrameGetVisibleStringRange(CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), fittedPath, nil)).length == (long as NSString).length)
+        for page in fitted.pages {
+            let setter = CTFramesetterCreateWithAttributedString(SubtitleTextLayout.attributed(page, font: SubtitleTextLayout.font(fitted.preferences)))
+            let fittedPath = CGPath(rect: CGRect(origin: .zero, size: CGSize(width: fitted.frame.width - 2 * inset, height: fitted.frame.height - 2 * inset)), transform: nil)
+            assert(CTFrameGetVisibleStringRange(CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), fittedPath, nil)).length == (page as NSString).length)
+        }
+        overlay.setLiveText("完整译文。", identity: .init(sentenceID: "short-spoken", revision: 1), synchronized: true, active: true)
+        try await Task.sleep(nanoseconds: 3_100_000_000)
+        assert(overlay.textView.accessibilityValue() as? String == "完整译文。", "A complete caption must stay with its spoken unit")
+        overlay.apply(preferences: settings)
+        overlay.setLiveText("第一句。\n\n第二句。", identity: .init(sentenceID: "reading", revision: 1), readingManaged: true, active: true)
+        assert(overlay.textView.accessibilityValue() as? String == "第一句。 第二句。", "Overlay must contain translation only, without labels or forced line breaks")
         large.verticalPosition = 1
         overlay.apply(preferences: large); overlay.panel.orderOut(nil)
         assert(overlay.panel.frame.minY == NSScreen.screens[0].frame.minY, "actual panel must cover Dock and reach screen bottom")

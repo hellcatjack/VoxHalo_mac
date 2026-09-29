@@ -61,10 +61,12 @@ from voxbridge.streaming.context_schedule import (
 )
 from voxbridge.streaming.segment_policy import SegmentPolicy
 from voxbridge.streaming.speculative_translation import SpeculativeTranslation, TranslationKey
+from voxbridge.streaming.short_units import split_short_units
 from voxbridge.streaming.submission_policy import DecodeObservation, PendingClausePolicy, StableCandidate
 from voxbridge.streaming.text_pool import dedup_segment_join, trim_prefix_overlap
 from voxbridge.streaming.translation_quality import translation_output_issue, recovery_translation_prompt
 from voxbridge.streaming.spoken_source import unspoken_extension, after_spoken_prefix
+from voxbridge.interpretation.source_commit import SourceCommitCoordinator
 from voxbridge.streaming.semantic_units import repair_semantic_units, open_conditional
 from voxbridge.streaming.church_terms import terminology_hint
 from voxbridge.streaming.vad_support import AudioPreRollBuffer, create_silero_onnx_observer
@@ -134,7 +136,6 @@ from voxbridge.streaming.sentence_rules import (
 from voxbridge.interpretation.translation_queue import run_translation_queue
 from voxbridge.interpretation.transcript import ChineseEnglishTextPolicy, SourceTextPolicy, source_text_policy as make_source_text_policy
 from voxbridge.tts.output import SharedSpeechOutput, SpeechOutput
-from voxbridge.tts.confirmation import SpeechConfirmation
 from voxbridge.translation.service import TranslationService
 from voxbridge.interpretation.contracts import TranslationRequest, TranslationRuntime
 from voxbridge.languages import normalize_direction, pair_for_direction, language_profile, language_capabilities
@@ -2720,7 +2721,9 @@ def _create_app(
             budget_sec=float(getattr(args, "qwen_submission_budget_sec", 8.0)),
         )
         qwen_observation = DecodeObservation()
-        speech_confirmation = SpeechConfirmation()
+        source_commit = SourceCommitCoordinator()
+        source_ledger = source_commit.ledger
+        confirmation_wait_keys = {}
         qwen_candidates: Dict[int, StableCandidate] = {}
 
         source_text_policy: SourceTextPolicy = ChineseEnglishTextPolicy(
@@ -2728,8 +2731,15 @@ def _create_app(
             target_latin_words=int(stable_clause_target_latin_words),
         )
 
-        def _split_subtitle_units(text: str) -> Tuple[List[str], str]:
-            units, tail = source_text_policy.split(text)
+        def _split_subtitle_units(text: str, *, group_final_short_units: bool = False) -> Tuple[List[str], str]:
+            if (group_final_short_units and not subtitle_state.processed_completed_count
+                    and translation_runtime.source_language in {"English", "Chinese"}):
+                # Regrouping an already-submitted/revisable row would change the
+                # existing revision reconciler's unit positions. Only batch a
+                # fresh, finalized input; live reading groups are independent.
+                units, tail = split_short_units(text, splitter=source_text_policy.split, locked=[])
+            else:
+                units, tail = source_text_policy.split(text)
             if engine_binding.id == "zipformer-xl":
                 native_units, tail = split_unpunctuated_chinese(
                     tail, target_chars=int(stable_clause_target_cjk_chars),
@@ -2851,6 +2861,8 @@ def _create_app(
             pending_prefix_text="",
             pending_prefix_segment_id=0,
             pending_prefix_reason="",
+            pending_prefix_silence_ms=0.0,
+            pending_prefix_validated=False,
             pending_prefix_miss_count=0,
             pending_prefix_terminal_text="",
             pending_prefix_is_separate=False,
@@ -3027,6 +3039,7 @@ def _create_app(
             released_sources={},
             covered_sources={},
             supplemented_sources={},
+            pending_additions={},
             ordered=RevisionStableTTSBuffer(
                 stable_sec=tts_revision_stable_sec,
                 latest_revision_grace_sec=tts_latest_revision_grace_sec,
@@ -3947,7 +3960,9 @@ def _create_app(
                 tts_runtime.released_sources.clear()
                 tts_runtime.covered_sources.clear()
                 tts_runtime.supplemented_sources.clear()
-                speech_confirmation.reset()
+                tts_runtime.pending_additions.clear()
+                source_commit.reset()
+                confirmation_wait_keys.clear()
                 tts_runtime.ordered.reset()
                 tts_runtime.last_wait_key = None
                 tts_runtime.stability_wake.set()
@@ -4031,6 +4046,18 @@ def _create_app(
             if not sid:
                 return
             async with tts_transition_lock:
+                # A prepared supplement is still revisable. Recompute a newer
+                # parent revision from actually published coverage, not from
+                # text that only reached translation/synthesis preparation.
+                for extra_id, addition in list(tts_runtime.pending_additions.items()):
+                    parent_id, parent_revision, _, _ = addition
+                    if parent_id == sid and parent_revision < int(revision):
+                        tts_runtime.ordered.mark_failed(extra_id, parent_revision)
+                        del tts_runtime.pending_additions[extra_id]
+                        tts_runtime.stability_wake.set()
+                        _trace_event("tts_pending_addition_replaced",
+                                     sentence_hash8=_opaque_identifier_hash8(extra_id),
+                                     previous_revision=parent_revision, new_revision=int(revision))
                 tts_runtime.source_versions[(sid, int(revision))] = str(source_text)
                 tts_runtime.source_segments[(sid, int(revision))] = int(segment_runtime.id)
                 generation = int(tts_runtime.generation)
@@ -4080,6 +4107,16 @@ def _create_app(
                 generation=generation,
             )
 
+        def _record_published_source(item, source: str) -> None:
+            tts_runtime.released_sources[item.sentence_id] = source
+            tts_runtime.covered_sources.setdefault(item.sentence_id, source)
+            addition = tts_runtime.pending_additions.pop(item.sentence_id, None)
+            if addition is not None:
+                parent_id, _, full_source, extra_source = addition
+                tts_runtime.covered_sources[parent_id] = full_source
+                prior = tts_runtime.supplemented_sources.get(parent_id, "")
+                tts_runtime.supplemented_sources[parent_id] = (prior + " " + extra_source).strip()
+
         async def _publish_tts_ready(items: List[Any]) -> None:
             for item in items:
                 if not _tts_output_active():
@@ -4092,8 +4129,8 @@ def _create_app(
                         if generation != tts_runtime.generation:
                             return
                         tts_runtime.ordered.commit(item.sentence_id, item.revision)
-                        tts_runtime.released_sources[item.sentence_id] = source
-                        tts_runtime.covered_sources.setdefault(item.sentence_id, source)
+                        source_ledger.publish(item.sentence_id, item.revision)
+                        _record_published_source(item, source)
                         app.state.monitor.observe(dict(type="speech_committed", sentence_id=item.sentence_id,
                             revision=item.revision, source=source, translation=item.text))
                         # Compatibility listeners also receive the final tail
@@ -4137,8 +4174,8 @@ def _create_app(
                     # sent. Their irreversible boundary is the job publication.
                     tts_runtime.ordered.commit(item.sentence_id, item.revision)
                     tts_runtime.stability_wake.set()
-                tts_runtime.released_sources[item.sentence_id] = source
-                tts_runtime.covered_sources.setdefault(item.sentence_id, source)
+                _record_published_source(item, source)
+                source_ledger.publish(item.sentence_id, item.revision)
                 tts_runtime.last_wait_key = None
                 _trace_event(
                     "tts_stability_release",
@@ -4262,6 +4299,7 @@ def _create_app(
             reason: str,
             lookahead_tokens: int,
             allow_urgent: bool = True,
+            evidence_age_ms: int | None = None,
         ) -> None:
             def _transition() -> List[Any]:
                 registered = tts_runtime.sentence_orders.get(str(sentence_id or ""))
@@ -4274,7 +4312,8 @@ def _create_app(
                 if current_index is None:
                     return []
                 revision = int(subtitle_state.sentence_items[current_index]["revision"])
-                changed = tts_runtime.ordered.confirm_revision(sentence_id, revision, allow_urgent=allow_urgent)
+                changed = tts_runtime.ordered.confirm_revision(sentence_id, revision, allow_urgent=allow_urgent,
+                    evidence_age_sec=None if evidence_age_ms is None else evidence_age_ms / 1000)
                 if not changed:
                     return []
                 tts_runtime.last_wait_key = None
@@ -4285,6 +4324,7 @@ def _create_app(
                     source_order=int(source_order),
                     revision=revision,
                     allow_urgent=allow_urgent,
+                    evidence_age_ms=evidence_age_ms,
                     reason=str(reason or ""),
                     lookahead_tokens=int(lookahead_tokens),
                     required_lookahead_tokens=int(
@@ -4503,6 +4543,18 @@ def _create_app(
                     )
 
         app.state.native_playback.subscribe(tts_runtime.stability_wake)
+        def _speech_diagnostics():
+            rows = tts_runtime.ordered.diagnostics()
+            for row in rows:
+                wait = confirmation_wait_keys.get(row['sentence_id'])
+                if wait and wait[0] == row['revision']:
+                    row['confirmation_wait_reason'] = wait[1]
+                    row['decode_hits'] = wait[2]
+                    if len(wait) > 3:
+                        row.update(boundary_hits=wait[3], required_hits=wait[4],
+                                   boundary_kind=wait[5], lookahead_tokens=wait[6])
+            return rows
+        app.state.speech_diagnostics = _speech_diagnostics
         tts_runtime.stability_task = asyncio.create_task(_tts_stability_scheduler())
 
         async def _stop_tts_stability_scheduler(*, reason: str) -> None:
@@ -4737,6 +4789,8 @@ def _create_app(
                 )
                 if current_item is not None:
                     await _mark_tts_translation_failed(sentence_id, revision)
+                    await _send_json({"type": "sentence_translation_failed",
+                                      "sentence_id": str(sentence_id), "revision": int(revision)})
                 return ""
             current_item = _current_translation_item(
                 sentence_id,
@@ -4762,6 +4816,9 @@ def _create_app(
                 source_hash8=_hash8(str(sentence_text or "")),
                 delta_chars=len(translated),
             )
+            # Read-only occurrence evidence for presentation. Missing bindings
+            # mean the UI retains the full text; this never commits/cancels TTS.
+            caption_span = source_ledger.binding(str(sentence_id), int(revision))
             await _send_json(
                 {
                     "type": "sentence_translation",
@@ -4770,6 +4827,7 @@ def _create_app(
                     "translation": translated,
                     "seq": int(seq_hint or 0),
                     "is_stable": True,
+                    "source_token_ids": list(caption_span.tokens) if caption_span else None,
                 }
             )
             if sentence_id in tts_runtime.released_sources:
@@ -4783,6 +4841,8 @@ def _create_app(
                 if extra_source:
                     extra_id = f"{sentence_id}:addition:{revision}"
                     await _register_tts_source(extra_id, revision, extra_source)
+                    tts_runtime.pending_additions[extra_id] = (
+                        sentence_id, revision, sentence_text, extra_source)
                     extra_translation = await _translate_sentence_once(
                         extra_source, language, seq_hint, source_language,
                         target_language, direction, sentence_id=extra_id, revision=revision,
@@ -4799,14 +4859,13 @@ def _create_app(
                                      subtitle_state.sentence_items[(item_index or 0) + 1:]]
                         if unspoken_extension(previous_source, sentence_text, following):
                             await _mark_tts_translation_ready(extra_id, revision, extra_translation, target_language)
-                            tts_runtime.covered_sources[sentence_id] = sentence_text
-                            prior = tts_runtime.supplemented_sources.get(sentence_id, "")
-                            tts_runtime.supplemented_sources[sentence_id] = (prior + " " + extra_source).strip()
                             _trace_event("tts_late_addition_recovered", sentence_id=sentence_id,
                                          revision=revision, source_chars=len(extra_source))
                         else:
+                            tts_runtime.pending_additions.pop(extra_id, None)
                             await _mark_tts_translation_failed(extra_id, revision)
                     else:
+                        tts_runtime.pending_additions.pop(extra_id, None)
                         await _mark_tts_translation_failed(extra_id, revision)
             else:
                 # A subsequent ASR row can arrive *after* its preceding row's
@@ -5168,6 +5227,12 @@ def _create_app(
                 snr_db = float(db - float(backend_vad.noise_db))
                 snr_db_last = snr_db
 
+                if subtitle_state.pending_prefix_text:
+                    subtitle_state.pending_prefix_silence_ms = (
+                        float(subtitle_state.pending_prefix_silence_ms) + frame_ms
+                        if snr_db <= float(vad_exit_snr_db) else 0.0
+                    )
+
                 if snr_db >= float(vad_enter_snr_db):
                     backend_vad.speech_confirm_ms = min(3000.0, float(backend_vad.speech_confirm_ms) + frame_ms)
                 else:
@@ -5215,6 +5280,11 @@ def _create_app(
                 return True
             if force:
                 return True
+            if _english_endpoint_needs_long_silence(snapshot):
+                # Keep the decoder and its VAD evidence alive until the existing
+                # forced-silence threshold. Rotating now would strand the held
+                # fragment in pending_prefix if nobody speaks again.
+                return False
             if engine_binding.id == "qwen3-asr" and pair_for_direction(translation_runtime.direction).source.code == "zh":
                 provisional = str(getattr(state, "_voxbridge_vad_provisional_text", "") or "")
                 if _qwen_cjk_endpoint_defer_reason(snapshot) or (
@@ -5238,6 +5308,27 @@ def _create_app(
             if _has_cjk(snapshot):
                 return len(snapshot) >= MIN_CJK_SENTENCE_CHARS
             return len(snapshot) >= 20
+
+        def _english_endpoint_needs_long_silence(text: str) -> bool:
+            if translation_runtime.source_language != "English":
+                return False
+            completed, tail = _split_source_sentences(text)
+            return bool(str(tail or "").strip()) or any(
+                _source_short_english_sentence(
+                    sentence,
+                    min_words=int(early_translation_min_english_words),
+                    min_chars=int(early_translation_min_english_chars),
+                )
+                for sentence in completed
+            )
+
+        def _has_unfinished_mlx_audio(local_state: Any) -> bool:
+            return bool(
+                str(getattr(args, "backend", "")) == "mlx"
+                and int(getattr(local_state, "_voxbridge_stream_decode_count", 0) or 0) > 0
+                and np.asarray(getattr(local_state, "audio_accum", [])).size
+                > int(getattr(local_state, "last_decoded_samples", 0) or 0)
+            )
 
         def _should_commit_tail_on_segment_finalize(reason: str, final_text: str, force_finalize: bool = False) -> bool:
             cut_reason = str(reason or "").strip()
@@ -5592,6 +5683,7 @@ def _create_app(
             nonlocal last_idle_commit_at, last_text_advance_at
             if finish_requested or stop_consumer.is_set():
                 return
+            await _maybe_commit_carried_endpoint()
             snapshot = str(last_text_snapshot or "").strip()
             if not snapshot:
                 return
@@ -5646,6 +5738,40 @@ def _create_app(
                     tentative_before_chars=len(tentative_before.strip()),
                     tentative_after_chars=len(str(tentative_after or "").strip()),
                 )
+
+        async def _maybe_commit_carried_endpoint() -> None:
+            pending = str(subtitle_state.pending_prefix_text or "").strip()
+            if (translation_runtime.source_language != "English"
+                    or not pending or last_text_snapshot or state is None
+                    or float(subtitle_state.pending_prefix_silence_ms) < vad_force_silence_ms
+                    or int(getattr(state, "_voxbridge_stream_decode_count", 0) or 0) > 0):
+                return
+            # A hard cut may occur on the very last word. The old segment has
+            # already been finalized; confirmed silence must release its carry
+            # even though the new decoder has no text (or new audio) to finish.
+            terminal = str(subtitle_state.pending_prefix_terminal_text or pending)
+            validated = bool(subtitle_state.pending_prefix_validated)
+            # This is the carried text itself, not overlapping audio from a
+            # subsequent utterance. Its own boundary anchor must not erase it.
+            subtitle_state.boundary_anchor_text = ""
+            subtitle_state.boundary_anchor_segment_id = 0
+            await _update_sentence_commits(
+                terminal, str(session_force_language or ""), int(seq or 0),
+                force_tail=True, holdback_newest=False, commit_all_completed=True,
+                slice_commit=True, final_reconcile=True,
+            )
+            if validated:
+                await _seal_tts_sources_through_current_segment(reason="carried_silence")
+            _trace_event("carried_endpoint_committed", seq=int(seq or 0),
+                         silence_ms=int(subtitle_state.pending_prefix_silence_ms),
+                         text_chars=len(terminal), validated=validated)
+            subtitle_state.pending_prefix_text = ""
+            subtitle_state.pending_prefix_reason = ""
+            _clear_pending_prefix_boundary_evidence()
+            subtitle_state.commit_base = len(subtitle_state.committed_sentences)
+            subtitle_state.prev_completed_sentences = []
+            _reset_completed_candidate_cursor()
+            _reset_early_translation_holdback_state()
 
         async def _flush_pending_decode_tail(local_state: Any, *, reason: str) -> int:
             tail, tail_samples = decode_pre_roll.prepend_to(
@@ -5865,6 +5991,16 @@ def _create_app(
                     return False
             punct_cut_carry_text = ""
             punct_cut_resolved_end = 0
+            if (reason == "vad_silence" and not force_finalize
+                    and _english_endpoint_needs_long_silence(final_text)):
+                # A final decode may add a short trailing phrase that was absent
+                # from the partial. Preserve that phrase and consecutive silence
+                # instead of rotating into an empty decoder state.
+                _track_text_progress(final_text)
+                _trace_event("segment_finalize_deferred", reason="english_tail_silence",
+                             segment_id=int(segment_runtime.id), seq=int(seq),
+                             silence_ms=int(backend_vad.silence_ms))
+                return False
             if str(reason or "") == "punct_timeout_cut" and int(cut_boundary_end or 0) > 0 and raw_final_text:
                 resolved = _resolve_boundary_for_anchor(raw_final_text, int(cut_boundary_end or 0), punct_cut_pattern)
                 if resolved is not None:
@@ -5892,6 +6028,7 @@ def _create_app(
             finalize_completed_preview, finalize_tail_preview = _split_source_sentences(final_text)
             defer_short_english_slice_commit = bool(
                 str(reason or "") in {"vad_silence", "hard_cut", "punct_timeout_cut"}
+                and not (reason == "vad_silence" and force_finalize)
                 and len(finalize_completed_preview) == 1
                 and not str(finalize_tail_preview or "").strip()
                 and _source_short_english_sentence(
@@ -6025,6 +6162,10 @@ def _create_app(
             subtitle_state.pending_prefix_text = str(pending_prefix or "")
             subtitle_state.pending_prefix_segment_id = int(getattr(segment_runtime, "id", 0) or 0)
             subtitle_state.pending_prefix_reason = str(reason or "")
+            subtitle_state.pending_prefix_silence_ms = float(backend_vad.silence_ms)
+            subtitle_state.pending_prefix_validated = bool(
+                not segment_final_redecode or segment_redecode_validated
+            )
             subtitle_state.pending_prefix_miss_count = 0
             subtitle_state.pending_prefix_terminal_text = str(pending_prefix_terminal_text or "")
             subtitle_state.pending_prefix_is_separate = False
@@ -6166,11 +6307,17 @@ def _create_app(
                     float(segment_age_ms),
                     float(signal.get("segment_elapsed_ms", 0.0) or 0.0),
                 )
+            buffered_speech_endpoint = bool(
+                empty_mlx_window
+                and translation_runtime.source_language == "English"
+                and signal.get("force", False)
+                and _has_unfinished_mlx_audio(state)
+            )
             decision = segment_policy.evaluate(
                 silence_ms=float(signal.get("silence_ms", 0.0) or 0.0),
                 segment_age_ms=float(segment_age_ms),
                 segment_active_ms=float(signal.get("segment_active_ms", 0.0) or 0.0),
-                has_pending_text=bool(snapshot),
+                has_pending_text=bool(snapshot or buffered_speech_endpoint),
                 vad_candidate=bool(signal.get("candidate", False)),
                 vad_force=bool(signal.get("force", False)),
             )
@@ -6201,7 +6348,8 @@ def _create_app(
             if not cut_reason:
                 return
 
-            if cut_reason == "vad_silence" and not _text_ready_for_vad_cut(snapshot, force=bool(force_finalize)):
+            if (cut_reason == "vad_silence" and not buffered_speech_endpoint
+                    and not _text_ready_for_vad_cut(snapshot, force=bool(force_finalize))):
                 _trace_event(
                     "segment_cut_deferred",
                     reason=str(cut_reason),
@@ -6261,17 +6409,6 @@ def _create_app(
         ) -> str:
             seq_no = int(seq_hint or 0)
             decoder_text = str(getattr(state, "text", "") or "").strip()
-            if native_pcm_enabled and translation_runtime.source_language == "English":
-                # Revoke before any await can allow an old prepared chunk to
-                # reach the shared encoder. Display holdback is not ASR proof.
-                for current in subtitle_state.sentence_items[-64:]:
-                    sid, revision = str(current["id"]), int(current["revision"])
-                    if (tts_runtime.source_segments.get((sid, revision)) == int(segment_runtime.id)
-                            and str(current["zh"]) not in decoder_text):
-                        if tts_runtime.ordered.revoke_confirmation(sid, revision):
-                            tts_runtime.stability_wake.set()
-                            _trace_event("tts_confirmation_revoked", sentence_hash8=_opaque_identifier_hash8(sid),
-                                         revision=revision, reason="decoder_withdrawal")
             raw_full_text = str(full_text or "").strip()
             total_committed_count = len(subtitle_state.committed_sentences)
             commit_base = int(getattr(subtitle_state, "commit_base", 0) or 0)
@@ -6288,7 +6425,26 @@ def _create_app(
             pending_prefix_reason = str(getattr(subtitle_state, "pending_prefix_reason", "") or "")
             boundary_anchor_before = str(getattr(subtitle_state, "boundary_anchor_text", "") or "").strip()
             effective_full_text = _compose_effective_text_for_commit(full_text, seq_no)
-            completed, tail = _split_subtitle_units(effective_full_text)
+            completed, tail = _split_subtitle_units(effective_full_text,
+                                                  group_final_short_units=bool(force_tail and final_reconcile))
+            qwen_chunk = getattr(state, "chunk_id", None)
+            qwen_evidence_available = type(qwen_chunk) is int and qwen_chunk > 0
+            observation = (int(segment_runtime.id), qwen_chunk) if qwen_evidence_available else None
+            source_commit.observe(effective_full_text, segment=int(segment_runtime.id),
+                                  raw=decoder_text, carried=pending_prefix_before,
+                                  units=completed, key=observation)
+            if native_pcm_enabled and translation_runtime.source_language == "English":
+                # Revoke before the first await. Compare logical occurrences,
+                # because repaired punctuation need not occur verbatim in ASR.
+                for current in subtitle_state.sentence_items[-64:]:
+                    sid, revision = str(current["id"]), int(current["revision"])
+                    present = source_commit.is_current(sid, revision, str(current["zh"]))
+                    if (tts_runtime.source_segments.get((sid, revision)) == int(segment_runtime.id)
+                            and not present):
+                        if tts_runtime.ordered.revoke_confirmation(sid, revision):
+                            tts_runtime.stability_wake.set()
+                            _trace_event("tts_confirmation_revoked", sentence_hash8=_opaque_identifier_hash8(sid),
+                                         revision=revision, reason="decoder_withdrawal")
             qwen_now = time.monotonic()
             qwen_scoped = (
                 qwen_submission_mode in {"shadow", "adaptive"}
@@ -7031,6 +7187,7 @@ def _create_app(
                 )
 
             candidate_sentence_ids = list(getattr(subtitle_state, "candidate_sentence_ids", []) or [])
+            candidate_spans = source_ledger.spans(completed)
             candidate_texts_before = list(getattr(subtitle_state, "candidate_texts", []) or [])
             update_upper = min(processed_count, len(completed), len(candidate_sentence_ids))
             committed_added = 0
@@ -7146,6 +7303,15 @@ def _create_app(
                     )
                     continue
                 accepted_upgrade = _is_committed_sentence_upgrade(current, upgraded)
+                # A published prefix is immutable, but its still-unpublished
+                # supplement must follow the final source even when the edit
+                # inserts words inside that supplement (not just at its end).
+                if final_reconcile and current != upgraded and any(
+                    addition[0] == sentence_id for addition in tts_runtime.pending_additions.values()
+                ):
+                    spoken_prefix = tts_runtime.covered_sources.get(sentence_id, "")
+                    if after_spoken_prefix(upgraded, spoken_prefix):
+                        accepted_upgrade = True
                 accepted_context_correction = bool(
                     canonical_segment_correction
                     and _should_accept_context_sentence_correction(current, upgraded)
@@ -7228,6 +7394,7 @@ def _create_app(
                 sentence_item["zh"] = upgraded
                 revision = int(sentence_item.get("revision", 1) or 1) + 1
                 sentence_item["revision"] = int(revision)
+                source_ledger.bind(sentence_id, revision, candidate_spans[i])
                 await _register_tts_source(sentence_id, revision, upgraded)
                 _record_completed_candidate(i, upgraded, sentence_id)
                 preserved_translation = str(sentence_item.get("en", "") or "")
@@ -7442,6 +7609,15 @@ def _create_app(
                         segment_id=int(getattr(segment_runtime, "id", 0) or 0),
                     )
                     continue
+                if sentence != original_sentence:
+                    candidate_spans = source_ledger.spans(completed)
+                covered_by = source_ledger.covered_by(candidate_spans[i])
+                if covered_by:
+                    _record_completed_candidate(i, sentence, "")
+                    _trace_event("source_range_covered", seq=seq_no, idx=int(i),
+                                 covered_by_hash8=_opaque_identifier_hash8(covered_by),
+                                 source_hash8=_hash8(sentence), segment_id=int(segment_runtime.id))
+                    continue
                 sentence_id = _new_sentence_id()
                 revision = 1
                 commit_ts_ms = int(time.time() * 1000)
@@ -7474,6 +7650,7 @@ def _create_app(
                         "seq": int(seq_hint or 0),
                     }
                 )
+                source_ledger.bind(sentence_id, revision, candidate_spans[i])
                 await _register_tts_source(sentence_id, revision, sentence)
                 if commit_rollback_safe and not (native_pcm_enabled and translation_runtime.source_language == "English"):
                     await _confirm_tts_source(
@@ -7666,9 +7843,6 @@ def _create_app(
                     total_committed_count=len(subtitle_state.committed_sentences),
                 )
             if native_pcm_enabled and translation_runtime.source_language == "English":
-                observation = (int(segment_runtime.id), qwen_chunk) if qwen_evidence_available else None
-                decoder_units, _ = _split_subtitle_units(decoder_text)
-                speech_confirmation.observe(decoder_units, observation)
                 if observation is not None:
                     # Use only text present in this actual decode; old display
                     # rows and repeated callbacks are not agreement evidence.
@@ -7676,14 +7850,28 @@ def _create_app(
                         sid, source = str(current["id"]), str(current["zh"])
                         if sid in tts_runtime.released_sources:
                             continue
-                        allow_urgent = speech_confirmation.decision(source)
-                        position = decoder_text.find(source)
-                        if allow_urgent is None or position < 0:
-                            continue
-                        lookahead = _count_tokenizer_tokens(asr_tokenizer, decoder_text[position + len(source):])
-                        if lookahead is not None and lookahead >= early_translation_required_lookahead_tokens:
-                            await _confirm_tts_source(sid, reason="decode_agreement", lookahead_tokens=lookahead,
-                                                      allow_urgent=allow_urgent)
+                        revision = int(current["revision"])
+                        evidence = source_commit.decision(sid, revision, source,
+                            count_tokens=lambda text: _count_tokenizer_tokens(asr_tokenizer, text),
+                            required_lookahead=early_translation_required_lookahead_tokens)
+                        if evidence.reason == "ready":
+                            await _confirm_tts_source(sid, reason="decode_agreement", lookahead_tokens=evidence.lookahead_tokens,
+                                                      allow_urgent=evidence.allow_urgent,
+                                                      evidence_age_ms=evidence.source_age_ms)
+                            confirmation_wait_keys.pop(sid, None)
+                        else:
+                            wait_key = (revision, evidence.reason, evidence.decode_hits,
+                                        evidence.boundary_hits, evidence.required_hits,
+                                        evidence.boundary_kind, evidence.lookahead_tokens)
+                            if confirmation_wait_keys.get(sid) != wait_key:
+                                confirmation_wait_keys[sid] = wait_key
+                                _trace_event("tts_confirmation_wait", sentence_hash8=_opaque_identifier_hash8(sid),
+                                             revision=revision, **asdict(evidence))
+                if len(confirmation_wait_keys) > 128:
+                    active_ids = {str(item["id"]) for item in subtitle_state.sentence_items[-64:]}
+                    for sid in list(confirmation_wait_keys):
+                        if sid not in active_ids:
+                            del confirmation_wait_keys[sid]
             return subtitle_state.tentative_tail
 
         async def _send_json(payload: Dict[str, Any]) -> None:
@@ -8024,6 +8212,8 @@ def _create_app(
             )
             if bool(backend_vad.in_speech):
                 backend_vad.silence_ms = float(backend_vad.silence_ms) + duration_ms
+            if subtitle_state.pending_prefix_text:
+                subtitle_state.pending_prefix_silence_ms += duration_ms
 
             since_last_cut_ms = (
                 time.monotonic() - float(backend_vad.last_cut_at)
@@ -8063,7 +8253,8 @@ def _create_app(
                 last_text_snapshot or getattr(local_state, "text", "") or ""
             ).strip()
             preserve_endpoint_tail = bool(
-                getattr(backend_vad, "in_speech", False) and pending_endpoint_text
+                getattr(backend_vad, "in_speech", False)
+                and (pending_endpoint_text or _has_unfinished_mlx_audio(local_state))
             )
             discarded_preroll_samples = 0
             if not preserve_endpoint_tail:
@@ -8236,6 +8427,7 @@ def _create_app(
                             # because its earlier frames contained speech.
                             previous_silence_ms = float(backend_vad.silence_ms)
                             backend_vad.silence_ms = 0.0
+                            subtitle_state.pending_prefix_silence_ms = 0.0
                             vad_signal.update(candidate=False, force=False, silence_ms=0.0)
                             if previous_silence_ms >= vad_silence_trigger_ms:
                                 _trace_event(

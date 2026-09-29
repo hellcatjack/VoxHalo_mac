@@ -77,6 +77,35 @@ def test_monitor_revision_reset_and_late_join_snapshot():
     state.observe({'type':'final'}); assert state.snapshot()['session']['status']=='stopped'
 
 
+def test_translation_failure_is_visible_and_cleared_by_a_successful_retry():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState()
+    state.observe(dict(type='sentence_committed', sentence_id='a', revision=1, text='Keep this sentence.'))
+    state.observe(dict(type='sentence_translation_failed', sentence_id='a', revision=0))
+    assert 'translation_error' not in state.snapshot()['rows'][0]
+    state.observe(dict(type='sentence_translation_failed', sentence_id='a', revision=1))
+    assert state.snapshot()['rows'][0]['translation_error'] is True
+    state.observe(dict(type='sentence_translation', sentence_id='a', revision=1, translation='保留这一句。'))
+    assert 'translation_error' not in state.snapshot()['rows'][0]
+
+
+def test_monitor_carries_only_current_revision_source_occurrences():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState()
+    state.observe(dict(type='sentence_committed', sentence_id='a', revision=1, text='Original.'))
+    state.observe(dict(type='sentence_translation', sentence_id='a', revision=1,
+                       translation='译文。', source_token_ids=[1, 2, 3]))
+    assert state.snapshot()['rows'][0]['source_token_ids'] == [1, 2, 3]
+    state.observe(dict(type='sentence_updated', sentence_id='a', revision=2, text='Correction.'))
+    assert 'source_token_ids' not in state.snapshot()['rows'][0]
+    state.observe(dict(type='sentence_translation', sentence_id='a', revision=1,
+                       translation='旧。', source_token_ids=[1, 2, 3]))
+    assert 'source_token_ids' not in state.snapshot()['rows'][0]
+    state.observe(dict(type='sentence_translation', sentence_id='a', revision=2,
+                       translation='更正。', source_token_ids=None))
+    assert 'source_token_ids' not in state.snapshot()['rows'][0]
+
+
 def test_monitor_keeps_spoken_snapshot_when_source_and_translation_are_corrected():
     from voxbridge.monitor import MonitorState
     state = MonitorState()

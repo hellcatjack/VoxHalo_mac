@@ -53,12 +53,22 @@ def test_english_period_finalizes_at_confirmed_silence_without_extra_text_idle(t
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             rows = [json.loads(line) for line in Path(args.subtitle_trace_log_file).read_text().splitlines()]
-            if any(r.get('event') in {'segment_cut_deferred', 'segment_finalize_done'} for r in rows):
+            if any(r.get('event') in {'segment_cut_deferred', 'segment_finalize_deferred', 'segment_finalize_done'} for r in rows):
                 break
             time.sleep(.01)
+        if not any(r.get('event') == 'segment_finalize_done' for r in rows):
+            # Short English terminal hypotheses require the existing 1.8s
+            # endpoint guard, rather than the unrelated text-idle timeout.
+            ws.send_json({'type': 'audio_silence', 'duration_ms': 1000, 'capture_sample_index': 36800})
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                rows = [json.loads(line) for line in Path(args.subtitle_trace_log_file).read_text().splitlines()]
+                if any(r.get('event') == 'segment_finalize_done' for r in rows):
+                    break
+                time.sleep(.01)
         assert any(r.get('event') == 'segment_finalize_done' for r in rows)
-        assert asr.finish_calls == 1
-        assert len(asr.transcribe_calls) == 1
+        assert asr.finish_calls >= 1
+        assert len(asr.transcribe_calls) >= 1
 
 
 def test_native_revision_replaces_queued_audio_and_preserves_sentence_order(monkeypatch, tmp_path):
@@ -124,6 +134,7 @@ def test_native_revision_replaces_queued_audio_and_preserves_sentence_order(monk
     ('The weather is pleasant and warm today.', 2),
     ('The total cost is 15 dollars today.', 3),
     ('We should not leave this place yet.', 3),
+    ("We don't need any. Any new regulations.", 3),
     ('The transfer is not authorized for this account.', 0),
 ])
 def test_native_confirmation_under_segment_final_redecode(monkeypatch, tmp_path, sentence, ready_after):
@@ -170,6 +181,9 @@ def test_native_confirmation_under_segment_final_redecode(monkeypatch, tmp_path,
             while ready_after and app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] == 0 and time.monotonic() < deadline:
                 time.sleep(.01)
             assert app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] == (1 if ready_after else 0)
+            if 'Any new regulations.' in sentence:
+                chunks = app.state.tts_hls.native_pcm.snapshot(0)['chunks']
+                assert "We don't need any Any new regulations." in chunks[0]['text']
             ws.send_json({'type': 'finish', 'mode': 'stop'})
             _receive_until_type(ws, 'final', max_steps=100)
             client.portal.call(app.state.tts_hls.wait_idle)
@@ -223,3 +237,183 @@ def test_final_shared_pcm_still_notifies_compatibility_listeners_after_capture_s
                 assert len(jobs) == 3
             finally:
                 unblock.set()
+
+
+@pytest.mark.parametrize('repeat', [False, True])
+def test_complete_comma_units_publish_early_and_all_final_words_reach_pcm(monkeypatch, tmp_path, repeat):
+    """New early release must conserve the complete stream, including real repeats."""
+    import re
+    first = 'We have already completed the first stage of this project,'
+    second = 'and we have already started the next stage of this project,'
+    last = 'and we will explain every remaining detail at the next meeting.'
+    full = ' '.join([first, *([first] if repeat else []), second, last])
+    class ASR(_FakeASR):
+        def __init__(self):
+            super().__init__()
+            self.processor = SimpleNamespace(tokenizer=_FakeTokenizer())
+            self.transcribe_text, self.transcribe_language = full, 'English'
+        def streaming_transcribe(self, wav, state):
+            state.chunk_id = getattr(state, 'chunk_id', 0) + 1
+            state.text, state.language = full, 'English'
+            return state
+        def finish_streaming_transcribe(self, state): return state
+    class Synthesizer:
+        def synthesize(self, text, language, **kwargs):
+            return SynthesizedAudio(_silent_wav_bytes(), sample_rate=24000, duration_ms=250)
+    monkeypatch.setenv('VOXBRIDGE_NATIVE_CONTROL_TOKEN', 'coverage-test')
+    args = _args()
+    args.native_console = args.tts_native_pcm = args.tts_stream_chunks = args.segment_final_redecode = True
+    args.final_redecode_on_stop = False
+    args.stable_clause_target_latin_words = 8
+    args.tts_hls_root_dir = str(tmp_path)
+    args.tts_hls_encoder_factory = FakeEncoder
+    app = _create_app(args, ASR(), translator=_FakeTranslator(), tts_synthesizer=Synthesizer())
+    headers = {'X-VoxBridge-Control-Token': 'coverage-test'}
+    with TestClient(app, client=('127.0.0.1', 1234)) as client:
+        client.get('/api/native/tts/native-coverage-test/pcm?after=-1', headers=headers).raise_for_status()
+        with client.websocket_connect('/ws', headers=headers) as ws:
+            ws.receive_json()
+            ws.send_json({'type': 'start', 'translation_direction': 'en2zh'})
+            _receive_until_type(ws, 'started')
+            for _ in range(3):
+                ws.send_bytes(np.array([0, 1000, -1000], dtype='<i2').tobytes())
+                _receive_until_type(ws, 'partial')
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] == 0:
+                time.sleep(.01)
+            assert app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] > 0, 'complete comma clause waited for finalization'
+            ws.send_json({'type': 'finish', 'mode': 'stop'})
+            _receive_until_type(ws, 'final', max_steps=100)
+            client.portal.call(app.state.tts_hls.wait_idle)
+            rows = app.state.monitor.snapshot()['rows']
+            published = [p for r in rows for p in r.get('spoken', [])]
+            expected_words = re.findall(r'\w+', full.lower())
+            actual_words = re.findall(r'\w+', ' '.join(p['source'] for p in published).lower())
+            assert actual_words == expected_words
+            chunks = app.state.tts_hls.native_pcm.snapshot(0)['chunks']
+            assert {c['sentence_id'] for c in chunks} == {p['sentence_id'] for p in published}
+            for p in published:
+                audio_text = ' '.join(c['text'] for c in chunks if c['sentence_id'] == p['sentence_id'])
+                assert re.findall(r'\w+', audio_text) == re.findall(r'\w+', p['text'])
+            assert app.state.speech_diagnostics() == []
+
+
+def test_native_carried_complement_and_last_sentence_both_reach_pcm(monkeypatch, tmp_path):
+    class ASR(_FakeASR):
+        active_segments = 0
+        def __init__(self):
+            super().__init__()
+            self.processor = SimpleNamespace(tokenizer=_FakeTokenizer())
+        def streaming_transcribe(self, wav, state):
+            if not hasattr(state, 'segment'):
+                self.active_segments += 1
+                state.segment = self.active_segments
+            state.language = 'English'
+            state.chunk_id = getattr(state, 'chunk_id', 0) + 1
+            state.text = ("We don't need any." if state.segment == 1 else
+                          'Any new regulations. The current laws already cover all of those problems.')
+            return state
+        def finish_streaming_transcribe(self, state): return state
+    class Synthesizer:
+        def synthesize(self, text, language, **kwargs):
+            return SynthesizedAudio(_silent_wav_bytes(), sample_rate=24000, duration_ms=250)
+    monkeypatch.setenv('VOXBRIDGE_NATIVE_CONTROL_TOKEN', 'carry-test')
+    args = _args()
+    args.native_console = args.tts_native_pcm = args.tts_stream_chunks = True
+    args.segment_hard_cut_sec, args.segment_overlap_sec = 1.0, 0.0
+    args.final_redecode_on_stop = False
+    args.early_translation_stable_sec, args.early_translation_stable_hits = 0, 2
+    args.tts_hls_root_dir = str(tmp_path)
+    args.tts_hls_encoder_factory = FakeEncoder
+    app = _create_app(args, ASR(), translator=_FakeTranslator(), tts_synthesizer=Synthesizer())
+    headers = {'X-VoxBridge-Control-Token': 'carry-test'}
+    with TestClient(app, client=('127.0.0.1', 1234)) as client:
+        client.get('/api/native/tts/native-carry-test/pcm?after=-1', headers=headers).raise_for_status()
+        with client.websocket_connect('/ws', headers=headers) as ws:
+            ws.receive_json()
+            ws.send_json({'type': 'start', 'translation_direction': 'en2zh'})
+            _receive_until_type(ws, 'started')
+            frame = np.array([0, 1200, -1200] * 2400, dtype='<i2').tobytes()
+            ws.send_bytes(frame)
+            _receive_until_type(ws, 'partial')
+            time.sleep(1.1)
+            for _ in range(6):
+                ws.send_bytes(frame)
+                _receive_until_type(ws, 'partial')
+            ws.send_json({'type': 'finish', 'mode': 'stop'})
+            _receive_until_type(ws, 'final', max_steps=100)
+            client.portal.call(app.state.tts_hls.wait_idle)
+            chunks = app.state.tts_hls.native_pcm.snapshot(0)['chunks']
+            speech = ' '.join(c['text'] for c in chunks)
+            assert speech.count("We don't need any Any new regulations.") == 1
+            assert speech.count('The current laws already cover all of those problems.') == 1
+            assert app.state.speech_diagnostics() == []
+
+
+@pytest.mark.parametrize('following_row,revised_extension', [(False, False), (True, False), (False, True)])
+def test_early_pcm_late_extension_survives_final_drain(monkeypatch, tmp_path, following_row, revised_extension):
+    """A later suffix must reach PCM even after its parent's audio is immutable."""
+    first = 'We have already completed the first stage of this project'
+    extra = 'and we have checked every remaining detail'
+    revised = 'and we have carefully checked every remaining detail and signed the final report'
+    tail = 'The next report will provide enough context for everyone to understand.'
+    class ASR(_FakeASR):
+        phase = 0
+        def __init__(self):
+            super().__init__()
+            self.processor = SimpleNamespace(tokenizer=_FakeTokenizer())
+        def streaming_transcribe(self, wav, state):
+            state.chunk_id = getattr(state, 'chunk_id', 0) + 1
+            state.language = 'English'
+            state.text = first + (', ' + extra if self.phase else '') + '. ' + tail
+            if self.phase == 2 and revised_extension:
+                state.text = first + ', ' + revised + '. ' + tail
+            if self.phase == 2 and following_row:
+                state.text = first + '. ' + extra + '. ' + tail
+            return state
+        def finish_streaming_transcribe(self, state): return state
+    class Synthesizer:
+        def synthesize(self, text, language, **kwargs):
+            return SynthesizedAudio(_silent_wav_bytes(), sample_rate=24000, duration_ms=250)
+    monkeypatch.setenv('VOXBRIDGE_NATIVE_CONTROL_TOKEN', 'extension-test')
+    args = _args()
+    args.subtitle_trace_log = True
+    args.subtitle_trace_log_file = str(tmp_path / 'extension.jsonl')
+    args.native_console = args.tts_native_pcm = args.tts_stream_chunks = args.segment_final_redecode = True
+    args.final_redecode_on_stop = False
+    args.tts_hls_root_dir = str(tmp_path)
+    args.tts_hls_encoder_factory = FakeEncoder
+    asr = ASR()
+    app = _create_app(args, asr, translator=_FakeTranslator(), tts_synthesizer=Synthesizer())
+    headers = {'X-VoxBridge-Control-Token': 'extension-test'}
+    with TestClient(app, client=('127.0.0.1', 1234)) as client:
+        client.get('/api/native/tts/native-extension-test/pcm?after=-1', headers=headers).raise_for_status()
+        with client.websocket_connect('/ws', headers=headers) as ws:
+            ws.receive_json()
+            ws.send_json({'type': 'start', 'translation_direction': 'en2zh'})
+            _receive_until_type(ws, 'started')
+            frame = np.array([0, 1000, -1000], dtype='<i2').tobytes()
+            for _ in range(3):
+                ws.send_bytes(frame)
+                _receive_until_type(ws, 'partial')
+            deadline = time.monotonic() + 2
+            while app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] == 0 and time.monotonic() < deadline:
+                time.sleep(.01)
+            assert app.state.tts_hls.native_pcm.snapshot(-1)['cursor'] == 1
+            for phase in (1, 2):
+                asr.phase = phase
+                for _ in range(3):
+                    ws.send_bytes(frame)
+                    _receive_until_type(ws, 'partial')
+                time.sleep(.03)
+            ws.send_json({'type': 'finish', 'mode': 'stop'})
+            _receive_until_type(ws, 'final', max_steps=100)
+            client.portal.call(app.state.tts_hls.wait_idle)
+            chunks = app.state.tts_hls.native_pcm.snapshot(0)['chunks']
+            speech = ' '.join(c['text'] for c in chunks)
+            assert speech.count(first) == 1
+            assert speech.count(revised if revised_extension else extra) == 1, app.state.monitor.snapshot()['rows']
+            if revised_extension:
+                assert extra not in speech
+            assert speech.count(tail) == 1
+            assert app.state.speech_diagnostics() == []

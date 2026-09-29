@@ -1350,6 +1350,86 @@
       "it": "Mostra / nascondi sfondo sottotitoli",
       "pt": "Mostrar / ocultar fundo das legendas",
       "hi": "उपशीर्षक पृष्ठभूमि दिखाएँ / छिपाएँ"
+    },
+    "字幕节奏": {
+      "zh": "字幕节奏",
+      "en": "Caption timing",
+      "ja": "字幕のタイミング",
+      "fr": "Rythme des sous-titres",
+      "es": "Ritmo de subtítulos",
+      "it": "Ritmo dei sottotitoli",
+      "pt": "Ritmo das legendas",
+      "hi": "उपशीर्षक का समय"
+    },
+    "阅读优先": {
+      "zh": "阅读优先",
+      "en": "Reading first",
+      "ja": "読みやすさ優先",
+      "fr": "Priorité à la lecture",
+      "es": "Priorizar lectura",
+      "it": "Priorità alla lettura",
+      "pt": "Priorizar leitura",
+      "hi": "पढ़ने को प्राथमिकता"
+    },
+    "跟随朗读": {
+      "zh": "跟随朗读",
+      "en": "Follow speech",
+      "ja": "読み上げに同期",
+      "fr": "Suivre la voix",
+      "es": "Seguir la voz",
+      "it": "Segui la voce",
+      "pt": "Seguir a voz",
+      "hi": "वाचन के साथ"
+    },
+    "阅读优先 · 译文可更新": {
+      "zh": "阅读优先 · 译文可更新",
+      "en": "Reading first · Translation may update",
+      "ja": "読みやすさ優先 · 翻訳は更新される場合があります",
+      "fr": "Lecture prioritaire · Traduction modifiable",
+      "es": "Lectura prioritaria · Traducción sujeta a cambios",
+      "it": "Lettura prioritaria · Traduzione aggiornabile",
+      "pt": "Leitura prioritária · Tradução sujeita a alterações",
+      "hi": "पढ़ना पहले · अनुवाद बदल सकता है"
+    },
+    "正在朗读：{0}": {
+      "zh": "正在朗读：{0}",
+      "en": "Speaking: {0}",
+      "ja": "読み上げ中：{0}",
+      "fr": "Lecture : {0}",
+      "es": "Leyendo: {0}",
+      "it": "Lettura: {0}",
+      "pt": "Lendo: {0}",
+      "hi": "वाचन: {0}"
+    },
+    "阅读优先：完整译文提前显示，可随后修订；短句合屏，每屏至少 3 秒，长文本按阅读量分页。朗读独立运行。": {
+      "zh": "阅读优先：完整译文提前显示，可随后修订；短句合屏，每屏至少 3 秒，长文本按阅读量分页。朗读独立运行。",
+      "en": "Reading first: show complete translations early; later revisions are possible. Short sentences share a page, each shown for at least 3 seconds. Long text is paginated for reading. Speech runs independently.",
+      "ja": "読みやすさ優先：完成した翻訳を早めに表示し、後で修正できます。短文をまとめ、各ページを最低3秒表示します。長文は読みやすく分割します。音声は独立して動作します。",
+      "fr": "Lecture prioritaire : les traductions complètes sont affichées plus tôt et peuvent être révisées. Les phrases courtes sont regroupées, avec au moins 3 secondes par page. Les longs textes sont paginés. La voix reste indépendante.",
+      "es": "Lectura prioritaria: muestra antes las traducciones completas, que pueden revisarse. Agrupa frases cortas y muestra cada página al menos 3 segundos. Divide los textos largos. La voz funciona de forma independiente.",
+      "it": "Lettura prioritaria: mostra prima le traduzioni complete, che possono essere riviste. Raggruppa le frasi brevi, con almeno 3 secondi per pagina. Suddivide i testi lunghi. La voce funziona indipendentemente.",
+      "pt": "Leitura prioritária: exibe as traduções completas mais cedo, com possíveis revisões. Agrupa frases curtas, com pelo menos 3 segundos por página. Divide textos longos. A voz funciona de forma independente.",
+      "hi": "पढ़ना पहले: पूरा अनुवाद जल्दी दिखता है और बाद में बदल सकता है। छोटे वाक्य एक पृष्ठ पर, हर पृष्ठ कम से कम 3 सेकंड दिखता है। लंबा पाठ पृष्ठों में बँटता है। वाचन स्वतंत्र चलता है।"
+    },
+    "垂直 100% 可覆盖 Dock。跟随朗读模式按实际音频切换；阅读优先模式按原文顺序显示，积压时保留全部内容。": {
+      "zh": "垂直 100% 可覆盖 Dock。跟随朗读模式按实际音频切换；阅读优先模式按原文顺序显示，积压时保留全部内容。",
+      "en": "At 100% vertical position, captions may cover the Dock. Follow speech uses actual audio timing. Reading first keeps source order and retains all queued text.",
+      "ja": "垂直位置100%でDockに重ねられます。読み上げ同期は実際の音声に従います。読みやすさ優先では原文の順序と待機中の全文を保持します。",
+      "fr": "À 100 % de position verticale, les sous-titres peuvent couvrir le Dock. Le mode voix suit le son réel. Le mode lecture conserve l’ordre du texte et tout le contenu en attente.",
+      "es": "Al 100 % de posición vertical, los subtítulos pueden cubrir el Dock. El modo voz sigue el audio real. El modo lectura conserva el orden y todo el texto pendiente.",
+      "it": "Al 100% di posizione verticale, i sottotitoli possono coprire il Dock. La modalità voce segue l’audio reale. La modalità lettura conserva l’ordine e tutto il testo in coda.",
+      "pt": "Na posição vertical de 100%, as legendas podem cobrir o Dock. O modo de voz segue o áudio real. O modo de leitura mantém a ordem e todo o texto na fila.",
+      "hi": "100% ऊर्ध्व स्थिति पर उपशीर्षक Dock को ढक सकते हैं। वाचन मोड वास्तविक ऑडियो के साथ चलता है। पठन मोड मूल क्रम और कतार का पूरा पाठ सुरक्षित रखता है।"
+    },
+    "此句翻译失败，请查看监控记录。": {
+      "zh": "此句翻译失败，请查看监控记录。",
+      "en": "This sentence could not be translated. See the monitor.",
+      "ja": "この文は翻訳できませんでした。モニターを確認してください。",
+      "fr": "Cette phrase n’a pas pu être traduite. Consultez le moniteur.",
+      "es": "No se pudo traducir esta frase. Consulte el monitor.",
+      "it": "Impossibile tradurre questa frase. Consulta il monitor.",
+      "pt": "Não foi possível traduzir esta frase. Consulte o monitor.",
+      "hi": "इस वाक्य का अनुवाद नहीं हो सका। मॉनिटर देखें।"
     }
   }
 }

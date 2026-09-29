@@ -60,6 +60,14 @@ class NativePlaybackFeedback:
                      if value["epoch"] == epoch and value["at"] + 2 > now]
         return min(deadlines) if deadlines else None
 
+    def snapshot(self, epoch: str) -> list[dict]:
+        now = self.clock()
+        return [dict(received_seq=value['received_seq'], played_seq=value['played_seq'],
+                     buffered_ms=value['buffered_ms'], playing=value['playing'],
+                     feedback_age_ms=round((now - value['at']) * 1000))
+                for value in self.entries.values()
+                if value['epoch'] == epoch and now - value['at'] < 2]
+
 
 def register_native_pcm_routes(app, *, token: str, owner_key, validate_listener) -> None:
     feedback = NativePlaybackFeedback()
@@ -71,6 +79,15 @@ def register_native_pcm_routes(app, *, token: str, owner_key, validate_listener)
             or not hmac.compare_digest(request.headers.get("x-voxbridge-control-token", ""), token)):
             raise HTTPException(403, "native console authorization required")
         return validate_listener(listener_id)
+
+    @app.get('/api/native/diagnostics')
+    async def native_diagnostics(request: Request):
+        authorize(request, 'native-diagnostics')
+        epoch = app.state.tts_hls.native_pcm.snapshot(-1).get('epoch', '')
+        pending = getattr(app.state, 'speech_diagnostics', lambda: [])()
+        return JSONResponse(dict(at_ms=round(time.time() * 1000), epoch=epoch,
+                                 pending=pending, playback=feedback.snapshot(epoch)),
+                            headers={'Cache-Control': 'no-store'})
 
     @app.get("/api/native/tts/{listener_id}/pcm")
     async def native_pcm(request: Request, listener_id: str, after: int = -1,

@@ -2,6 +2,16 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 38 · 2026-09-29
+
+Consolidates local improvements from builds 26–38:
+
+- Improve silence finalization, short utterances and English semantic units; coordinate translation, confirmation and speech using source revisions and coverage records while preserving models and prompts.
+- Add an independent reading-first caption queue with stable display, conservative deduplication, fixed font size, complete pagination and pause while hidden. Follow-speech mode remains available.
+- Use language-specific reading budgets: character timing for Chinese/Japanese and independent word timing for English and the other five languages, without shortening captions as TTS catches up. Automatic Chinese speech now ranges from 1.20–1.50×.
+- Fit subtitle backgrounds to each rendered line. Add persistent local signing and update-identity checks to avoid repeated privacy requests caused by changing ad-hoc identities.
+- Final validation passed 1,389 tests with 32 skipped; a ten-minute caption replay covered all 85 final translation revisions. See [reading captions](VoxBridge/docs/READING-SUBTITLES.md) and [source commit coordination](VoxBridge/docs/SOURCE-COMMIT-COORDINATION.md).
+
 ## LingoCove 1.0.0 · build 25 · 2026-09-16
 
 - Rename the product to LingoCove across the installed App, Finder/Dock, all eight native interface languages, permission guidance and listener page.

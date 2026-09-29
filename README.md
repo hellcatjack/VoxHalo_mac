@@ -80,11 +80,13 @@ Interface language is independent, follows system/browser preferences by default
 
 - **Follow videos, classes and online meetings.** Capture the audio playing on your Mac. Translation-only mode suppresses source playback during interpretation and sends translated speech to your headphones or speakers.
 - **Translate live speech.** Select the default input or a specific microphone/audio interface, then continuously recognize and translate incoming speech.
-- **Read while you listen.** Desktop subtitles follow actual local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock. Use [global subtitle shortcuts for presentations](docs/en/SUBTITLE-SHORTCUTS.md).
+- **Read while you listen.** Choose early reading captions or subtitles synchronized with local speech playback. Adjust font, size, color, shadow, display, position and width, including placement over the Dock. Use [global subtitle shortcuts for presentations](docs/en/SUBTITLE-SHORTCUTS.md).
 - **Invite listeners on the same network.** The App detects your LAN IP and provides an address and QR code. Phones and tablets can scan it to hear the shared translation stream.
 - **Run interpretation entirely from the App.** Native controls handle devices, direction, start and stop. The browser monitor displays text and status; closing it does not interrupt interpretation.
 
-Speech supports continuous playback and automatic catch-up. Chinese synthesis favors complete sentences, with an automatic speed range of **1.10–1.30×**. Committed speech and its subtitles stay aligned; a newer translation does not replace a sentence that is still being spoken.
+Subtitle settings offer **Reading first** and **Follow speech**. Reading first shows completed translations early, grouping available short sentences before each page appears. Each displayed page stays unchanged for its full text-length-based reading time, with a minimum of 3 seconds; new text and corrections wait for the next page. Visual pacing adapts to measured speech duration without replaying identical revisions. Long text is paginated. Follow speech keeps captions synchronized with actual playback. Captions keep the selected font size and contain translation only; lines wrap naturally without inserted headings or paragraph breaks. Display timing never controls the audio queue.
+
+Speech supports continuous playback and automatic catch-up. Chinese synthesis favors complete sentences, with an automatic speed range of **1.2–1.5×**. In Follow speech mode, a newer translation does not replace a sentence that is still being spoken.
 
 ## Models and acceleration
 

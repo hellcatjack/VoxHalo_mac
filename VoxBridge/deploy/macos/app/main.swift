@@ -13,6 +13,11 @@ private final class ConsoleDocumentView: NSView {
     private let session = NativeSession()
     private var preferences = NativePreferences.load()
     private var subtitlePreferences = SubtitlePreferences.load()
+    private struct ReadingLayoutKey: Equatable {
+        let fontName: String; let fontSize: Double; let width: Double
+        let padding: CGFloat; let screen: CGRect
+    }
+    private var readingLayoutKey: ReadingLayoutKey?
     private let subtitleOverlay = SubtitleOverlayController()
     private lazy var subtitleSettings = SubtitleSettingsController(preferences: subtitlePreferences)
     private let subtitleHotKeys = SubtitleHotKeyController()
@@ -39,6 +44,7 @@ private final class ConsoleDocumentView: NSView {
     private let ttsLabel = NSTextField(labelWithString: "本机朗读尚未开始")
     private let sourceLabel = NSTextField(wrappingLabelWithString: "原文将在这里显示")
     private let translationLabel = NSTextField(wrappingLabelWithString: "译文将在这里显示")
+    private let spokenLabel = NSTextField(wrappingLabelWithString: "")
     private let addressLabel = NSTextField(wrappingLabelWithString: "正在获取局域网地址…")
     private let interfacePopup = NSPopUpButton()
     private let localizedViews = NativeLocalizedViews()
@@ -97,10 +103,12 @@ private final class ConsoleDocumentView: NSView {
         guard desktopReady, window == nil else { return }
         loadInstallation(); buildWindow()
         subtitleOverlay.apply(preferences: subtitlePreferences)
+        session.subtitleMode = subtitlePreferences.mode
         subtitleSettings.onChange = { [weak self] value in
             guard let self else { return }
             self.subtitleSaveTimer?.invalidate(); self.subtitleSaveTimer = nil
             self.subtitlePreferences = value; self.subtitleOverlay.apply(preferences: value); self.render()
+            self.session.subtitleMode = value.mode
         }
         subtitleSettings.onPreview = { [weak self] value in self?.subtitleOverlay.setPreview(value) }
         subtitleSettings.shortcuts.onChange = { [weak self] value in self?.subtitleHotKeys.configure(value); self?.render() }
@@ -311,6 +319,11 @@ private final class ConsoleDocumentView: NSView {
         speech.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
         speech.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
         transcript.addArrangedSubview(speech)
+        spokenLabel.font = .systemFont(ofSize: 12); spokenLabel.textColor = .secondaryLabelColor
+        spokenLabel.isSelectable = true; spokenLabel.maximumNumberOfLines = 2
+        spokenLabel.lineBreakMode = .byTruncatingTail
+        transcript.addArrangedSubview(spokenLabel)
+        spokenLabel.widthAnchor.constraint(equalTo: transcript.widthAnchor).isActive = true
         transcript.setCustomSpacing(12, after: ttsLabel)
         speech.widthAnchor.constraint(equalTo: transcript.widthAnchor).isActive = true
         let transcriptSurface = surface(transcript)
@@ -366,7 +379,7 @@ private final class ConsoleDocumentView: NSView {
         guard let content = window?.contentView else { return }
         displayedLocale = NativeLocalization.locale
         window.title = NativeLocalization.text("LingoCove")
-        localizedViews.capture(content, excluding: [stateLabel, modelLabel, sessionLabel, ttsLabel, sourceLabel, translationLabel, addressLabel, detailLabel, interfacePopup])
+        localizedViews.capture(content, excluding: [stateLabel, modelLabel, sessionLabel, ttsLabel, sourceLabel, translationLabel, spokenLabel, addressLabel, detailLabel, interfacePopup])
         if let menu = NSApp.mainMenu { localizedViews.capture(menu) }
         if let menu = statusItem.menu { localizedViews.capture(menu) }
         localizedViews.apply()
@@ -499,8 +512,23 @@ private final class ConsoleDocumentView: NSView {
         let installed = desktopReady && client?.isInstalled == true, running = snapshot?.hasProcess == true, ready = snapshot?.isReady == true
         let busy = maintenanceWindowShown || modelManager?.isRepairing == true || !desktopReady || operation != nil || snapshot?.busy == true || choosingFolder
         let sessionBusy = session.isActive
-        subtitleHotKeys.setActive(!quitRequested && (session.phase == .running || session.phase == .stopping))
-        subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, active: !quitRequested && (session.phase == .running || session.phase == .stopping))
+        if let screen = SubtitleDisplays.selected(subtitlePreferences.screenID) {
+            let style = subtitlePreferences.normalized(), frame = screen.frame
+            let key = ReadingLayoutKey(fontName: style.fontName, fontSize: style.fontSize,
+                                       width: style.widthFraction, padding: SubtitleTextLayout.padding(style), screen: frame)
+            if readingLayoutKey != key {
+                readingLayoutKey = key
+                session.configureReadingPresentation(splitter: { text in
+                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages ?? [text]
+                }, fits: { text in
+                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages.count == 1
+                })
+            }
+        }
+        let showingSubtitles = !quitRequested && (session.phase == .running || session.phase == .stopping || (session.readingModeEnabled && !session.subtitleText.isEmpty))
+        session.readingPresentationEnabled = subtitlePreferences.enabled
+        subtitleHotKeys.setActive(showingSubtitles)
+        subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, readingManaged: session.readingModeEnabled, active: showingSubtitles)
         subtitleSettings.setSessionActive(sessionBusy)
         subtitleMenu.state = subtitlePreferences.enabled ? .on : .off
         if let operation { stateLabel.stringValue = operation == "stop" ? "正在停止…" : "正在准备本机服务…" }
@@ -529,8 +557,10 @@ private final class ConsoleDocumentView: NSView {
         let showTranscript = pair == session.languagePair
         ttsLabel.stringValue = session.isActive ? NativeLocalization.text("{0}朗读待输出 {1} 秒 · 合成语速 {2}× · 音频连接 {3}", pair.targetName, String(format: "%.1f", session.backlogSeconds), String(format: "%.2f", session.speed), String(session.listenerCount)) : NativeLocalization.text("识别{0} → 翻译并朗读{1} · 开始前可切换方向", pair.sourceName, pair.targetName)
         sourceLabel.stringValue = !showTranscript || session.sourceText.isEmpty ? NativeLocalization.text("{0}原文将在这里显示", pair.sourceName) : session.sourceText
-        let displayedTranslation = session.subtitleFollowsPlayback ? session.subtitleText : session.translationText
+        let displayedTranslation = session.subtitleText
         translationLabel.stringValue = !showTranscript || displayedTranslation.isEmpty ? NativeLocalization.text(session.subtitleFollowsPlayback ? "等待{0}朗读字幕" : "等待{0}译文", pair.targetName) : displayedTranslation
+        spokenLabel.isHidden = !showTranscript || !session.readingModeEnabled || session.spokenSubtitleText.isEmpty
+        spokenLabel.stringValue = NativeLocalization.text("正在朗读：{0}", session.spokenSubtitleText)
         addressLabel.stringValue = snapshot?.listener_url ?? snapshot?.lan_error ?? "连接局域网后自动显示地址"
         addressLabel.stringValue = NativeLocalization.render(addressLabel.stringValue)
         if lastQR != snapshot?.listener_url { lastQR = snapshot?.listener_url; updateQR(lastQR) }

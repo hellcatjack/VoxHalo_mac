@@ -19,7 +19,7 @@ import re
 import regex
 from typing import Any, List, Optional, Sequence, Tuple
 from voxbridge.translation.language_checks import _has_cjk, _has_latin
-from .semantic_units import repair_semantic_units, open_conditional
+from .semantic_units import repair_semantic_units, open_conditional, dependent_phrase, open_english_complement
 
 SENTENCE_BOUNDARY_PATTERN = re.compile(
     r"[。！？!?…।॥]+[\"'”’)\]）】》」』]*|\.+[\"'”’)\]）】》」』]*(?=\s|$|[\u3400-\u9fff])"
@@ -93,7 +93,7 @@ def _split_long_clause_text(text: str, *, target_size: int, cjk: bool) -> Tuple[
         if str(match.group(0) or "").startswith(",") and prev_char.isdigit() and next_char.isdigit():
             continue
         candidate = src[start:end].strip()
-        if open_conditional(candidate):
+        if open_conditional(candidate) or dependent_phrase(candidate) or open_english_complement(candidate):
             continue
         candidate_size = _translation_unit_size(candidate, cjk=cjk)
         if candidate_size < target_size:

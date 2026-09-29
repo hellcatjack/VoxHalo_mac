@@ -11,9 +11,9 @@ class SpeechPolicy:
 
     def automatic_speed(self, baseline: float, multiplier: float) -> float:
         if self.language == 'Chinese':
-            # Compress the shared 1.0–1.5 catch-up scale into a comfortable
-            # absolute Chinese range, retaining intermediate backlog steps.
-            return min(1.30, max(1.10, 1.10 + (multiplier - 1.0) * 0.40))
+            # Map the shared 1.0–1.5 catch-up scale to the absolute Chinese
+            # range of 1.2–1.5, retaining intermediate backlog steps.
+            return min(1.50, max(1.20, 1.20 + (multiplier - 1.0) * 0.60))
         return baseline * multiplier
 
     def split(self, text: str) -> tuple[str, ...]:

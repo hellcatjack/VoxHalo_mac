@@ -59,6 +59,15 @@ class MonitorState:
             row = self.rows.get(str(event.get('sentence_id', '')))
             if row is not None and int(event.get('revision', 0)) == row['revision']:
                 row['translation'] = str(event.get('translation', ''))[:8000]
+                if event.get('source_token_ids') is not None:
+                    row['source_token_ids'] = list(event['source_token_ids'])
+                else:
+                    row.pop('source_token_ids', None)
+                row.pop('translation_error', None)
+        elif kind == 'sentence_translation_failed':
+            row = self.rows.get(str(event.get('sentence_id', '')))
+            if row is not None and int(event.get('revision', 0)) == row['revision']:
+                row['translation_error'] = True
         elif kind == 'speech_committed':
             sid = str(event.get('sentence_id', ''))
             row = self.rows.get(sid.split(':addition:', 1)[0])
@@ -103,13 +112,13 @@ const statuses=new Set(['idle','ready','running','stopped','disconnected','error
 function localizedLabel(tag,key){const node=document.createElement(tag);node.dataset.i18n=key;node.textContent=ui.t(key);return node}
 function renderTranslation(node,r){
   const spoken=(r.spoken||[]).map(p=>p.text).join('\n');
-  const signature=JSON.stringify([spoken,r.translation]);
+  const signature=JSON.stringify([spoken,r.translation,r.translation_error]);
   if(node.dataset.content===signature)return;
   node.dataset.content=signature;node.replaceChildren();
   const label=localizedLabel('div',spoken?'monitor.published':'monitor.pending');label.className='muted';node.append(label);
   const text=document.createElement('div');
   if(spoken||r.translation)text.textContent=spoken||r.translation;
-  else {text.dataset.i18n='monitor.waitTranslation';text.textContent=ui.t('monitor.waitTranslation')}
+  else {text.dataset.i18n=r.translation_error?'monitor.translationFailed':'monitor.waitTranslation';text.textContent=ui.t(text.dataset.i18n)}
   node.append(text);
   if(spoken&&r.translation&&spoken!==r.translation){
     const details=document.createElement('details'),summary=localizedLabel('summary','monitor.correction'),correction=document.createElement('div');

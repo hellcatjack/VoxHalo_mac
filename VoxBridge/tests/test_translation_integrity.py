@@ -74,6 +74,21 @@ def test_ordinary_translation_keeps_original_prompt_and_one_request(monkeypatch)
     assert len(requests) == 1
 
 
+def test_browser_interview_policy_paraphrase_retries_the_complete_source(monkeypatch):
+    source = ('Do the do the obvious first, do the practical first And then we can '
+              "talk about the theoretical later, but don't talk about the theoretical without doing the practical.")
+    leaked = ('首先做那些显而易见的事情，先处理实际的问题。之后我们再讨论理论方面的问题。'
+              '对于那些有明确指定名称的术语，应遵循原文的表述方式。'
+              '不得添加、扩展、解释或替换原文中的内容。'
+              '最终输出的只是翻译后的文本本身，无需进行任何解释。')
+    correct = '先做显而易见的事，先处理实际问题，然后再谈理论；不要没做实际工作就空谈理论。'
+    requests = responses(monkeypatch, [leaked, correct])
+    assert translator().translate(source, translation_direction='en2zh') == correct
+    assert len(requests) == 2
+    assert requests[1]['messages'][0]['content'].endswith(source)
+    assert requests[0]['temperature'] == requests[1]['temperature'] == 0
+
+
 def test_incomplete_preposition_is_joined_to_its_following_phrase():
     units, tail = _split_translation_units_and_tail('On your. Belly, you shall go.')
     assert units == ['On your Belly, you shall go.']

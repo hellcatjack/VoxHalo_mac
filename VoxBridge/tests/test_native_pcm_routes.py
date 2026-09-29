@@ -17,8 +17,11 @@ def test_feedback_expires_and_does_not_use_unplayed_server_estimates():
     assert feedback.urgent("one") is True
     assert wake.is_set()
     assert feedback.urgent("two") is False
+    assert feedback.snapshot('one')[0]['played_seq'] == 2
+    assert feedback.snapshot('two') == []
     now[0] = 12.01
     assert feedback.urgent("one") is False
+    assert feedback.snapshot('one') == []
 
 
 def test_expired_feedback_cannot_shorten_release_on_translation_completion():
@@ -87,6 +90,18 @@ def test_pcm_join_and_feedback_validate_epoch_and_available_cursor():
         assert app.state.native_playback.urgent("one")
         body['received_seq']=4
         assert client.post('/api/native/tts/native-one/playback',headers=headers,json=body).status_code==409
+
+
+def test_diagnostics_are_local_read_only_and_do_not_join_or_refresh_playback():
+    client, app = route_client()
+    app.state.speech_diagnostics = lambda: [{'sentence_id': 'test', 'release_policy': 'revision_confirmation'}]
+    with client:
+        assert client.get('/api/native/diagnostics').status_code == 403
+        result = client.get('/api/native/diagnostics', headers={'X-VoxBridge-Control-Token': 'secret'})
+        assert result.status_code == 200
+        assert result.json()['pending'][0]['release_policy'] == 'revision_confirmation'
+        assert result.json()['playback'] == []
+        assert app.state.tts_hls.leases == set()
 
 
 def test_native_app_advertises_pcm_and_joins_without_hls_bootstrap(monkeypatch,tmp_path):
