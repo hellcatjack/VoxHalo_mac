@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 41 · 2026-10-03
+
+- Input levels update the meter without repeatedly laying out captions, checking service files or refreshing the entire console. Caption updates precede coalesced history-window updates.
+- Console translations wrap without the previous three-line tail truncation. Reading-card content and font size stay unchanged; long console text can be scrolled.
+- Add test observations for actual caption geometry, AppKit drawing and native mixer output. These hooks are excluded from the shipping App. English sentence starts are investigated separately at synthesis, audio boundaries and playback; offline recognition alone does not justify changing speed or scheduling.
+- Validation: 1,398 tests passed, 33 skipped. Four-minute Chinese→English and three-minute English→Chinese model replays covered real subtitle drawing and native playback, including actual 1.50× Chinese output. See [methods, observations and limits](docs/en/VALIDATION-CAPTION-HEAD-2026-10-03.md).
+
 ## LingoCove 1.0.0 · build 40 · 2026-10-03
 
 - Reference native Reading first captions to accepted immutable sentence text and actual PCM playback progress. Aim for a 0.6-second lead when the next audio is scheduled, group complete short neighbors into a frozen card, and paginate long sentences at the user's fixed font size.

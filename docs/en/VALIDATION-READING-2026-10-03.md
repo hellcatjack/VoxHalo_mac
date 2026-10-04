@@ -27,6 +27,8 @@ Both median leads are close to the intended 0.6-second lead for scheduled audio.
 
 ## Measurement method
 
+**Follow-up coverage correction:** the build 40 replay did not install the App's font/screen layout callbacks. Its logical cards therefore defaulted to fitting on one page. The recorded measurements validate controller selection, not actual pagination or screen drawing. The [build 41 follow-up](VALIDATION-CAPTION-HEAD-2026-10-03.md) adds real geometry, normal AppKit drawing and software mixer recording.
+
 The local [`NativeReadingLeadReplay.swift`](../../VoxBridge/tests/macos/NativeReadingLeadReplay.swift) harness supplied file PCM in real time through the production capture interface. It used `NativeSession`, real ASR/MT/TTS and the native speech player, with Reading first selected. It did not create the visible App subtitle overlay. The caption change uses accepted immutable sentence text and native PCM progress; it does not change model selection, synthesized audio or playback scheduling.
 
 The harness sampled the native presentation clock every 20 ms. Lead measurements compare a caption's first observed appearance with voice onset detected from 10 ms RMS windows of the accepted PCM. The numeric precision above describes the calculated frame/timestamp differences; it does not imply physical screen-to-speaker accuracy to hundredths of a millisecond.

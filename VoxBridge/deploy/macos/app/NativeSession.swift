@@ -125,8 +125,10 @@ enum HLSPlaybackGap {
     var playbackTime: Double { speechPlayer.map { Double($0.renderedFrame) / 24000 } ?? player?.currentTime().seconds ?? 0 }
     #if NATIVE_PLAYBACK_TESTING
     var onPlaybackPCM: ((NativeSpeechChunk) -> Void)?
+    var onPlaybackSchedule: ((NativeSpeechScheduleProbe) -> Void)?
+    var onPlaybackMixerOutput: AVAudioNodeTapBlock?
     var playbackDiagnostics: [String: Any] {
-        let reading: [String: Any] = ["reading_live": usesLiveReading, "reading_text": subtitleText,
+        let reading: [String: Any] = ["reading_live": usesLiveReading, "reading_text": subtitleText, "tts_speed": speed,
             "reading_sentence_id": subtitleIdentity?.sentenceID ?? "", "reading_revision": subtitleIdentity?.revision ?? -1,
             "reading_sequence": subtitleIdentity?.speechSequence ?? -1, "history_count": subtitleHistory.entries.count,
             "reading_target_frame": liveReading.targetFrame ?? -1,
@@ -137,6 +139,7 @@ enum HLSPlaybackGap {
         if let speechPlayer {
             return reading.merging(["mode": "pcm", "media_time": playbackTime, "listener": localListener ?? "",
                     "epoch": speechPlayer.epoch, "received_seq": speechPlayer.receivedSequence,
+                    "output_device_probe": speechPlayer.outputDeviceProbe,
                     "played_seq": speechPlayer.playedSequence, "buffered_ms": speechPlayer.bufferedMilliseconds,
                     "rendered_frame": speechPlayer.renderedFrame, "subtitle_presented_frame": speechPlayer.subtitlePresentedFrame ?? -1, "pcm_chunks": speechPlayer.scheduledChunks,
                     "rate": speechPlayer.isPlaying ? 1 : 0, "waiting": ""], uniquingKeysWith: { _, value in value })
@@ -159,6 +162,8 @@ enum HLSPlaybackGap {
     private var playbackGapEvents: [[String: Any]] = []
     #endif
     var onChange: (() -> Void)?
+    /// Capture meters do not invalidate captions, history or the rest of the UI.
+    var onLevelChange: ((Float) -> Void)?
     var isActive: Bool { phase == .starting || phase == .running || phase == .stopping }
 
     private let capture: NativeAudioSource
@@ -301,6 +306,8 @@ enum HLSPlaybackGap {
                 audio.onFailure = { [weak self] error in self?.fail(error, run: run) }
                 #if NATIVE_PLAYBACK_TESTING
                 audio.onPCMChunk = { [weak self] chunk in self?.onPlaybackPCM?(chunk) }
+                audio.onScheduleProbe = { [weak self] probe in self?.onPlaybackSchedule?(probe) }
+                audio.onMixerOutput = onPlaybackMixerOutput
                 #endif
                 try audio.start(outputUID: selected.outputUID, epoch: joined.epoch, cursor: joined.cursor)
                 speechPlayer = audio
@@ -316,7 +323,7 @@ enum HLSPlaybackGap {
             }
             capture.onLevel = { [weak self] value in
                 guard let self, self.generation == run else { return }
-                self.level = value; self.onChange?()
+                self.updateLevel(value)
             }
             capture.onFailure = { [weak self] error in self?.fail(error, run: run) }
             acceptingAudio = true
@@ -444,6 +451,14 @@ enum HLSPlaybackGap {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }
+
+    private func updateLevel(_ value: Float) {
+        level = value
+        onLevelChange?(value)
+    }
+    #if NATIVE_PLAYBACK_TESTING
+    func observeLevelForTesting(_ value: Float) { updateLevel(value) }
+    #endif
 
     private func observeReadingSubtitle(_ event: [String: Any]) {
         let historyVersion = subtitleHistory.version

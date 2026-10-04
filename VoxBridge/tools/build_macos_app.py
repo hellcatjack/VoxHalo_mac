@@ -17,7 +17,7 @@ SOURCES = ROOT / 'deploy/macos/app'
 APP_NAME = 'LingoCove.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
 APP_VERSION = '1.0.0'
-APP_BUILD = '40'
+APP_BUILD = '41'
 
 
 def signing_configuration(identity: str | None = None, ad_hoc: bool = False) -> tuple[str, str | None]:

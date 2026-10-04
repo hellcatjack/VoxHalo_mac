@@ -35,6 +35,10 @@ currently being spoken.
   positions: there is no word-level audio alignment. Only scheduled PCM can
   establish a future page position; an unknown synthesis or starvation gap is
   not predicted.
+- The console shows the same complete reading card with natural wrapping in
+  its scrollable content, without a three-line tail truncation. Very long cards
+  can require scrolling in the console. The floating caption still shows its
+  complete physical page at the selected fixed font size.
 - Paused output holds the card; receiving more audio while the sample position
   stays unchanged does not replace an existing card. Hiding captions does not
   pause this playback clock. Restoring captions follows the current position;

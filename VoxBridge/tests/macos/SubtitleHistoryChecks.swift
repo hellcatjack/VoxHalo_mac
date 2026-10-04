@@ -134,7 +134,7 @@ private func checkHistory() {
     [view] + view.subviews.flatMap(descendants)
 }
 
-@MainActor private func checkWindow() {
+@MainActor private func checkWindow() async {
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.prohibited)
     let controller = SubtitleHistoryWindow()
@@ -151,6 +151,7 @@ private func checkHistory() {
         history.observe(translation("row-\(index)", "Translation \(index) 🌿."))
     }
     controller.update(history: history)
+    await settleHistory()
     assert(view.string.contains("1. Source 0\nTranslation 0 🌿.") && view.string.contains("80. Source 79"))
     let selected = (view.string as NSString).range(of: "Translation 25 🌿.")
     view.setSelectedRange(selected)
@@ -160,18 +161,22 @@ private func checkHistory() {
     assert(before > 0 && scroll.contentView.bounds.maxY < view.bounds.maxY - 4)
     history.observe(source("appended", text: "Appended source")); history.observe(translation("appended", "Appended translation."))
     controller.update(history: history)
+    await settleHistory()
     assert(view.selectedRange() == selected && abs(scroll.contentView.bounds.origin.y - before) < 1,
-           "Appending history must preserve selection and a reader's scroll position")
+           "Appending history must preserve selection and a reader's scroll position: \(view.selectedRange()) versus \(selected), scroll \(scroll.contentView.bounds.origin.y) versus \(before)")
     history.observe(translation("early", "Earlier translation."))
     controller.update(history: history)
+    await settleHistory()
     assert((view.string as NSString).substring(with: view.selectedRange()) == "Translation 25 🌿.",
            "A late earlier translation must preserve the selected entry")
     let currentSelection = view.selectedRange(), currentScroll = scroll.contentView.bounds.origin.y
     controller.refreshLocalization(history: history)
+    await settleHistory()
     assert(view.selectedRange() == currentSelection && abs(scroll.contentView.bounds.origin.y - currentScroll) < 1)
     assert(view.string.hasPrefix("1. Earlier source\nEarlier translation."))
     history.observeSpeech([speech("early:addition:2", "Supplemental 2030 text.", order: 5)])
     controller.update(history: history)
+    await settleHistory()
     assert(view.string.contains(NativeLocalization.text("朗读补充") + "\nSupplemental 2030 text."))
     assert((view.string as NSString).substring(with: view.selectedRange()) == "Translation 25 🌿.",
            "Adding a translation-only supplement above the selected passage must preserve selection")
@@ -179,6 +184,7 @@ private func checkHistory() {
     scroll.reflectScrolledClipView(scroll.contentView)
     history.observe(source("last")); history.observe(translation("last", "Last full translation."))
     controller.update(history: history)
+    await settleHistory()
     assert(abs(scroll.contentView.bounds.maxY - view.bounds.maxY) < 1, "A reader already at the end may continue following new entries")
     let oldPassage = (view.string as NSString).range(of: "Translation 25 🌿.")
     view.setSelectedRange(oldPassage); view.scrollRangeToVisible(oldPassage)
@@ -187,6 +193,7 @@ private func checkHistory() {
     history.observe(source("row-25", text: "Source 25"))
     history.observe(translation("row-25", "Translation 25 🌿."))
     controller.update(history: history)
+    await settleHistory()
     assert(view.selectedRange() == oldPassage && abs(scroll.contentView.bounds.origin.y - retainedScroll) < 1,
            "Reused source IDs after ledger reset must not move selection to the reconstructed occurrence")
     let closedBody = view.string, closedFrame = view.frame
@@ -206,14 +213,31 @@ private func checkHistory() {
     for index in 0..<12 { assert(view.string.contains("Closed source \(index)\nClosed translation \(index).")) }
     assert(view.selectedRange() == oldPassage && abs(scroll.contentView.bounds.origin.y - retainedScroll) < 1,
            "Reopening must render every deferred entry while preserving the prior reading anchor")
+    let beforeBurst = view.string, renders = controller.renderCountForTesting
+    for index in 0..<40 {
+        history.observe(source("burst-\(index)")); history.observe(translation("burst-\(index)", "Burst translation \(index)."))
+        controller.update(history: history)
+    }
+    assert(view.string == beforeBurst && controller.renderCountForTesting == renders,
+           "A burst of history events must not synchronously block caption updates with text layout")
+    await settleHistory()
+    assert(controller.renderCountForTesting == renders + 1 && view.string.contains("Burst translation 39."),
+           "Coalescing must retain and render every latest record in one deferred update")
+    assert(view.selectedRange() == oldPassage && abs(scroll.contentView.bounds.origin.y - retainedScroll) < 1,
+           "Deferred burst rendering must preserve the reader's selection and scroll anchor")
     history.reset(); controller.update(history: history)
+    await settleHistory()
     assert(view.string == NativeLocalization.text("本次传译尚无完整译文。"))
     window.close()
     print("PASS: native selectable history, numbering, append/insertion anchors, deferred closed-window rendering, localization refresh and bottom following")
 }
 
+@MainActor private func settleHistory() async {
+    try? await Task.sleep(nanoseconds: 300_000_000)
+}
+
 @main struct SubtitleHistoryChecks {
-    @MainActor static func main() {
-        checkHistory(); checkSpeechSupplements(); checkWindow()
+    @MainActor static func main() async {
+        checkHistory(); checkSpeechSupplements(); await checkWindow()
     }
 }

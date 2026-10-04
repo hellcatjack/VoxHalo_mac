@@ -18,7 +18,7 @@ def test_full_native_session_history_and_reading_window(tmp_path):
     assert sdk is not None, 'MacOSX26 SDK is required for the native checks'
     environment = dict(os.environ, SDKROOT=str(sdk))
     built = subprocess.run([
-        'xcrun', 'swiftc', '-swift-version', '5', '-sdk', str(sdk), '-framework', 'AppKit',
+        'xcrun', 'swiftc', '-swift-version', '5', '-D', 'NATIVE_PLAYBACK_TESTING', '-sdk', str(sdk), '-framework', 'AppKit',
         str(root / 'deploy/macos/app/NativeLocalization.swift'),
         str(root / 'deploy/macos/app/SubtitleHistory.swift'),
         str(root / 'tests/macos/SubtitleHistoryChecks.swift'), '-o', str(executable),

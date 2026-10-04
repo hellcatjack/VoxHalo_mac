@@ -1,6 +1,40 @@
 import Foundation
 import AVFoundation
 import AudioToolbox
+#if NATIVE_PLAYBACK_TESTING
+import Darwin
+import CoreAudio
+
+/// Test-only observations. The render snapshot can precede wall time by a
+/// device quantum; capturing both timestamps makes that age measurable.
+struct NativeSpeechRenderProbe {
+    let observedHostTime: UInt64
+    let renderHostTime: UInt64?
+    let playerFrame: AVAudioFramePosition?
+    let playerSampleRate: Double?
+
+    var renderAgeMilliseconds: Double? {
+        guard let renderHostTime else { return nil }
+        if observedHostTime >= renderHostTime {
+            return AVAudioTime.seconds(forHostTime: observedHostTime - renderHostTime) * 1000
+        }
+        // Some hardware renders ahead of wall time. Preserve that negative
+        // age rather than treating a future render snapshot as unavailable.
+        return -AVAudioTime.seconds(forHostTime: renderHostTime - observedHostTime) * 1000
+    }
+}
+
+struct NativeSpeechScheduleProbe {
+    let sequence: Int
+    let startFrame: AVAudioFramePosition
+    let endFrame: AVAudioFramePosition
+    let playing: Bool
+    let chosen: NativeSpeechRenderProbe
+    let submitting: NativeSpeechRenderProbe
+    let submittedHostTime: UInt64
+    let presentationLatency: Double
+}
+#endif
 
 struct NativeSpeechChunk: Decodable {
     let seq: Int
@@ -118,6 +152,38 @@ enum NativeSpeechStartupRecovery {
     var onFailure: ((String) -> Void)?
     #if NATIVE_PLAYBACK_TESTING
     var onPCMChunk: ((NativeSpeechChunk) -> Void)?
+    var onScheduleProbe: ((NativeSpeechScheduleProbe) -> Void)?
+    var onMixerOutput: AVAudioNodeTapBlock?
+    var outputDeviceProbe: [String: Any] {
+        guard let engine, let id = Self.currentOutputDevice(engine) else { return [:] }
+        var rate = Float64(0)
+        var frames = UInt32(0)
+        var rateAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var frameAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyBufferFrameSize,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var rateSize = UInt32(MemoryLayout.size(ofValue: rate))
+        var frameSize = UInt32(MemoryLayout.size(ofValue: frames))
+        let rateStatus = AudioObjectGetPropertyData(id, &rateAddress, 0, nil, &rateSize, &rate)
+        let frameStatus = AudioObjectGetPropertyData(id, &frameAddress, 0, nil, &frameSize, &frames)
+        let device = try? AudioDevices.outputs().first { $0.id == id }
+        var result: [String: Any] = ["id": id, "uid": device?.uid ?? "", "name": device?.name ?? "",
+            "engine_output_sample_rate": engine.outputNode.outputFormat(forBus: 0).sampleRate]
+        if rateStatus == noErr { result["nominal_sample_rate"] = rate }
+        if frameStatus == noErr { result["io_buffer_frames"] = frames }
+        if rateStatus == noErr, frameStatus == noErr, rate > 0 {
+            result["io_quantum_ms"] = Double(frames) / rate * 1000
+        }
+        return result
+    }
+
+    private func renderProbe(_ player: AVAudioPlayerNode) -> NativeSpeechRenderProbe {
+        let render = player.lastRenderTime
+        let time = render.flatMap { player.playerTime(forNodeTime: $0) }
+        return NativeSpeechRenderProbe(observedHostTime: mach_absolute_time(),
+            renderHostTime: render.flatMap { $0.isHostTimeValid ? $0.hostTime : nil },
+            playerFrame: time?.sampleTime, playerSampleRate: time?.sampleRate)
+    }
     #endif
 
     var epoch: String { cursor?.epoch ?? "" }
@@ -158,6 +224,11 @@ enum NativeSpeechStartupRecovery {
         }
         audio.attach(player)
         audio.connect(player, to: audio.mainMixerNode, format: AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1))
+        #if NATIVE_PLAYBACK_TESTING
+        if let onMixerOutput {
+            audio.mainMixerNode.installTap(onBus: 0, bufferSize: 512, format: nil, block: onMixerOutput)
+        }
+        #endif
         try audio.start()
         engine = audio; node = player
         outputDeviceID = Self.currentOutputDevice(audio)
@@ -219,7 +290,13 @@ enum NativeSpeechStartupRecovery {
         cursor = candidate
         let run = generation
         for (chunk, buffer) in zip(chunks, buffers) {
+            #if NATIVE_PLAYBACK_TESTING
+            let chosenProbe = renderProbe(node)
+            let rendered = max(0, chosenProbe.playerFrame ?? 0)
+            let wasPlaying = node.isPlaying
+            #else
             let rendered = renderedFrame
+            #endif
             // Schedule adjacent blocks at exactly the same sample boundary. When
             // starved, add only one render-quantum margin rather than a carrier.
             let start = NativeSpeechSchedule.start(previousEnd: scheduledEnd, rendered: rendered, playing: node.isPlaying)
@@ -236,7 +313,7 @@ enum NativeSpeechStartupRecovery {
             scheduledChunks.append(subtitleSchedule)
             if scheduledChunks.count > 256 { scheduledChunks.removeFirst() }
             #if NATIVE_PLAYBACK_TESTING
-            onPCMChunk?(chunk)
+            let submittingProbe = renderProbe(node)
             #endif
             node.scheduleBuffer(buffer, at: AVAudioTime(sampleTime: start, atRate: 24000), options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor [weak self] in
@@ -246,6 +323,17 @@ enum NativeSpeechStartupRecovery {
                     while self.completed.remove(self.playedSequence + 1) != nil { self.playedSequence += 1 }
                 }
             }
+            #if NATIVE_PLAYBACK_TESTING
+            let submittedHostTime = mach_absolute_time()
+            onScheduleProbe?(NativeSpeechScheduleProbe(sequence: chunk.seq,
+                startFrame: start, endFrame: end, playing: wasPlaying,
+                chosen: chosenProbe, submitting: submittingProbe,
+                submittedHostTime: submittedHostTime,
+                presentationLatency: node.outputPresentationLatency))
+            // Observers may hash/scan PCM. Run them after enqueueing, so test
+            // instrumentation cannot consume this block's scheduling margin.
+            onPCMChunk?(chunk)
+            #endif
         }
         if !chunks.isEmpty && !node.isPlaying { node.play() }
     }

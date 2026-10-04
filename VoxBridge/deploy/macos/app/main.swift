@@ -116,6 +116,9 @@ private final class ConsoleDocumentView: NSView {
         subtitleHotKeys.onAction = { [weak self] action in self?.performSubtitleShortcut(action) }
         subtitleHotKeys.onStatusChange = { [weak self] in self?.updateSubtitleShortcutStatus() }
         session.onChange = { [weak self] in self?.render() }
+        session.onLevelChange = { [weak self] value in
+            self?.meter.doubleValue = Double(min(1, value * 3))
+        }
         reloadDevices(); showWindow(); refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor [weak self] in self?.refresh() } }
     }
@@ -188,7 +191,7 @@ private final class ConsoleDocumentView: NSView {
         return label
     }
 
-    private func buildWindow() {
+    private func buildWindow(renderAfterBuilding: Bool = true) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 680),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "LingoCove"; window.isReleasedWhenClosed = false; window.delegate = self
@@ -315,6 +318,8 @@ private final class ConsoleDocumentView: NSView {
         }
         sourceLabel.textColor = .secondaryLabelColor
         translationLabel.font = .systemFont(ofSize: 16, weight: .medium); translationLabel.textColor = .labelColor
+        translationLabel.maximumNumberOfLines = 0
+        translationLabel.lineBreakMode = .byWordWrapping
         let speech = row([sourceLabel, translationLabel], spacing: 24)
         speech.distribution = .fillEqually; speech.alignment = .top
         speech.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
@@ -359,7 +364,7 @@ private final class ConsoleDocumentView: NSView {
         let footer = row([detailLabel, NSView(), utilities], spacing: 16); footer.alignment = .centerY
         detailLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         append(footer)
-        refreshInterfaceText(); render()
+        if renderAfterBuilding { refreshInterfaceText(); render() }
         content.layoutSubtreeIfNeeded()
         let desired = content.fittingSize.height + 36
         let available = (NSScreen.main?.visibleFrame.height ?? 950) - 50
@@ -368,8 +373,20 @@ private final class ConsoleDocumentView: NSView {
         window.contentView?.layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: .zero)
         scroll.reflectScrolledClipView(scroll.contentView)
-        window.center(); render()
+        window.center()
+        if renderAfterBuilding { render() }
     }
+
+    #if NATIVE_READING_UI_CHECKS
+    /// Build the real, hidden console hierarchy without launching services,
+    /// capture, menus or timers, so its scroll/typographic layout can be checked.
+    func consoleTranslationLayoutForTesting(text: String) -> (NSWindow, NSTextField, NSScrollView) {
+        buildWindow(renderAfterBuilding: false)
+        translationLabel.stringValue = text
+        window.contentView?.layoutSubtreeIfNeeded()
+        return (window, translationLabel, window.contentView!.subviews.first as! NSScrollView)
+    }
+    #endif
 
     @objc private func interfaceLanguageChanged() {
         let value = interfacePopup.selectedItem?.representedObject as? String ?? "auto"
@@ -536,9 +553,9 @@ private final class ConsoleDocumentView: NSView {
         }
         let showingSubtitles = !quitRequested && (session.phase == .running || session.phase == .stopping || (session.readingModeEnabled && !session.subtitleText.isEmpty))
         session.readingPresentationEnabled = subtitlePreferences.enabled
-        subtitleHistoryWindow.update(history: session.subtitleHistory)
         subtitleHotKeys.setActive(showingSubtitles)
         subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, readingManaged: session.readingModeEnabled, active: showingSubtitles)
+        subtitleHistoryWindow.update(history: session.subtitleHistory)
         subtitleSettings.setSessionActive(sessionBusy)
         subtitleMenu.state = subtitlePreferences.enabled ? .on : .off
         if let operation { stateLabel.stringValue = operation == "stop" ? "正在停止…" : "正在准备本机服务…" }

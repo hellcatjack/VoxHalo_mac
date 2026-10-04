@@ -123,6 +123,19 @@ extension NSColor {
 @MainActor final class SubtitleTextView: NSView {
     private var text = ""
     private var preferences = SubtitlePreferences()
+    #if NATIVE_PLAYBACK_TESTING
+    struct PaintObservation {
+        let text: String
+        let visibleText: String
+        let uptime: TimeInterval
+        let isScreenDrawing: Bool
+        let windowVisible: Bool
+        let forcedOffscreen: Bool
+    }
+    private(set) var lastPaintForTesting: PaintObservation?
+    var onDidDraw: ((PaintObservation) -> Void)?
+    var forceOffscreenObservationForTesting = false
+    #endif
     var padding: CGFloat {
         SubtitleTextLayout.padding(preferences)
     }
@@ -164,6 +177,17 @@ extension NSColor {
         }
         CTFrameDraw(frame, context)
         context.restoreGState()
+        #if NATIVE_PLAYBACK_TESTING
+        let range = CTFrameGetVisibleStringRange(frame)
+        let source = text as NSString
+        let observation = PaintObservation(text: text,
+            visibleText: source.substring(with: NSRange(location: range.location, length: range.length)),
+            uptime: ProcessInfo.processInfo.systemUptime,
+            isScreenDrawing: NSGraphicsContext.current?.isDrawingToScreen == true,
+            windowVisible: window?.isVisible == true,
+            forcedOffscreen: forceOffscreenObservationForTesting)
+        lastPaintForTesting = observation; onDidDraw?(observation)
+        #endif
     }
 }
 

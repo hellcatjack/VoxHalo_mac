@@ -153,11 +153,17 @@ struct SubtitleHistory {
     private var renderedRanges: [NSRange] = []
     private var renderedVersion: Int?
     private var renderedLocale = ""
+    private var latestHistory: SubtitleHistory?
+    private var updateTask: Task<Void, Never>?
+    #if NATIVE_PLAYBACK_TESTING
+    private(set) var renderCountForTesting = 0
+    #endif
 
     init() {}
 
     func show(history: SubtitleHistory) {
         if window == nil { build() }
+        updateTask?.cancel(); updateTask = nil; latestHistory = history
         render(history: history)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -166,14 +172,29 @@ struct SubtitleHistory {
     func update(history: SubtitleHistory) {
         // A closed, hidden or minimized history must not rebuild/layout a full
         // transcript on the main thread while live captions and audio continue.
+        latestHistory = history
         guard let window, window.isVisible, !window.isMiniaturized else { return }
-        render(history: history)
+        guard renderedVersion != history.version || renderedLocale != NativeLocalization.locale,
+              updateTask == nil else { return }
+        // Caption selection and paint always get the immediate main-actor turn.
+        // Merge bursts of translation/correction events into one history layout.
+        updateTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 200_000_000) } catch { return }
+            guard let self else { return }
+            self.updateTask = nil
+            guard let window = self.window, window.isVisible, !window.isMiniaturized,
+                  let latest = self.latestHistory else { return }
+            self.render(history: latest)
+        }
     }
 
     private func render(history: SubtitleHistory) {
         guard let window else { return }
         let locale = NativeLocalization.locale
         guard renderedVersion != history.version || renderedEntries != history.entries || renderedLocale != locale else { return }
+        #if NATIVE_PLAYBACK_TESTING
+        renderCountForTesting += 1
+        #endif
         window.title = NativeLocalization.text("阅读记录")
         intro.stringValue = NativeLocalization.text("保留本次传译的完整译文与校订记录；实时字幕按朗读进度显示。")
         textView.setAccessibilityLabel(NativeLocalization.text("阅读记录"))
