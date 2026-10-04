@@ -2,6 +2,14 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 40 · 2026-10-03
+
+- Reference native Reading first captions to accepted immutable sentence text and actual PCM playback progress. Aim for a 0.6-second lead when the next audio is scheduled, group complete short neighbors into a frozen card, and paginate long sentences at the user's fixed font size.
+- Add a native **Reading history** window through the book button and menus. Retain completed full translations and corrections, plus the exact accepted wording of incremental **Spoken supplement** entries not covered by the full translation. Keep records after stopping and across in-session source-ledger resets; clear them on the next session or App relaunch.
+- Base native audio finishing on published PCM and actual playback, excluding unpublished speculative preparation and HLS mirror buffers. Stop after 60 seconds without progress or the 180-second hard limit; this is not a promise to process/play unlimited backlog without omissions.
+- Keep language-specific reading timers when native local playback is unavailable. Live captions prioritize playback progress and cannot guarantee each page its previous minimum reading hold; the first packet may appear with speech, and page positions within a long PCM chunk are approximate without word alignment.
+- Preserve recognition/translation models, prompts, speech synthesis, audio bytes, playback scheduling and browser listening behavior. See [caption timing and history](VoxBridge/docs/READING-SUBTITLES.md).
+
 ## LingoCove 1.0.0 · build 39 · 2026-09-29
 
 - Add global subtitle font-size shortcuts: Control + Shift + Command + ← decreases and → increases by 2 pt, within 12–144 pt. Hold to repeat; changes save automatically.

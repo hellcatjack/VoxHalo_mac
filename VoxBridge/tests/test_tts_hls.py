@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import math
 import shutil
@@ -2318,11 +2319,13 @@ def test_whole_sentence_reaches_shared_audio_and_subtitle_metadata(tmp_path, lan
             await asyncio.wait_for(stream.wait_idle(), 3)
             chunks = stream.native_pcm.snapshot(0)['chunks']
             assert [(c['text'], c['index'], c['count']) for c in chunks] == [(text, 0, 1)]
+            assert [c['sentence_text'] for c in chunks] == [text]
             assert synth.calls == [(text, language)]
             # One audio payload, with the existing 300 ms pause only at its end.
             assert len(encoder.appended) == 1
             pcm = decode_mono_pcm16_wav(wav, expected_rate=24000)
             assert encoder.appended[0] == pcm + bytes(24000 * 2 * 300 // 1000)
+            assert base64.b64decode(chunks[0]['pcm']) == encoder.appended[0]
         finally:
             await stream.close()
     asyncio.run(scenario())
@@ -2357,6 +2360,13 @@ def test_chunk_release_while_second_preparation_blocks(tmp_path):
             assert len(first) == 1
             assert first[0]['index'] == 0 and first[0]['count'] == 2
             assert first[0]['duration_ms'] == 100
+            assert first[0]['sentence_text'] == item.text
+            assert not unblock.is_set()
+            assert synth.calls == [('One two three four five six seven eight, ', 'English')]
+            pcm = decode_mono_pcm16_wav(synth.wav_bytes, expected_rate=24000)
+            assert encoders[0].appended == [pcm]
+            assert base64.b64decode(first[0]['pcm']) == pcm
+            first[0]['sentence_text'] = 'A later display correction.'
             assert stream.status.queue_depth == 1
             assert stream.status.synthesis_active
             assert stream.status.translated_audio_backlog_count == 1
@@ -2364,7 +2374,13 @@ def test_chunk_release_while_second_preparation_blocks(tmp_path):
             await asyncio.wait_for(stream.wait_idle(), 2)
             chunks = stream.native_pcm.snapshot(0)['chunks']
             assert [c['duration_ms'] for c in chunks] == [100, 400]
-            assert len(encoders[0].appended) == 2
+            assert [c['sentence_text'] for c in chunks] == [item.text, item.text]
+            assert synth.calls == [
+                ('One two three four five six seven eight, ', 'English'),
+                ('nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.', 'English'),
+            ]
+            assert encoders[0].appended == [pcm, pcm + bytes(24000 * 2 * 300 // 1000)]
+            assert [base64.b64decode(c['pcm']) for c in chunks] == encoders[0].appended
         finally:
             unblock.set(); await stream.close()
     asyncio.run(scenario())

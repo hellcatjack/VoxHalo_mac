@@ -13,6 +13,7 @@ struct NativeSpeechChunk: Decodable {
     let pcm: Data
     let duration_ms: Double
     let text: String
+    let sentence_text: String?
     let created_at_ms: Double
 }
 
@@ -225,12 +226,14 @@ enum NativeSpeechStartupRecovery {
             let end = start + AVAudioFramePosition(buffer.frameLength)
             pending.append(Scheduled(seq: chunk.seq, start: start, end: end))
             scheduledEnd = end
-            scheduledChunks.append(["seq": chunk.seq, "sentence_id": chunk.sentence_id,
+            var subtitleSchedule: [String: Any] = ["seq": chunk.seq, "sentence_id": chunk.sentence_id,
                                     "source_order": chunk.source_order, "revision": chunk.revision,
                                     "index": chunk.index, "count": chunk.count, "text": chunk.text,
                                     "start_frame": start, "end_frame": end,
                                     "created_at_ms": chunk.created_at_ms,
-                                    "scheduled_at_ms": Date().timeIntervalSince1970 * 1000])
+                                    "scheduled_at_ms": Date().timeIntervalSince1970 * 1000]
+            if let sentence = chunk.sentence_text { subtitleSchedule["sentence_text"] = sentence }
+            scheduledChunks.append(subtitleSchedule)
             if scheduledChunks.count > 256 { scheduledChunks.removeFirst() }
             #if NATIVE_PLAYBACK_TESTING
             onPCMChunk?(chunk)

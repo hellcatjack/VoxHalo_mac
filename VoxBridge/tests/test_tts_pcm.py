@@ -35,3 +35,29 @@ def test_buffer_bounds_and_batch():
     b = NativePCMBuffer(); b.reset('e')
     for _ in range(7): append(b)
     assert len(b.snapshot(0)['chunks']) == 4
+
+
+@pytest.mark.parametrize('sentence_text', [None, '', 'Full sentence. 完整句子。'])
+def test_sentence_metadata_is_additive_and_retained_on_retry(monkeypatch, sentence_text):
+    import voxbridge.tts.pcm as pcm_module
+    monkeypatch.setattr(pcm_module.time, 'time', lambda: 100.0)
+    original = pcm_module.NativePCMBuffer(); original.reset('e')
+    annotated = pcm_module.NativePCMBuffer(); annotated.reset('e')
+    pcm = b'\x01\x00\xff\x7f\x00\x80'
+    arguments = dict(pcm=pcm, sentence_id='s', revision=2, source_order=3,
+                     index=0, count=2, text='Full sentence. ')
+    expected = original.append(**arguments)
+    published = annotated.append(**arguments, sentence_text=sentence_text)
+    if sentence_text is None:
+        assert published == expected
+        assert 'sentence_text' not in published
+    else:
+        assert published.pop('sentence_text') == sentence_text
+        assert published == expected
+    first = annotated.snapshot(0, 'e')
+    assert first == annotated.snapshot(0, 'e')
+    if sentence_text is not None:
+        assert first['chunks'][0]['sentence_text'] == sentence_text
+        first['chunks'][0]['sentence_text'] = 'A later display correction.'
+        assert annotated.snapshot(0, 'e')['chunks'][0]['sentence_text'] == sentence_text
+    assert annotated.snapshot(-1, 'e') == original.snapshot(-1, 'e')

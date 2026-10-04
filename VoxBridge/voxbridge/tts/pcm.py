@@ -35,7 +35,8 @@ class NativePCMBuffer:
         self._chunks = deque()
 
     def append(self, *, pcm: bytes, sentence_id: str, revision: int,
-               source_order: int, index: int, count: int, text: str):
+               source_order: int, index: int, count: int, text: str,
+               sentence_text: str | None = None):
         pcm = bytes(pcm)
         if not pcm or len(pcm) % 2 or len(pcm) > self.max_bytes:
             raise ValueError('invalid or oversized PCM16 chunk')
@@ -47,6 +48,8 @@ class NativePCMBuffer:
                      sample_rate=24000, pcm=base64.b64encode(pcm).decode('ascii'),
                      duration_ms=max(1, round(len(pcm) * 1000 / 48000)), text=text,
                      created_at_ms=round(time.time() * 1000))
+        if sentence_text is not None:
+            chunk['sentence_text'] = sentence_text
         self._chunks.append((chunk, len(pcm)))
         self._bytes += len(pcm)
         while self._bytes > self.max_bytes or len(self._chunks) > self.max_chunks:

@@ -19,6 +19,7 @@ private final class ConsoleDocumentView: NSView {
     }
     private var readingLayoutKey: ReadingLayoutKey?
     private let subtitleOverlay = SubtitleOverlayController()
+    private let subtitleHistoryWindow = SubtitleHistoryWindow()
     private lazy var subtitleSettings = SubtitleSettingsController(preferences: subtitlePreferences)
     private let subtitleHotKeys = SubtitleHotKeyController()
     private var subtitleSaveTimer: Timer?
@@ -352,6 +353,7 @@ private final class ConsoleDocumentView: NSView {
             : iconButton("检查或修复模型", symbol: "shippingbox", action: #selector(manageInstallation))
         let utilities = row([button("字幕设置…", #selector(showSubtitleSettings)),
                              button("模型管理", #selector(manageModels)),
+                             iconButton("阅读记录", symbol: "book", action: #selector(showReadingHistory)),
                              iconButton("查看日志", symbol: "doc.text.magnifyingglass", action: #selector(openLogs)), folderButton], spacing: 7)
         utilities.setContentHuggingPriority(.required, for: .horizontal)
         let footer = row([detailLabel, NSView(), utilities], spacing: 16); footer.alignment = .centerY
@@ -387,6 +389,7 @@ private final class ConsoleDocumentView: NSView {
         interfacePopup.setAccessibilityLabel(NativeLocalization.text("界面语言"))
         subtitleSettings.refreshLocalization()
         subtitleOverlay.refreshLocalization()
+        subtitleHistoryWindow.refreshLocalization(history: session.subtitleHistory)
         modelManagerWindow?.refreshLocalization()
     }
 
@@ -402,6 +405,7 @@ private final class ConsoleDocumentView: NSView {
     private func buildMenu() {
         let main = NSMenu(), root = NSMenuItem(), appMenu = NSMenu()
         appMenu.addItem(item("显示控制面板", #selector(showWindow)))
+        appMenu.addItem(item("阅读记录", #selector(showReadingHistory)))
         appMenu.addItem(item("字幕设置…", #selector(showSubtitleSettings))); appMenu.addItem(.separator())
         appMenu.addItem(item("模型管理", #selector(manageModels)))
         appMenu.addItem(item("停止服务并退出", #selector(quit), key: "q")); root.submenu = appMenu; main.addItem(root)
@@ -419,6 +423,7 @@ private final class ConsoleDocumentView: NSView {
         menu.addItem(startMenu); menu.addItem(captureMenu); menu.addItem(stopMenu)
         subtitleMenu = item("显示翻译字幕", #selector(toggleSubtitles))
         menu.addItem(subtitleMenu); menu.addItem(item("字幕设置…", #selector(showSubtitleSettings)))
+        menu.addItem(item("阅读记录", #selector(showReadingHistory)))
         menu.addItem(item("模型管理", #selector(manageModels)))
         menu.addItem(item("打开监控页", #selector(openOperator))); menu.addItem(.separator())
         menu.addItem(item("停止服务并退出", #selector(quit))); statusItem.menu = menu
@@ -522,11 +527,16 @@ private final class ConsoleDocumentView: NSView {
                     SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages ?? [text]
                 }, fits: { text in
                     SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages.count == 1
+                }, liveSplitter: { text in
+                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame, fitCompleteText: true)?.pages ?? [text]
+                }, liveFits: { text in
+                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame, fitCompleteText: true)?.pages.count == 1
                 })
             }
         }
         let showingSubtitles = !quitRequested && (session.phase == .running || session.phase == .stopping || (session.readingModeEnabled && !session.subtitleText.isEmpty))
         session.readingPresentationEnabled = subtitlePreferences.enabled
+        subtitleHistoryWindow.update(history: session.subtitleHistory)
         subtitleHotKeys.setActive(showingSubtitles)
         subtitleOverlay.setLiveText(session.subtitleText, identity: session.subtitleIdentity, synchronized: session.subtitleFollowsPlayback, readingManaged: session.readingModeEnabled, active: showingSubtitles)
         subtitleSettings.setSessionActive(sessionBusy)
@@ -586,6 +596,7 @@ private final class ConsoleDocumentView: NSView {
     }
 
     @objc private func showSubtitleSettings() { guard desktopReady else { showWindow(); return }; subtitleSettings.show() }
+    @objc private func showReadingHistory() { subtitleHistoryWindow.show(history: session.subtitleHistory) }
     @objc private func toggleSubtitles() {
         performSubtitleShortcut(.toggle)
     }

@@ -1689,7 +1689,7 @@ class SharedHLSTTSPublisher:
                         def commit():
                             self.native_pcm.append(pcm=prepared.pcm, sentence_id=item.sentence_id,
                                 revision=item.revision, source_order=item.source_order, index=index,
-                                count=len(state.texts), text=state.texts[index])
+                                count=len(state.texts), text=state.texts[index], sentence_text=str(item.text))
                             self._chunk_consumed_source_order = max(self._chunk_consumed_source_order, item.source_order)
                             self._discard_callbacks.pop(key, None)
                             self._notify_publication(self._commit_callbacks.pop(key, None))

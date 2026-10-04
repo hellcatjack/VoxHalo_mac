@@ -1,18 +1,109 @@
 # Reading-first subtitles
 
 The native App offers **Reading first** (default) and **Follow speech** in Subtitle
-settings. The setting is presentation-only: changing it, moving/hiding captions,
-or reading a longer page does not publish, consume, seek or cancel speech jobs.
-Follow speech retains the actual PCM playback clock. The local web listener
-continues to show playback-synchronized captions.
+settings. Build 40 uses native PCM playback progress for live Reading first
+captions and keeps a separate full-session reading history. These are
+presentation features: changing mode, moving/hiding captions or opening history
+does not publish, consume, seek or cancel speech jobs. Models, prompts, synthesis,
+audio bytes, scheduling and browser listening are unchanged. The local web
+listener continues to show playback-synchronized captions.
 
-Reading first consumes completed `sentence_translation` events at the current
-source revision. These results can still be revised; Subtitle settings explains
-this behavior. The overlay contains translation only, without mode labels or
-operational messages. It never exposes partial token generation. The App separately shows the text
-currently being spoken, so the two timelines are not mislabeled as one.
+The overlay contains translation only, without headings, mode labels or
+operational messages. It never exposes partial token generation. Captions keep
+the selected font size and wrap naturally. The App separately shows the text
+currently being spoken.
 
-## Timing and completeness
+## Live Reading first with native local speech
+
+- The live card uses immutable sentence text accepted by the native PCM player,
+  rather than a newer translation revision that may differ from the audible
+  sentence. It advances from the player's actual output sample position,
+  including its presentation-latency adjustment.
+- Once upcoming audio is scheduled, a new card is eligible approximately
+  **0.6 seconds before its first PCM anchor**. This is an intended lead, not an
+  end-to-end timing guarantee. The first packet can arrive as speech begins, so
+  the first caption may appear simultaneously. Network delivery, UI scheduling
+  and device latency can reduce the lead.
+- Complete neighboring short sentences can share a card if they are already
+  scheduled, adjacent and fit at the chosen font size. The card's text and
+  identity stay frozen; incoming sentences and revised translations do not
+  append words or rewrap that card. Grouped later sentences may appear farther
+  ahead than the first card anchor.
+- Long sentences paginate at the user's fixed font size. Page positions follow
+  accepted PCM chunk boundaries and proportional text work within each chunk.
+  A long sentence synthesized as a single chunk therefore has approximate page
+  positions: there is no word-level audio alignment. Only scheduled PCM can
+  establish a future page position; an unknown synthesis or starvation gap is
+  not predicted.
+- Paused output holds the card; receiving more audio while the sample position
+  stays unchanged does not replace an existing card. Hiding captions does not
+  pause this playback clock. Restoring captions follows the current position;
+  a suspended UI catches up rather than replaying an obsolete visual backlog.
+  Manual font/display changes reflow at current speech progress, without
+  rewinding spoken pages or restarting an independent reading timer.
+- Live cards prioritize playback progress. There is **no universal 3-second or
+  3.5-second minimum hold** when fast speech or several long-sentence pages must
+  fit the existing audio duration. Complete history remains available for
+  reading; retaining the text is not a promise that every live page received
+  enough reading time. Full minimum holds, finite display space and unchanged
+  audio cannot also guarantee keeping up with arbitrarily fast speech.
+- **Follow speech** remains tied to the currently audible PCM segment. Live
+  Reading first keeps its last card after stopping and does not replay the
+  independent fallback queue accumulated during local speech.
+
+## Reading history
+
+Open **Reading history** with the console's book button or the App/menu-bar menu.
+The separate native window shows numbered source text and completed full
+translations in a selectable, scrollable text view. It retains final complete
+translation results and completed corrections,
+including previous completed versions while a newer source revision waits for
+translation. Identical retransmissions do not add duplicate entries; distinct
+source occurrences with identical words remain separate. Draft, stale and
+invalid translation events are ignored. Entries follow source insertion order,
+with each occurrence's recorded corrections kept together.
+
+Accepted incremental speech that is not covered by the full sentence translation
+is also retained in its exact accepted wording as **Spoken supplement**. Only
+the accepted supplement's complete sentence text is recorded, not each PCM chunk
+or repeated schedule snapshot. It stays with its original source occurrence
+when that binding is known, including after source-ledger resets. Distinct
+occurrences with the same words remain separate. When the original source delta
+cannot be reliably identified, the record shows the supplement translation only;
+it does not label the full parent source as that delta.
+
+There is no completed-entry eviction limit within the current session. New
+entries preserve the selected passage and scroll position; the window follows
+the end only when the reader was already there. The record stays available after
+stopping and clears when the next session starts. An in-session source-ledger
+reset for final re-decode or reconciliation retains completed records; rebuilt
+occurrences receive separate history identities even if source IDs are reused.
+It lives in App memory and is **not durable across App relaunches**. Opening or
+reading history has no audio, model or browser side effects.
+
+## Native audio finish limits
+
+After final translation flushing, the native audio drain follows published PCM
+and actual playback completion. Unpublished speculative pre-synthesis and HLS
+mirror buffering do not count as native speech waiting to play. Delivery and
+playback progress keep the drain active; a sample clock running through silence
+alone is not progress. The drain stops after **60 seconds without progress** or
+its **180-second hard limit**, and reports the timeout.
+
+These limits apply to the native audio drain, not to unlimited processing of an
+arbitrarily large input backlog. They do not guarantee that every source utterance
+will be translated and played under all backlog or failure conditions. Completed
+translations, corrections and accepted supplements already in Reading history
+remain readable after stopping. The history feature does not alter synthesis,
+PCM bytes or playback scheduling.
+
+## Reading timers without native local PCM playback
+
+When native local playback is unavailable, including **Do not play locally**,
+Reading first retains the independent reading queue described below. It consumes
+completed `sentence_translation` events at the current source revision. These
+results can still be corrected. The language-specific minimum holds and hidden
+clock pause apply to this fallback, not to live PCM captions.
 
 - Pages follow source insertion order, not translation completion order. A later
   result cannot overwrite or leapfrog an untranslated earlier sentence.
@@ -27,12 +118,13 @@ currently being spoken, so the two timelines are not mislabeled as one.
   suffix into a second, standalone caption. The next screen contains unread
   content; a repeated sentence with a distinct source identity still appears.
 - Reading work is `CJK characters / 6 + other-script words / 3`. Chinese and
-  Japanese use this work divided by a
-  visual pace factor initially set to 1.35. Accepted complete PCM units provide
-  read-only duration feedback: the last 12 units set a pace 20% ahead of measured
-  speech, bounded to 1.35–2.2. At least four waiting ready rows allow a further
-  15% increase, capped at 2.5. This affects new display deadlines only and never
-  changes speech speed, scheduling or an already-visible group's minimum.
+  Japanese use this work divided by a visual pace factor initially set to 1.35.
+  At least four waiting ready rows allow a 15% display-pace increase, capped at
+  2.5. The retained queue can also use read-only speech-duration feedback when
+  available; a session without local PCM has no such samples. These adjustments
+  affect new display deadlines only and never change speech speed, scheduling
+  or an already-visible group's minimum. Live PCM captions use the sample clock
+  described above rather than this reading-rate estimate.
   Punctuation/whitespace do not add words; contractions remain one word. These
   are engineering defaults, not a universal reading-speed assertion.
 - Chinese target screens retain their extra reading allowance after the

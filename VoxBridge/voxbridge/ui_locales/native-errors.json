@@ -920,6 +920,26 @@
       "it": "Esecuzione del comando del servizio non riuscita.",
       "pt": "A execução do comando do serviço falhou.",
       "hi": "सेवा का कमांड चलाना विफल हुआ।"
+    },
+    "朗读收尾连续 60 秒没有进展，已停止本机播放。": {
+      "zh": "朗读收尾连续 60 秒没有进展，已停止本机播放。",
+      "en": "Speech finishing made no progress for 60 seconds. Local playback stopped.",
+      "ja": "読み上げの終了処理が60秒間進みませんでした。本機の再生を停止しました。",
+      "fr": "La fin de lecture n’a pas progressé pendant 60 secondes. La lecture locale est arrêtée.",
+      "es": "La finalización de voz no avanzó durante 60 segundos. Se detuvo la reproducción local.",
+      "it": "La chiusura della lettura non è avanzata per 60 secondi. Riproduzione locale interrotta.",
+      "pt": "A finalização da voz não avançou por 60 segundos. A reprodução local foi interrompida.",
+      "hi": "वाचन पूरा करने में 60 सेकंड तक कोई प्रगति नहीं हुई। स्थानीय प्लेबैक रोक दिया गया।"
+    },
+    "朗读收尾超过 180 秒，已停止本机播放。": {
+      "zh": "朗读收尾超过 180 秒，已停止本机播放。",
+      "en": "Speech finishing exceeded 180 seconds. Local playback stopped.",
+      "ja": "読み上げの終了処理が180秒を超えました。本機の再生を停止しました。",
+      "fr": "La fin de lecture a dépassé 180 secondes. La lecture locale est arrêtée.",
+      "es": "La finalización de voz superó los 180 segundos. Se detuvo la reproducción local.",
+      "it": "La chiusura della lettura ha superato 180 secondi. Riproduzione locale interrotta.",
+      "pt": "A finalização da voz ultrapassou 180 segundos. A reprodução local foi interrompida.",
+      "hi": "वाचन पूरा करने में 180 सेकंड से अधिक लगे। स्थानीय प्लेबैक रोक दिया गया।"
     }
   }
 }

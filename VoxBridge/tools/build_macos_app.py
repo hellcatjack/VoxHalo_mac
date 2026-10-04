@@ -17,7 +17,7 @@ SOURCES = ROOT / 'deploy/macos/app'
 APP_NAME = 'LingoCove.app'
 BUNDLE_ID = 'org.pccs.voxbridge.console'
 APP_VERSION = '1.0.0'
-APP_BUILD = '39'
+APP_BUILD = '40'
 
 
 def signing_configuration(identity: str | None = None, ad_hoc: bool = False) -> tuple[str, str | None]:
@@ -121,8 +121,8 @@ def build(destination: Path, desktop_link: bool, release_payload: Path | None = 
                         '-framework', 'AppKit', '-framework', 'AVFoundation', '-framework', 'ScreenCaptureKit',
                         '-framework', 'CoreAudio', '-framework', 'CoreImage', '-framework', 'Carbon',
                         *[str(SOURCES/name) for name in ('NativeLocalization.swift', 'NativeLocalizedViews.swift', 'ServiceClient.swift', 'NativePreferences.swift',
-                           'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift',
-                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitlePreferences.swift', 'SubtitleShortcuts.swift', 'SubtitleHotKeys.swift',
+                           'AudioDevices.swift', 'AudioCapture.swift', 'SystemAudioTap.swift', 'NativeSpeechPlayer.swift', 'NativeSpeechDrainProgress.swift',
+                           'SubtitleState.swift', 'SubtitlePlayback.swift', 'SubtitleLiveReading.swift', 'SubtitleHistory.swift', 'SubtitlePreferences.swift', 'SubtitleShortcuts.swift', 'SubtitleHotKeys.swift',
                            'SubtitleOverlay.swift', 'SubtitleShortcutSettings.swift', 'SubtitleSettings.swift', 'NativeSession.swift',
                            'DesktopInstallation.swift', 'InstallationWindow.swift', 'ModelInventory.swift',
                            'ModelManager.swift', 'ModelManagerWindow.swift', 'main.swift')],
