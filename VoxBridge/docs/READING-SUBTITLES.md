@@ -1,59 +1,89 @@
 # Reading-first subtitles
 
 The native App offers **Reading first** (default) and **Follow speech** in Subtitle
-settings. Build 40 uses native PCM playback progress for live Reading first
-captions and keeps a separate full-session reading history. These are
-presentation features: changing mode, moving/hiding captions or opening history
-does not publish, consume, seek or cancel speech jobs. Models, prompts, synthesis,
-audio bytes, scheduling and browser listening are unchanged. The local web
-listener continues to show playback-synchronized captions.
+settings. **Build 43 makes Reading first independent of audio**: a completed
+translation can enter the visible queue before speech confirmation, synthesis or
+PCM delivery. Follow speech still shows the currently audible segment. Models,
+prompts, speech confirmation, synthesis speed, PCM bytes and playback scheduling
+are unchanged. The local web listener retains playback-synchronized captions.
 
-The overlay contains translation only, without headings, mode labels or
-operational messages. It never exposes partial token generation. Captions keep
-the selected font size and wrap naturally. The App separately shows the text
-currently being spoken.
+The overlay contains translations only, with no mode labels, operational notices,
+or partial token generation. It uses the selected fixed font size, natural
+wrapping, and spaces in place of source newlines. The App separately shows the
+text currently being spoken. A later completed correction can therefore differ
+from an older translation still being spoken; choose Follow speech when matching
+the audible wording matters more than seeing a completed translation early.
 
-## Live Reading first with native local speech
+## Independent reading clock
 
-- The live card uses immutable sentence text accepted by the native PCM player,
-  rather than a newer translation revision that may differ from the audible
-  sentence. It advances from the player's actual output sample position,
-  including its presentation-latency adjustment.
-- Once upcoming audio is scheduled, a new card is eligible approximately
-  **0.6 seconds before its first PCM anchor**. This is an intended lead, not an
-  end-to-end timing guarantee. The first packet can arrive as speech begins, so
-  the first caption may appear simultaneously. Network delivery, UI scheduling
-  and device latency can reduce the lead.
-- Complete neighboring short sentences can share a card if they are already
-  scheduled, adjacent and fit at the chosen font size. The card's text and
-  identity stay frozen; incoming sentences and revised translations do not
-  append words or rewrap that card. Grouped later sentences may appear farther
-  ahead than the first card anchor.
-- Long sentences paginate at the user's fixed font size. Page positions follow
-  accepted PCM chunk boundaries and proportional text work within each chunk.
-  A long sentence synthesized as a single chunk therefore has approximate page
-  positions: there is no word-level audio alignment. Only scheduled PCM can
-  establish a future page position; an unknown synthesis or starvation gap is
-  not predicted.
-- The console shows the same complete reading card with natural wrapping in
-  its scrollable content, without a three-line tail truncation. Very long cards
-  can require scrolling in the console. The floating caption still shows its
-  complete physical page at the selected fixed font size.
-- Paused output holds the card; receiving more audio while the sample position
-  stays unchanged does not replace an existing card. Hiding captions does not
-  pause this playback clock. Restoring captions follows the current position;
-  a suspended UI catches up rather than replaying an obsolete visual backlog.
-  Manual font/display changes reflow at current speech progress, without
-  rewinding spoken pages or restarting an independent reading timer.
-- Live cards prioritize playback progress. There is **no universal 3-second or
-  3.5-second minimum hold** when fast speech or several long-sentence pages must
-  fit the existing audio duration. Complete history remains available for
-  reading; retaining the text is not a promise that every live page received
-  enough reading time. Full minimum holds, finite display space and unchanged
-  audio cannot also guarantee keeping up with arbitrarily fast speech.
-- **Follow speech** remains tied to the currently audible PCM segment. Live
-  Reading first keeps its last card after stopping and does not replay the
-  independent fallback queue accumulated during local speech.
+- A complete, stable `sentence_translation` for the current source revision is
+  eligible immediately, with no dependency on accepted or playing PCM. An
+  isolated very short result can gather neighboring text for **at most 0.4 s
+  from translation completion**; time already spent waiting counts toward that
+  bound. End of input removes this gathering delay.
+- Screens follow source insertion order. A later completed result cannot jump
+  over an earlier unresolved translation. Already-ready neighboring rows share
+  a screen at the next boundary if they fit at the selected font size and within
+  the target language's reading budget. Sharing charges the minimum once.
+- Once shown, the entire screen's text, identity, layout and deadline stay fixed.
+  Incoming text is not appended mid-screen. After its reading time ends, the
+  next ready screen replaces it on the independent 50 ms presentation clock;
+  there is no wait for an audio chunk or another silent interval.
+- Chinese and Japanese use `max(3, reading_work / 1.35)` seconds, plus a bounded
+  dense-text allowance. Reading work is `CJK characters / 6 + other-script
+  words / 3`. The allowance is 0.05 s per Han character beyond 24, capped at
+  1.5 s per screen; Japanese also counts kana. It is charged once to the whole
+  screen. **Speech speed and queued audio do not shorten these budgets.**
+- Chinese/Japanese screens have a work limit of 10 (approximately **60 pure
+  CJK characters**), in addition to actual fixed-font geometry. A pure Chinese
+  30-character screen gets about 4.0 s, 40 gets about 5.7 s and 60 about 8.9 s.
+  Longer translations continue on complete subsequent pages without truncation.
+- English, French, Spanish, Italian, Portuguese and Hindi retain separate policy
+  entries, initially `max(3.5, 0.5 + words / 3.5)` seconds and a whole-screen limit
+  of approximately 36 words. Mixed CJK consumes proportional reading work.
+  Contractions remain one word and Indic combining marks stay with their word.
+  These are engineering defaults, not a universal reading-speed claim.
+- Long text paginates at punctuation/word boundaries and the user's actual font
+  and display capacity. Every non-whitespace character is retained. There is no
+  automatic font shrinking, inserted newline or second overlay pagination timer.
+  Manual font/display changes reflow visible and unread text with full reading
+  time. Hiding captions or switching to Follow speech pauses the independent
+  reading clock, while audio continues; returning preserves remaining time.
+- The last caption stays visible. Completed history alone is bounded within the
+  queue; unread content is never evicted to catch up. Reading may continue after
+  capture/audio stops without delaying audio shutdown. A new session resets it.
+
+## Revisions and source continuity
+
+- An identical completed revision preserves read and visible page progress.
+  A changed translation, including number or negation corrections, gets a full
+  later reading turn rather than changing words under the reader's eyes.
+- Distinct source occurrences with identical words remain separate. Exact
+  source token IDs **within the same ledger epoch**, plus exact word-bounded
+  target text, can prove an already-displayed occurrence is covered. This is not
+  fuzzy or global text deduplication. Unknown bindings retain full text.
+- Source retirement rejects late obsolete events but keeps an already completed
+  unread visual fallback until its replacement MT succeeds. If new MT fails,
+  a completed previous version remains readable. Failure records are separate
+  from queue exhaustion and never appear as subtitle text.
+- Final source-ledger rebuilds freeze the current reading turn. A complete
+  snapshot proving the entire ordered canonical source is unchanged can retain
+  exact prior reading progress across new segmentation. Corrected or unprovable
+  rebuilds stage the new visual rows until the final result. All new rows must
+  have complete MT and exact source-range coverage before replacing old unread
+  fallback; otherwise known complete old text is retained, followed by complete
+  successful corrections. Ambiguous overlap is never cut by source/target length
+  ratios. Such a conservative correction can repeat context.
+- Reset snapshots are presentation metadata only. Oversized snapshots are omitted
+  atomically and take the conservative fallback path. They never alter ASR,
+  translation confirmation, source-ledger decisions or speech jobs.
+
+If input persistently exceeds reading capacity, delay can still grow. Keeping
+all completed content and minimum reading time takes priority over silently
+skipping unread captions. This change removes audio-related display waits; it
+cannot remove the time needed to recognize and translate speech, or guarantee
+that every failed source produces a translation. An explicit MT failure stays
+in the App/monitor and does not block all later completed captions.
 
 ## Reading history
 
@@ -100,100 +130,6 @@ will be translated and played under all backlog or failure conditions. Completed
 translations, corrections and accepted supplements already in Reading history
 remain readable after stopping. The history feature does not alter synthesis,
 PCM bytes or playback scheduling.
-
-## Reading timers without native local PCM playback
-
-When native local playback is unavailable, including **Do not play locally**,
-Reading first retains the independent reading queue described below. It consumes
-completed `sentence_translation` events at the current source revision. These
-results can still be corrected. The language-specific minimum holds and hidden
-clock pause apply to this fallback, not to live PCM captions.
-
-- Pages follow source insertion order, not translation completion order. A later
-  result cannot overwrite or leapfrog an untranslated earlier sentence.
-- At each page boundary, already-ready groups fill the available space at the
-  selected font size. Once shown, the whole screen's text, identity and reading
-  deadline are frozen. New translations and corrections wait for the next screen;
-  they never append words or change wrapping while the current screen is read.
-  Reading work is accounted for in source order. Groups assembled together share
-  the target language's minimum hold rather than each adding a separate minimum.
-- Groups on the same screen retire together after all their reading budgets
-  have elapsed. Removing a preceding group must not reflow its already-visible
-  suffix into a second, standalone caption. The next screen contains unread
-  content; a repeated sentence with a distinct source identity still appears.
-- Reading work is `CJK characters / 6 + other-script words / 3`. Chinese and
-  Japanese use this work divided by a visual pace factor initially set to 1.35.
-  At least four waiting ready rows allow a 15% display-pace increase, capped at
-  2.5. The retained queue can also use read-only speech-duration feedback when
-  available; a session without local PCM has no such samples. These adjustments
-  affect new display deadlines only and never change speech speed, scheduling
-  or an already-visible group's minimum. Live PCM captions use the sample clock
-  described above rather than this reading-rate estimate.
-  Punctuation/whitespace do not add words; contractions remain one word. These
-  are engineering defaults, not a universal reading-speed assertion.
-- Chinese target screens retain their extra reading allowance after the
-  paced duration and shared 3-second minimum: 0.05 seconds per Han character
-  beyond 24, capped at 1.5 seconds per screen (40 characters: +0.8 s;
-  60 characters: +1.5 s). Count the whole visible screen once, including
-  grouped short sentences. Japanese uses the same initial parameters, counting
-  both Han and kana. This allowance never modifies speech or mid-screen deadlines.
-- English, French, Spanish, Italian, Portuguese and Hindi have separate policy
-  entries, initially `max(3.5, 0.5 + word_count / 3.5)` seconds for the whole screen.
-  The 0.5-second orientation allowance is charged once, not per grouped sentence.
-  Mixed CJK text consumes proportional reading work as well. Combining marks in
-  Hindi stay with their word; apostrophes do not split contractions. Their visual
-  clock is independent of PCM speech feedback and backlog acceleration.
-- Those six word-based policies limit the **entire** screen to approximately
-  36 words (72 CJK-equivalent characters for mixed text), in addition to the
-  actual fixed-font capacity. Other ready groups wait for the next screen, with
-  no truncation, smaller font or forced newlines. Each target language has its
-  own defaults; changing French, for example, does not change English.
-- Neighboring short translations can share a page up to approximately 72 CJK
-  characters or 36 words, subject to the actual fixed-font display capacity.
-  An isolated short result can gather for at most 0.4 s
-  from completion; time already spent in the queue consumes that budget. EOF
-  removes this gathering delay.
-- Long translations are paginated at natural punctuation/word boundaries and
-  retain every non-whitespace character. Each page gets its own minimum time.
-  The reading queue also measures pages against the selected font and display.
-  It serializes groups that cannot fit together; it does not shrink the font or
-  run a second pagination timer. Manual font/display changes reflow unread and
-  currently visible pages with full reading time.
-- All captions keep the exact selected font size. They use natural width-based
-  wrapping; source line breaks and group separators become spaces for display.
-  No headings, blank lines or forced line breaks are inserted. This normalization
-  never changes stored translations or TTS input. Oversized Follow speech captions
-  can paginate at the same size without controlling or delaying audio playback.
-- A displayed group's reading budget is not shortened by newer translations;
-  it can remain alongside its neighbors until the whole screen is complete.
-  A correction gets a subsequent complete reading turn; an identical translation
-  at a new source revision preserves its visible and already-read page progress,
-  including multi-page translations. Distinct source sentences with the same
-  text retain their separate reading turns. Stale results are ignored.
-- Completed translation events may include `source_token_ids`, a read-only copy
-  of the source ledger's occurrence binding. A fully displayed translation can
-  cover a later resegmented row only if both its contiguous source occurrence
-  IDs and its exact, word-bounded translated text are covered. Coverage includes
-  groups accepted onto the same frozen screen, but never deferred or unread
-  pages. Known overlap is recorded in `coveredVersions` for verification.
-  An exact sentence-ending prefix of a fully displayed same-source revision
-  can be removed from its extension. Rephrased translations, negation/number
-  changes, missing bindings and new occurrences retain their full text. This
-  is not fuzzy or global string deduplication. Metadata does not commit, cancel,
-  reorder or otherwise change speech jobs.
-- Hiding reading captions or switching to Follow speech pauses the reading clock;
-  it does not pause audio. Restoring reading captions preserves remaining time.
-- Only completed history is bounded. Unread/unfinished rows are never evicted to
-  catch up. Final text remains visible. Reading can finish after capture stops,
-  without holding up audio shutdown. Starting a new session explicitly resets it.
-
-If input persistently exceeds reading capacity, delay can grow. Preserving all
-content and minimum reading time takes priority over silently skipping a queue.
-This is not an ASR/translation accuracy guarantee. An explicit translation
-failure stays in the monitor with its source record; it does not insert a notice
-into the subtitle area or block all later captions. A successful later retry
-can still enter the reading queue. An unfinished translation
-still holds its place until a result or failure is known.
 
 ## Source units before translation
 

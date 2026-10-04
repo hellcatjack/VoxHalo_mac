@@ -93,26 +93,19 @@ enum HLSPlaybackGap {
     private var subtitleState = CompletedSubtitleState()
     private var playbackSubtitle: SubtitlePlayback.Caption?
     private var readingSubtitles = ReadingSubtitleQueue()
-    private var liveReading = LiveReadingSubtitle()
     private(set) var subtitleHistory = SubtitleHistory()
-    // Remain on the live presentation after stopping rather than replaying the
-    // independent visual queue accumulated while local speech was active.
-    private var usesLiveReading = false
     private var readingClock: Task<Void, Never>?
     var subtitleMode: SubtitlePreferences.Mode = .playback { didSet { onChange?() } }
     var readingPresentationEnabled = true
     var readingModeEnabled: Bool { subtitleMode == .reading || preferences.outputUID == "none" }
     var subtitleFollowsPlayback: Bool { !readingModeEnabled }
-    var subtitleText: String { subtitleFollowsPlayback ? (playbackSubtitle?.text ?? "") : usesLiveReading ? (liveReading.caption?.text ?? "") : readingSubtitles.text }
-    var subtitleIdentity: CompletedSubtitleState.Identity? { subtitleFollowsPlayback ? playbackSubtitle?.identity : usesLiveReading ? liveReading.caption?.identity : readingSubtitles.identity }
+    var subtitleText: String { subtitleFollowsPlayback ? (playbackSubtitle?.text ?? "") : readingSubtitles.text }
+    var subtitleIdentity: CompletedSubtitleState.Identity? { subtitleFollowsPlayback ? playbackSubtitle?.identity : readingSubtitles.identity }
     var readingPendingCount: Int { readingSubtitles.pendingCount }
     func configureReadingPresentation(splitter: @escaping (String) -> [String], fits: @escaping (String) -> Bool,
                                       liveSplitter: ((String) -> [String])? = nil, liveFits: ((String) -> Bool)? = nil) {
         readingSubtitles.configure(splitter: splitter, fits: fits)
-        liveReading.configure(splitter: liveSplitter ?? splitter, fits: liveFits ?? fits)
-        liveReading.advance(presentedFrame: speechPlayer?.subtitlePresentedFrame)
-        readingSubtitles.advance(now: ProcessInfo.processInfo.systemUptime,
-                                 visible: !usesLiveReading && readingModeEnabled && readingPresentationEnabled)
+        advanceReadingPresentation(now: ProcessInfo.processInfo.systemUptime)
         if readingSubtitles.pendingCount > 0 { ensureReadingClock() }
     }
     var spokenSubtitleText: String { playbackSubtitle?.text ?? "" }
@@ -128,13 +121,15 @@ enum HLSPlaybackGap {
     var onPlaybackSchedule: ((NativeSpeechScheduleProbe) -> Void)?
     var onPlaybackMixerOutput: AVAudioNodeTapBlock?
     var playbackDiagnostics: [String: Any] {
-        let reading: [String: Any] = ["reading_live": usesLiveReading, "reading_text": subtitleText, "tts_speed": speed,
+        let reading: [String: Any] = ["reading_live": false, "reading_independent": readingModeEnabled,
+            "reading_text": subtitleText, "tts_speed": speed,
             "reading_sentence_id": subtitleIdentity?.sentenceID ?? "", "reading_revision": subtitleIdentity?.revision ?? -1,
             "reading_sequence": subtitleIdentity?.speechSequence ?? -1, "history_count": subtitleHistory.entries.count,
-            "reading_target_frame": liveReading.targetFrame ?? -1,
-            "reading_references": liveReading.references.map {
-                ["sentence_id": $0.sentenceID, "revision": $0.revision, "source_order": $0.sourceOrder,
-                 "first_sequence": $0.firstSequence, "page": $0.page, "start_frame": $0.startFrame] as [String: Any]
+            "reading_deadline": readingSubtitles.deadline, "reading_pending_count": readingSubtitles.pendingCount,
+            "reading_unresolved_count": readingSubtitles.unresolvedVersions.count,
+            "reading_target_frame": -1,
+            "reading_references": readingSubtitles.references.map {
+                ["sentence_id": $0.id, "revision": $0.revision, "page": $0.page] as [String: Any]
             }]
         if let speechPlayer {
             return reading.merging(["mode": "pcm", "media_time": playbackTime, "listener": localListener ?? "",
@@ -231,8 +226,7 @@ enum HLSPlaybackGap {
         finalReceived = false; pcm.reset(); subtitleState.reset(); playbackSubtitle = nil; subtitleHLSCues = []; sourceText = ""; translationText = ""; ttsWarning = nil
         readingClock?.cancel(); readingClock = nil
         readingSubtitles.reset(targetLanguage: selected.languagePair.target.code)
-        liveReading.reset(targetLanguage: selected.languagePair.target.code)
-        subtitleHistory.reset(); usesLiveReading = false
+        subtitleHistory.reset()
         onChange?()
         do {
             // A live socket must not inherit the 60-second HTTP resource limit.
@@ -311,7 +305,6 @@ enum HLSPlaybackGap {
                 #endif
                 try audio.start(outputUID: selected.outputUID, epoch: joined.epoch, cursor: joined.cursor)
                 speechPlayer = audio
-                usesLiveReading = true
                 speechTransport = Task { [weak self] in await self?.receiveSpeech(listener: listener, run: run) }
             }
             receiver = Task { [weak self] in await self?.receiveLoop(ws, run: run) }
@@ -433,7 +426,6 @@ enum HLSPlaybackGap {
             var readingChanged = false
             if let audio = speechPlayer {
                 candidate = SubtitlePlayback.pcm(audio.scheduledChunks, presentedFrame: audio.subtitlePresentedFrame)
-                readingChanged = liveReading.advance(presentedFrame: audio.subtitlePresentedFrame)
             } else if let player, player.rate > 0, !gapSeekInFlight,
                       let date = player.currentItem?.currentDate() {
                 let programMs = date.timeIntervalSince1970 * 1000
@@ -458,14 +450,36 @@ enum HLSPlaybackGap {
     }
     #if NATIVE_PLAYBACK_TESTING
     func observeLevelForTesting(_ value: Float) { updateLevel(value) }
+    func resetIndependentReadingForTesting(preferences: NativePreferences) {
+        readingClock?.cancel(); readingClock = nil
+        self.preferences = preferences
+        readingSubtitles.reset(targetLanguage: preferences.languagePair.target.code)
+    }
+    func observeReadingEventForTesting(_ event: [String: Any], now: Double) {
+        observeReadingSubtitle(event, now: now, driveClock: false)
+    }
+    @discardableResult func advanceIndependentReadingForTesting(now: Double) -> Bool {
+        advanceReadingPresentation(now: now)
+    }
+    var independentReadingDeadlineForTesting: Double { readingSubtitles.deadline }
+    func observeReadingSpeechForTesting(text: String, seconds: Double) {
+        // Speech cannot change an independent visual reading budget.
+    }
     #endif
 
-    private func observeReadingSubtitle(_ event: [String: Any]) {
+    private func observeReadingSubtitle(_ event: [String: Any],
+                                        now: Double = ProcessInfo.processInfo.systemUptime,
+                                        driveClock: Bool = true) {
         let historyVersion = subtitleHistory.version
         subtitleHistory.observe(event)
-        readingSubtitles.observe(event, now: ProcessInfo.processInfo.systemUptime)
-        if !usesLiveReading { ensureReadingClock() }
-        if historyVersion != subtitleHistory.version { onChange?() }
+        readingSubtitles.observe(event, now: now)
+        let readingChanged = advanceReadingPresentation(now: now)
+        if driveClock { ensureReadingClock() }
+        if readingChanged || historyVersion != subtitleHistory.version { onChange?() }
+    }
+
+    @discardableResult private func advanceReadingPresentation(now: Double) -> Bool {
+        readingSubtitles.advance(now: now, visible: readingModeEnabled && readingPresentationEnabled)
     }
 
     private func ensureReadingClock() {
@@ -473,9 +487,7 @@ enum HLSPlaybackGap {
             readingClock = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
-                    if self.usesLiveReading { self.readingClock = nil; return }
-                    if self.readingSubtitles.advance(now: ProcessInfo.processInfo.systemUptime,
-                                                    visible: self.readingModeEnabled && self.readingPresentationEnabled) { self.onChange?() }
+                    if self.advanceReadingPresentation(now: ProcessInfo.processInfo.systemUptime) { self.onChange?() }
                     // The visual queue can finish after audio capture stops. It
                     // must never hold up stop(), PCM scheduling or device release.
                     if !self.isActive && self.readingSubtitles.pendingCount == 0 {
@@ -615,16 +627,10 @@ enum HLSPlaybackGap {
                     let snapshot = try await nativeSpeechSnapshot(listener: listener, after: audio.receivedSequence,
                                                                   epoch: audio.epoch, run: run)
                     try requireCurrent(run, allowStopping: true)
-                    let previousSequence = audio.receivedSequence
                     try audio.accept(snapshot)
                     let historyVersion = subtitleHistory.version
-                    liveReading.accept(audio.scheduledChunks)
                     subtitleHistory.observeSpeech(audio.scheduledChunks)
-                    let readingChanged = liveReading.advance(presentedFrame: audio.subtitlePresentedFrame)
-                    if readingChanged || historyVersion != subtitleHistory.version { onChange?() }
-                    for chunk in snapshot.chunks where chunk.seq > previousSequence && chunk.count == 1 {
-                        readingSubtitles.observeSpeech(text: chunk.text, seconds: chunk.duration_ms / 1000)
-                    }
+                    if historyVersion != subtitleHistory.version { onChange?() }
                 }
                 if Date().timeIntervalSince(feedbackAt) >= 0.25 {
                     _ = try await requestData("/api/native/tts/\(listener)/playback", method: "POST", timeout: 3,

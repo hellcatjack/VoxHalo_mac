@@ -87,14 +87,16 @@ enum SubtitleReading {
 struct SubtitleTimingPolicy {
     struct CharacterPolicy {
         let minimumSeconds: Double
+        let paceFactor: Double
+        let screenWorkLimit: Double
         let denseThreshold: Int
         let extraPerCharacter: Double
         let maximumExtra: Double
         let countKana: Bool
     }
     static let characterLanguages: [String: CharacterPolicy] = [
-        "zh": .init(minimumSeconds: 3, denseThreshold: 24, extraPerCharacter: 0.05, maximumExtra: 1.5, countKana: false),
-        "ja": .init(minimumSeconds: 3, denseThreshold: 24, extraPerCharacter: 0.05, maximumExtra: 1.5, countKana: true)
+        "zh": .init(minimumSeconds: 3, paceFactor: 1.35, screenWorkLimit: 10, denseThreshold: 24, extraPerCharacter: 0.05, maximumExtra: 1.5, countKana: false),
+        "ja": .init(minimumSeconds: 3, paceFactor: 1.35, screenWorkLimit: 10, denseThreshold: 24, extraPerCharacter: 0.05, maximumExtra: 1.5, countKana: true)
     ]
     let wordsPerSecond: Double
     let minimumSeconds: Double
@@ -115,6 +117,15 @@ struct SubtitleTimingPolicy {
 }
 
 struct ReadingSubtitleQueue {
+    private struct CompletedVersion {
+        let revision: Int
+        let translation: String
+        let sourceTokens: [Int]?
+        let sourceTokenEpoch: String
+        let pages: [String]
+        let nextPage: Int
+        let readyAt: Double
+    }
     private struct Row {
         let id: String
         var revision: Int
@@ -124,23 +135,53 @@ struct ReadingSubtitleQueue {
         var nextPage = 0
         var previousPages: [String]?
         var previousNextPage = 0
+        var previousCompleted: CompletedVersion?
+        var displayRevision: Int?
         var sourceTokens: [Int]?
+        var sourceTokenEpoch = "visual:0"
+        var canonicalRange: Range<Int>?
+        var failedRevision: Int?
         var translation = ""
+        var completed: CompletedVersion? {
+            guard let pages, !pages.isEmpty, !translation.isEmpty else { return nil }
+            return CompletedVersion(revision: displayRevision ?? revision, translation: translation,
+                sourceTokens: sourceTokens, sourceTokenEpoch: sourceTokenEpoch,
+                pages: pages, nextPage: nextPage, readyAt: readyAt)
+        }
     }
-    private struct Coverage { let id: String; let tokens: [Int]; let text: String }
+    private struct Replacement { let id: String; let revision: Int }
+    private struct RebuildProjection {
+        let id: String
+        let epoch: Int
+        let tokens: [String]
+        var ignoredRows: [String: Int] = [:]
+    }
+    private struct RebuildFallback {
+        let tokens: [String]?
+        let rows: [Row]
+    }
+    private struct Coverage { let id: String; let tokens: [Int]; let epoch: String; let text: String }
     private struct Part { let id: String; var revision: Int; let page: Int; let text: String }
     private struct Card { var parts: [Part]; let text: String; var readingEnd: Double; var deadline: Double }
     private var rows: [Row] = []
     private var supersededIDs: Set<String> = []
+    /// A terminal source retirement does not discard a completed visual fallback
+    /// until the replacement translation has actually completed successfully.
+    private var pendingReplacements: [String: Replacement] = [:]
+    private var sourceEpoch = 0
+    private var rebuildProjection: RebuildProjection?
+    private var rebuildFallback: RebuildFallback?
     private var cards: [Card] = []
     private var serial = 0
     private var pausedAt: Double?
     private var splitToFit: (String) -> [String] = { [$0] }
     private var fits: (String) -> Bool = { _ in true }
-    private var speechSamples: [(work: Double, seconds: Double)] = []
     private var displayedCoverage: [Coverage] = []
     private(set) var coveredVersions: [(id: String, revision: Int, coveredBy: String)] = []
     private var timing: SubtitleTimingPolicy? { SubtitleTimingPolicy.wordLanguages[targetLanguage] }
+    private var screenWorkLimit: Double {
+        SubtitleTimingPolicy.characterLanguages[targetLanguage]?.screenWorkLimit ?? timing?.screenWorkLimit ?? 12
+    }
     private(set) var targetLanguage = ""
     private(set) var readingRate = 1.35
     private(set) var text = ""
@@ -149,7 +190,18 @@ struct ReadingSubtitleQueue {
     private(set) var displayedPages = 0
     private(set) var finished = false
     private(set) var references: [(id: String, revision: Int, page: Int)] = []
-    var pendingCount: Int { rows.filter { $0.pages == nil || $0.nextPage < $0.pages!.count }.count + cards.count }
+    var pendingCount: Int {
+        rows.filter { $0.pages == nil || $0.nextPage < $0.pages!.count }.count + cards.count
+            + (rebuildFallback == nil ? 0 : 1)
+    }
+    /// Operational completeness is separate from visual queue exhaustion. A
+    /// failed source with no complete fallback never counts as displayed text.
+    var unresolvedVersions: [(id: String, revision: Int)] {
+        rows.compactMap { row in
+            if let revision = row.failedRevision { return (row.id, revision) }
+            return row.pages?.isEmpty == true && row.translation.isEmpty ? (row.id, row.revision) : nil
+        }
+    }
 
     private static func tokens(_ value: Any?) -> [Int]? {
         guard let values = value as? [NSNumber], !values.isEmpty, values.count <= 8192,
@@ -171,12 +223,12 @@ struct ReadingSubtitleQueue {
     }
     private func coverage(for row: Row) -> Coverage? {
         guard let tokens = row.sourceTokens, !row.translation.isEmpty else { return nil }
-        return Coverage(id: row.id, tokens: tokens, text: row.translation)
+        return Coverage(id: row.id, tokens: tokens, epoch: row.sourceTokenEpoch, text: row.translation)
     }
     private func covering(_ row: Row, in known: [Coverage]) -> Coverage? {
         guard let tokens = row.sourceTokens else { return nil }
         return known.last { prior in
-            guard Self.covers(tokens, with: prior.tokens) else { return false }
+            guard prior.epoch == row.sourceTokenEpoch, Self.covers(tokens, with: prior.tokens) else { return false }
             // A changed translation of the same complete occurrence is a
             // correction even when it happens to be a substring of the old one.
             if prior.id == row.id || prior.tokens == tokens { return row.translation == prior.text }
@@ -184,16 +236,192 @@ struct ReadingSubtitleQueue {
         }
     }
 
-    /// Read-only feedback from accepted complete speech units. Never delays or
-    /// changes audio; the visual clock keeps a small lead over measured speech.
+    private mutating func restoreCompletedFallback(at index: Int) {
+        guard rows[index].pages == nil else { return }
+        if let prior = rows[index].previousCompleted {
+            rows[index].pages = prior.pages
+            rows[index].nextPage = prior.nextPage
+            rows[index].displayRevision = prior.revision
+            rows[index].translation = prior.translation
+            rows[index].sourceTokens = prior.sourceTokens
+            rows[index].sourceTokenEpoch = prior.sourceTokenEpoch
+            rows[index].readyAt = prior.readyAt
+        } else {
+            // This row never produced a complete translation. It has no visual
+            // content to recover and must not block following completed rows.
+            rows[index].pages = []
+            rows[index].nextPage = 0
+            rows[index].failedRevision = rows[index].revision
+        }
+    }
+
+    private mutating func completeReplacement(_ id: String, revision: Int) {
+        var replaced = Set(pendingReplacements.compactMap { child, replacement in
+            replacement.id == id && replacement.revision <= revision ? child : nil
+        })
+        // Ownership can be transferred more than once before MT completes. A
+        // successful terminal owner covers its intermediate owners' children.
+        var previousCount = -1
+        while previousCount != replaced.count {
+            previousCount = replaced.count
+            for (child, replacement) in pendingReplacements where replaced.contains(replacement.id) {
+                replaced.insert(child)
+            }
+        }
+        guard !replaced.isEmpty else { return }
+        rows.removeAll { replaced.contains($0.id) }
+        for child in replaced { pendingReplacements.removeValue(forKey: child) }
+        // Visible parts remain frozen for their original reading turn. Only
+        // unread fallback pages are consumed by the successful replacement.
+    }
+
+    private static func nonnegativeInteger(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue >= 0,
+              number.doubleValue < Double(Int.max), number.doubleValue == Double(number.intValue) else { return nil }
+        return number.intValue
+    }
+    private static func canonicalRange(_ event: [String: Any], limit: Int) -> Range<Int>? {
+        guard let begin = nonnegativeInteger(event["source_begin"]),
+              let end = nonnegativeInteger(event["source_end"]), begin < end, end <= limit else { return nil }
+        return begin..<end
+    }
+    private static func partitions(_ ranges: [Range<Int>], tokenCount: Int) -> Bool {
+        var cursor = 0
+        for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            guard range.lowerBound == cursor, range.upperBound <= tokenCount else { return false }
+            cursor = range.upperBound
+        }
+        return cursor == tokenCount && tokenCount > 0
+    }
+    private mutating func observeSourceRebuild(_ event: [String: Any]) {
+        sourceEpoch += 1
+        finished = false
+        let priorProjection = rebuildProjection
+        rebuildProjection = nil
+        supersededIDs.removeAll(); pendingReplacements.removeAll()
+        // A second rebuild before final does not discard the first transaction's
+        // recoverable, completed old translations.
+        var fallbackRows = rebuildFallback?.rows ?? rows
+        if rebuildFallback != nil {
+            let known = Set(fallbackRows.map { $0.id })
+            // A second canonical correction must not erase complete results
+            // which arrived while the first rebuild was still being staged.
+            fallbackRows.append(contentsOf: rows.filter { !known.contains($0.id) })
+        }
+        let complete = (event["caption_snapshot_complete"] as? NSNumber).map {
+            CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue
+        } == true
+        let previousTokens = event["previous_source_tokens"] as? [String]
+        let canonicalTokens = event["canonical_replacement_tokens"] as? [String]
+        let snapshot = event["previous_source_rows"] as? [[String: Any]]
+        var mappedRows = rows
+        if priorProjection?.tokens != previousTokens {
+            for index in mappedRows.indices { mappedRows[index].canonicalRange = nil }
+        }
+        var snapshotRanges: [Range<Int>] = [], snapshotIDs = Set<String>(), priorOrder = -1
+        let oldEpoch = Self.nonnegativeInteger(event["old_epoch"])
+        let newEpoch = Self.nonnegativeInteger(event["new_epoch"])
+        var snapshotValid = complete && previousTokens?.isEmpty == false
+            && oldEpoch != nil && newEpoch != nil && newEpoch! > oldEpoch!
+            && previousTokens?.allSatisfy({ !$0.isEmpty }) == true
+            && canonicalTokens?.allSatisfy({ !$0.isEmpty }) == true
+        if let previousTokens, let snapshot, !snapshot.isEmpty {
+            for source in snapshot {
+                guard let id = source["id"] as? String, !id.isEmpty, snapshotIDs.insert(id).inserted,
+                      let revision = Self.nonnegativeInteger(source["revision"]),
+                      let order = Self.nonnegativeInteger(source["order"]), order > priorOrder,
+                      let text = source["source"] as? String,
+                      let range = Self.canonicalRange(source, limit: previousTokens.count) else {
+                    snapshotValid = false; break
+                }
+                priorOrder = order; snapshotRanges.append(range)
+                if let index = mappedRows.firstIndex(where: { $0.id == id }),
+                   mappedRows[index].revision == revision, mappedRows[index].source == text,
+                   mappedRows[index].completed?.revision == revision, mappedRows[index].failedRevision == nil {
+                    mappedRows[index].canonicalRange = range
+                } else if priorProjection?.tokens != previousTokens { snapshotValid = false }
+            }
+            snapshotValid = snapshotValid && Self.partitions(snapshotRanges, tokenCount: previousTokens.count)
+        } else { snapshotValid = false }
+        let completedRanges = mappedRows.compactMap { row -> Range<Int>? in
+            guard row.completed != nil else { return nil }
+            return row.canonicalRange
+        }
+        let unreadMapped = mappedRows.allSatisfy { row in
+            guard let pages = row.pages, row.nextPage < pages.count else { return true }
+            return row.canonicalRange != nil
+        }
+        if snapshotValid, let previousTokens, let canonicalTokens, previousTokens == canonicalTokens,
+           unreadMapped,
+           Self.partitions(completedRanges, tokenCount: canonicalTokens.count),
+           let id = event["caption_reset_id"] as? String, !id.isEmpty,
+           let epoch = Self.nonnegativeInteger(event["new_epoch"]) {
+            // Identical source occurrences already have complete translations.
+            // Keep their exact old reading turns, even when new source grouping
+            // crosses the already-read/unread boundary. Never slice target text
+            // in proportion to source tokens.
+            rows = mappedRows
+            rebuildFallback = nil
+            rebuildProjection = RebuildProjection(id: id, epoch: epoch, tokens: canonicalTokens)
+            return
+        }
+        // Corrected or unprovable full re-decodes form a visual transaction.
+        // The current immutable card keeps its time. Complete old unread turns
+        // are held until final establishes whether the rebuilt MT fully succeeds.
+        rebuildFallback = RebuildFallback(tokens: canonicalTokens, rows: fallbackRows)
+        rows = []
+    }
+    private mutating func finishSourceRebuild() {
+        guard let fallback = rebuildFallback else { return }
+        // The final event closes this source transaction. A result which never
+        // completed remains explicit unresolved coverage, not an eternal head
+        // which prevents the retained complete fallback from being read.
+        for index in rows.indices where rows[index].pages == nil {
+            rows[index].failedRevision = rows[index].revision
+            restoreCompletedFallback(at: index)
+        }
+        let ranges = rows.compactMap { $0.canonicalRange }
+        let fullyTranslated = !rows.isEmpty && rows.allSatisfy {
+            $0.completed?.revision == $0.revision
+        }
+        let completeRange = fallback.tokens.map {
+            ranges.count == rows.count && Self.partitions(ranges, tokenCount: $0.count)
+        } == true
+        if !fullyTranslated || !completeRange {
+            var recovered: [Row] = []
+            for var row in fallback.rows {
+                if row.pages == nil, let prior = row.previousCompleted {
+                    row.pages = prior.pages; row.nextPage = prior.nextPage
+                    row.displayRevision = prior.revision; row.translation = prior.translation
+                    row.sourceTokens = prior.sourceTokens; row.sourceTokenEpoch = prior.sourceTokenEpoch
+                    row.readyAt = prior.readyAt
+                } else if row.pages == nil {
+                    row.pages = []; row.nextPage = 0; row.failedRevision = row.revision
+                }
+                if row.failedRevision != nil || row.pages?.isEmpty == true || row.nextPage < (row.pages?.count ?? 0) { recovered.append(row) }
+            }
+            // Unprovable alignment retains all known complete unread content.
+            // Successful rebuilt rows are then complete corrections, which may
+            // repeat context; ambiguous overlap is never silently cut away.
+            rows = recovered + rows
+        }
+        rebuildFallback = nil
+    }
+    private mutating func suppressRebuiltSource(_ event: [String: Any], id: String, revision: Int) -> Bool {
+        guard var projection = rebuildProjection,
+              event["caption_reset_id"] as? String == projection.id,
+              Self.nonnegativeInteger(event["new_epoch"] ?? event["source_token_epoch"]) == projection.epoch,
+              Self.canonicalRange(event, limit: projection.tokens.count) != nil else { return false }
+        projection.ignoredRows[id] = revision
+        rebuildProjection = projection
+        return true
+    }
+
+    /// Retained as a presentation-only compatibility hook. Native speech speed
+    /// cannot shorten the independent target-language reading budget.
     mutating func observeSpeech(text: String, seconds: Double) {
-        guard timing == nil else { return }
-        let work = SubtitleReading.work(text)
-        guard seconds.isFinite, seconds >= 0.6, work >= 0.5 else { return }
-        speechSamples.append((work, seconds))
-        if speechSamples.count > 12 { speechSamples.removeFirst() }
-        let measured = speechSamples.reduce(0) { $0 + $1.work } / speechSamples.reduce(0) { $0 + $1.seconds }
-        readingRate = max(1.35, min(2.2, measured * 1.2))
+        _ = text; _ = seconds
     }
 
     mutating func reset(targetLanguage: String? = nil) {
@@ -212,14 +440,14 @@ struct ReadingSubtitleQueue {
         // visible parts with full reading time; never discard unread text.
         for card in cards {
             for part in card.parts {
-                if let index = rows.firstIndex(where: { $0.id == part.id && $0.revision == part.revision }) {
+                if let index = rows.firstIndex(where: { $0.id == part.id && ($0.displayRevision ?? $0.revision) == part.revision }) {
                     rows[index].nextPage = min(rows[index].nextPage, part.page)
                 }
             }
         }
         if cards.isEmpty {
             for part in references {
-                if let index = rows.firstIndex(where: { $0.id == part.id && $0.revision == part.revision }) {
+                if let index = rows.firstIndex(where: { $0.id == part.id && ($0.displayRevision ?? $0.revision) == part.revision }) {
                     rows[index].nextPage = min(rows[index].nextPage, part.page)
                 }
             }
@@ -234,8 +462,12 @@ struct ReadingSubtitleQueue {
 
     mutating func observe(_ event: [String: Any], now: Double) {
         switch event["type"] as? String {
-        case "started", "sentence_reset": reset()
-        case "final": finished = true
+        case "started": reset()
+        case "sentence_reset":
+            if ["final_redecode", "final_commit_reconcile"].contains(event["reason"] as? String ?? "") {
+                observeSourceRebuild(event)
+            } else { reset() }
+        case "final": finished = true; finishSourceRebuild()
         case "sentence_superseded":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
                   let revision = event["revision"] as? Int, revision >= 0,
@@ -245,57 +477,97 @@ struct ReadingSubtitleQueue {
                   replacementRevision >= 0 else { return }
             if let row = rows.first(where: { $0.id == id }), row.revision != revision { return }
             supersededIDs.insert(id)
-            rows.removeAll { $0.id == id }
+            pendingReplacements[id] = Replacement(id: replacement, revision: replacementRevision)
+            if let index = rows.firstIndex(where: { $0.id == id }) { restoreCompletedFallback(at: index) }
+            if let owner = rows.first(where: { $0.id == replacement }),
+               owner.revision >= replacementRevision, owner.displayRevision == owner.revision,
+               owner.pages != nil, !owner.translation.isEmpty {
+                completeReplacement(replacement, revision: owner.revision)
+            }
             // Preserve an already visible card for its complete reading turn.
-            // Only its remaining pages and late source/MT events are retired.
+            // Late source/MT is terminal; completed unread fallback is held
+            // until a successful owner translation can cover it.
         case "sentence_translation_failed":
             // Operational notices belong in the App/monitor, never the overlay.
             guard let id = event["sentence_id"] as? String,
                   let revision = event["revision"] as? Int,
                   let index = rows.firstIndex(where: { $0.id == id && $0.revision == revision }),
                   rows[index].pages == nil else { return }
-            rows[index].pages = []; rows[index].nextPage = 0
+            rows[index].failedRevision = revision
+            restoreCompletedFallback(at: index)
         case "sentence_committed", "sentence_updated":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
                   !supersededIDs.contains(id),
                   let revision = event["revision"] as? Int, revision >= 0,
                   let source = event["text"] as? String else { return }
+            if suppressRebuiltSource(event, id: id, revision: revision) { return }
             if let index = rows.firstIndex(where: { $0.id == id }) {
                 guard revision >= rows[index].revision else { return }
                 if revision != rows[index].revision || source != rows[index].source {
                     let previous = rows[index]
                     rows[index] = Row(id: id, revision: revision, source: source,
                                       previousPages: previous.pages ?? previous.previousPages,
-                                      previousNextPage: previous.pages == nil ? previous.previousNextPage : previous.nextPage)
+                                      previousNextPage: previous.pages == nil ? previous.previousNextPage : previous.nextPage,
+                                      previousCompleted: previous.completed ?? previous.previousCompleted)
                 }
             } else { rows.append(Row(id: id, revision: revision, source: source)) }
+            if let limit = rebuildFallback?.tokens?.count,
+               let index = rows.firstIndex(where: { $0.id == id }) {
+                rows[index].canonicalRange = Self.canonicalRange(event, limit: limit)
+            }
         case "sentence_translation":
             guard let stable = event["is_stable"] as? NSNumber,
                   CFGetTypeID(stable) == CFBooleanGetTypeID(), stable.boolValue,
                   let id = event["sentence_id"] as? String,
+                  !supersededIDs.contains(id),
                   let revision = event["revision"] as? Int,
+                  rebuildProjection?.ignoredRows[id] != revision,
                   let translation = event["translation"] as? String,
                   !translation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let index = rows.firstIndex(where: { $0.id == id && $0.revision == revision }) else { return }
+            if let projection = rebuildProjection,
+               Self.nonnegativeInteger(event["source_token_epoch"] ?? event["new_epoch"]) != projection.epoch { return }
+            if let limit = rebuildFallback?.tokens?.count {
+                rows[index].canonicalRange = Self.canonicalRange(event, limit: limit)
+            }
             // Use the actual fixed-font capacity instead of pre-cutting every
             // 18–36 characters and charging another minimum hold per fragment.
             let fullText = SubtitlePresentation.singleLine(translation)
+            rows[index].failedRevision = nil
             rows[index].translation = fullText
             rows[index].sourceTokens = Self.tokens(event["source_token_ids"])
+            if let epoch = event["source_token_epoch"] as? NSNumber,
+               CFGetTypeID(epoch) != CFBooleanGetTypeID(), epoch.doubleValue.isFinite,
+               epoch.doubleValue >= 0, epoch.doubleValue == Double(epoch.intValue) {
+                rows[index].sourceTokenEpoch = "ledger:\(epoch.intValue)"
+            } else { rows[index].sourceTokenEpoch = "visual:\(sourceEpoch)" }
             var displayText = fullText
             // Trim only an exact already-displayed prefix of the same source
             // occurrence. Rephrased/corrected translations retain a full turn.
             if let tokens = rows[index].sourceTokens,
                let prior = displayedCoverage.last(where: { $0.id == id
+                   && $0.epoch == rows[index].sourceTokenEpoch
                    && tokens.count > $0.tokens.count && tokens.starts(with: $0.tokens)
                    && fullText.count > $0.text.count && fullText.hasPrefix($0.text) }),
                prior.text.last.map({ ".!?。！？।॥".contains($0) }) == true {
                 displayText = String(fullText.dropFirst(prior.text.count)).trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            let pages = SubtitleReading.pages(displayText, budget: 12).flatMap(splitToFit)
-            if rows[index].pages == pages { return }
+            let pages = SubtitleReading.pages(displayText, budget: min(12, screenWorkLimit)).flatMap(splitToFit)
+            if rows[index].pages == pages {
+                rows[index].displayRevision = revision
+                for card in cards.indices {
+                    for part in cards[card].parts.indices where cards[card].parts[part].id == id {
+                        cards[card].parts[part].revision = revision
+                    }
+                }
+                for part in references.indices where references[part].id == id { references[part].revision = revision }
+                rows[index].previousCompleted = nil
+                completeReplacement(id, revision: revision)
+                return
+            }
             let unchanged = rows[index].previousPages == pages
             rows[index].pages = pages; rows[index].nextPage = 0; rows[index].readyAt = now
+            rows[index].displayRevision = revision
             // Identical multi-page revisions preserve both visible and already
             // read progress. A source re-decode must not replay the entire row.
             if unchanged {
@@ -318,6 +590,8 @@ struct ReadingSubtitleQueue {
                 }
             }
             rows[index].previousPages = nil; rows[index].previousNextPage = 0
+            rows[index].previousCompleted = nil
+            completeReplacement(id, revision: revision)
         default: break
         }
     }
@@ -340,11 +614,16 @@ struct ReadingSubtitleQueue {
             guard now >= last.deadline else { return false }
             cards.removeAll()
         }
+        // Full-session canonical rebuilds finish as one visual transaction.
+        // Normal live translation events never pass through this gate.
+        if rebuildFallback != nil { return false }
         // Completed history is bounded; unread rows are never evicted to catch up.
         if rows.count > 500 {
             var removable = rows.count - 500
             rows.removeAll { row in
                 guard removable > 0, let pages = row.pages, row.nextPage >= pages.count,
+                      !row.translation.isEmpty,
+                      row.failedRevision == nil,
                       !cards.contains(where: { $0.parts.contains(where: { $0.id == row.id }) }) else { return false }
                 removable -= 1; return true
             }
@@ -369,15 +648,16 @@ struct ReadingSubtitleQueue {
                     continue
                 }
                 // Do not put an old and a corrected version beside each other.
-                if cards.contains(where: { $0.parts.contains(where: { $0.id == row.id && ($0.revision != row.revision || $0.page == row.nextPage) }) }) { break }
+                let displayRevision = row.displayRevision ?? row.revision
+                if cards.contains(where: { $0.parts.contains(where: { $0.id == row.id && ($0.revision != displayRevision || $0.page == row.nextPage) }) }) { break }
                 let page = pages[row.nextPage]
                 let candidate = SubtitlePresentation.joined([combined, page])
                 if !combined.isEmpty && (SubtitleReading.work(combined) >= 8 || SubtitleReading.work(candidate) > 12) { break }
                 let screen = SubtitlePresentation.joined(cards.map { $0.text } + [candidate])
-                if let timing, SubtitleReading.work(screen) > timing.screenWorkLimit { break }
+                if SubtitleReading.work(screen) > screenWorkLimit { break }
                 if !fits(screen) { break }
                 combined = candidate
-                parts.append(Part(id: row.id, revision: row.revision, page: row.nextPage, text: page))
+                parts.append(Part(id: row.id, revision: displayRevision, page: row.nextPage, text: page))
                 if row.nextPage + 1 == pages.count, let known = coverage(for: row) { availableCoverage.append(known) }
                 if row.nextPage + 1 < pages.count { break }
             }
@@ -393,7 +673,7 @@ struct ReadingSubtitleQueue {
                 break
             }
             for part in parts {
-                if let index = rows.firstIndex(where: { $0.id == part.id && $0.revision == part.revision }) {
+                if let index = rows.firstIndex(where: { $0.id == part.id && ($0.displayRevision ?? $0.revision) == part.revision }) {
                     rows[index].nextPage = part.page + 1
                     if rows[index].nextPage == rows[index].pages?.count, let known = coverage(for: rows[index]) {
                         // Only the latest displayed version can justify coverage.
@@ -404,19 +684,20 @@ struct ReadingSubtitleQueue {
                     }
                 }
             }
-            let waiting = rows.filter { $0.pages != nil && $0.nextPage < $0.pages!.count }.count
-            let rate = min(2.5, readingRate * (waiting >= 4 ? 1.15 : 1))
+            let rate = SubtitleTimingPolicy.characterLanguages[targetLanguage]?.paceFactor ?? readingRate
             let readingEnd = max(now, cards.last?.readingEnd ?? now) + SubtitleReading.work(combined) / rate
             let until = max(now + (SubtitleTimingPolicy.characterLanguages[targetLanguage]?.minimumSeconds ?? 3), readingEnd)
             cards.append(Card(parts: parts, text: combined, readingEnd: readingEnd, deadline: until))
             displayedPages += parts.count
         }
         if let last = cards.indices.last {
-            if let timing {
-                cards[last].deadline = now + timing.seconds(SubtitlePresentation.joined(cards.map { $0.text }))
+            let screen = SubtitlePresentation.joined(cards.map { $0.text })
+            if let timing { cards[last].deadline = now + timing.seconds(screen) }
+            else if let policy = SubtitleTimingPolicy.characterLanguages[targetLanguage] {
+                cards[last].deadline = now + max(policy.minimumSeconds, SubtitleReading.work(screen) / policy.paceFactor)
             }
             cards[last].deadline += SubtitleReading.additionalSeconds(
-                SubtitlePresentation.joined(cards.map { $0.text }), targetLanguage: targetLanguage)
+                screen, targetLanguage: targetLanguage)
         }
         deadline = cards.last?.deadline ?? now
         guard !cards.isEmpty else { return false } // Keep final text visible.

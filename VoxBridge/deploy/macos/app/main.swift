@@ -544,10 +544,6 @@ private final class ConsoleDocumentView: NSView {
                     SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages ?? [text]
                 }, fits: { text in
                     SubtitleTextLayout.layout(text: text, preferences: style, screen: frame)?.pages.count == 1
-                }, liveSplitter: { text in
-                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame, fitCompleteText: true)?.pages ?? [text]
-                }, liveFits: { text in
-                    SubtitleTextLayout.layout(text: text, preferences: style, screen: frame, fitCompleteText: true)?.pages.count == 1
                 })
             }
         }

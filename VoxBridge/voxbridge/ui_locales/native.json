@@ -1431,26 +1431,6 @@
       "pt": "Aumentar tamanho do texto",
       "hi": "उपशीर्षक का अक्षर आकार बढ़ाएँ"
     },
-    "阅读优先：本机朗读时提前显示已确定朗读的译文，按音频进度切换；完整译文与校订可在阅读记录中查看。本机不播放时按阅读量分页。": {
-      "zh": "阅读优先：本机朗读时提前显示已确定朗读的译文，按音频进度切换；完整译文与校订可在阅读记录中查看。本机不播放时按阅读量分页。",
-      "en": "Reading first: local speech previews the accepted translation and advances with audio. Complete translations and corrections are in Reading history. Without local playback, pages follow reading time.",
-      "ja": "読むことを優先：本機の読み上げでは確定した訳を先に表示し、音声の進行に合わせて切り替えます。全文と修正は読書履歴で確認できます。本機で再生しない場合は読書時間に合わせてページを進めます。",
-      "fr": "Lecture prioritaire : avec la voix locale, le texte accepté apparaît en avance et suit l’audio. Les traductions complètes et corrections restent dans l’historique. Sans lecture locale, les pages suivent le temps de lecture.",
-      "es": "Lectura primero: la voz local anticipa la traducción aceptada y avanza con el audio. Las traducciones completas y correcciones están en el historial. Sin reproducción local, las páginas siguen el tiempo de lectura.",
-      "it": "Lettura prima: la voce locale anticipa la traduzione accettata e segue l’audio. Traduzioni complete e correzioni sono nella cronologia. Senza riproduzione locale, le pagine seguono il tempo di lettura.",
-      "pt": "Leitura primeiro: a voz local antecipa a tradução aceita e acompanha o áudio. Traduções completas e correções ficam no histórico. Sem reprodução local, as páginas seguem o tempo de leitura.",
-      "hi": "पहले पढ़ें: स्थानीय वाचन में स्वीकृत अनुवाद पहले दिखता है और ऑडियो के साथ आगे बढ़ता है। पूरे अनुवाद और सुधार पठन इतिहास में मिलते हैं। स्थानीय प्लेबैक के बिना पृष्ठ पढ़ने के समय के अनुसार बदलते हैं।"
-    },
-    "垂直 100% 可覆盖 Dock。实时字幕跟随朗读进度；完整内容保留在阅读记录。本机不播放时按原文顺序阅读。": {
-      "zh": "垂直 100% 可覆盖 Dock。实时字幕跟随朗读进度；完整内容保留在阅读记录。本机不播放时按原文顺序阅读。",
-      "en": "Vertical 100% can cover the Dock. Live subtitles follow speech progress; full content remains in Reading history. Without local playback, read in source order.",
-      "ja": "垂直 100% で Dock に重ねられます。リアルタイム字幕は音声に追従し、全文は読書履歴に残ります。本機で再生しない場合は原文順に読みます。",
-      "fr": "À 100 % en hauteur, les sous-titres peuvent couvrir le Dock. Ils suivent la voix ; le contenu complet reste dans l’historique. Sans lecture locale, l’ordre original est conservé.",
-      "es": "La posición vertical al 100 % puede cubrir el Dock. Los subtítulos siguen la voz; el contenido completo queda en el historial. Sin reproducción local, se respeta el orden original.",
-      "it": "La posizione verticale al 100% può coprire il Dock. I sottotitoli seguono la voce; il contenuto completo resta nella cronologia. Senza riproduzione locale, seguono l’ordine originale.",
-      "pt": "A posição vertical a 100% pode cobrir o Dock. As legendas acompanham a voz; o conteúdo completo fica no histórico. Sem reprodução local, seguem a ordem original.",
-      "hi": "100% ऊर्ध्वाधर स्थिति Dock को ढक सकती है। लाइव उपशीर्षक वाचन के साथ चलते हैं; पूरा पाठ पठन इतिहास में रहता है। स्थानीय प्लेबैक के बिना मूल क्रम में पढ़ें।"
-    },
     "阅读记录": {
       "zh": "阅读记录",
       "en": "Reading history",
@@ -1490,6 +1470,26 @@
       "it": "Integrazione letta",
       "pt": "Complemento falado",
       "hi": "वाचन का पूरक"
+    },
+    "阅读优先：译文完成后按文字量独立展示，不等待朗读；每屏保留足够阅读时间。跟随朗读：显示当前正在朗读的译文。": {
+      "zh": "阅读优先：译文完成后按文字量独立展示，不等待朗读；每屏保留足够阅读时间。跟随朗读：显示当前正在朗读的译文。",
+      "en": "Reading first: show completed translations on their own reading clock, without waiting for speech. Each screen keeps its reading time. Follow speech: show the translation currently being spoken.",
+      "ja": "読書優先：翻訳が完成したら、音声を待たず文字量に応じて表示します。各画面に読む時間を確保します。音声に追従：現在読み上げている訳文を表示します。",
+      "fr": "Lecture prioritaire : afficher les traductions terminées selon leur durée de lecture, sans attendre la voix. Chaque écran conserve son temps de lecture. Suivre la voix : afficher la traduction en cours de lecture.",
+      "es": "Lectura primero: mostrar las traducciones completas con su propio tiempo de lectura, sin esperar a la voz. Cada pantalla conserva su tiempo de lectura. Seguir la voz: mostrar la traducción que se está leyendo.",
+      "it": "Prima la lettura: mostra le traduzioni complete con tempi di lettura indipendenti, senza attendere la voce. Ogni schermata mantiene il suo tempo di lettura. Segui la voce: mostra la traduzione letta in quel momento.",
+      "pt": "Leitura primeiro: mostrar as traduções concluídas com tempo de leitura independente, sem esperar pela voz. Cada tela mantém seu tempo de leitura. Seguir a voz: mostrar a tradução que está sendo lida.",
+      "hi": "पठन पहले: पूरी हुई अनुवादित सामग्री को बोलने की प्रतीक्षा किए बिना, पढ़ने के स्वतंत्र समय के अनुसार दिखाएँ। हर स्क्रीन को पढ़ने का समय मिलेगा। आवाज़ का अनुसरण: अभी बोला जा रहा अनुवाद दिखाएँ।"
+    },
+    "垂直 100% 可覆盖 Dock。阅读优先按原文顺序显示，当前一屏读完后显示下一屏；完整译文与校订保留在阅读记录。": {
+      "zh": "垂直 100% 可覆盖 Dock。阅读优先按原文顺序显示，当前一屏读完后显示下一屏；完整译文与校订保留在阅读记录。",
+      "en": "Vertical 100% can cover the Dock. Reading first follows source order and shows the next screen when the current reading time ends. Full translations and corrections remain in Reading history.",
+      "ja": "垂直位置100%ではDockに重ねられます。読書優先は原文の順序を守り、現在の画面の読む時間が終わると次を表示します。全文と修正は読書履歴に残ります。",
+      "fr": "La position verticale à 100 % peut recouvrir le Dock. La lecture prioritaire suit l’ordre du texte source et passe à l’écran suivant à la fin du temps de lecture. Les traductions complètes et corrections restent dans l’historique.",
+      "es": "La posición vertical al 100 % puede cubrir el Dock. Lectura primero respeta el orden del original y pasa a la siguiente pantalla al terminar el tiempo de lectura. Las traducciones completas y correcciones quedan en el historial.",
+      "it": "La posizione verticale al 100% può coprire il Dock. Prima la lettura segue l’ordine del testo originale e passa alla schermata successiva al termine del tempo di lettura. Traduzioni complete e correzioni restano nella cronologia.",
+      "pt": "A posição vertical de 100% pode cobrir o Dock. Leitura primeiro segue a ordem do original e mostra a próxima tela após o tempo de leitura da atual. Traduções completas e correções ficam no histórico.",
+      "hi": "100% ऊर्ध्वाधर स्थिति Dock को ढक सकती है। पठन पहले मूल पाठ के क्रम में चलता है और वर्तमान स्क्रीन का पढ़ने का समय पूरा होने पर अगली स्क्रीन दिखाता है। पूरे अनुवाद और सुधार पठन इतिहास में रहते हैं।"
     }
   }
 }

@@ -67,6 +67,7 @@ from voxbridge.streaming.text_pool import dedup_segment_join, trim_prefix_overla
 from voxbridge.streaming.translation_quality import translation_output_issue, recovery_translation_prompt
 from voxbridge.streaming.spoken_source import unspoken_extension, after_spoken_prefix
 from voxbridge.interpretation.source_commit import SourceCommitCoordinator, SourceCommitRow
+from voxbridge.streaming.source_ledger import SourceSpan, _TOKENS as _SOURCE_OCCURRENCE_TOKENS
 from voxbridge.streaming.semantic_units import repair_carried_discourse_units, repair_semantic_units, open_conditional
 from voxbridge.streaming.church_terms import terminology_hint
 from voxbridge.streaming.vad_support import AudioPreRollBuffer, create_silero_onnx_observer
@@ -148,6 +149,74 @@ AUTH_HASH_SCHEME = "pbkdf2_sha256"
 AUTH_HASH_ITERATIONS = 260_000
 AUTH_SESSION_TOKEN_BYTES = 32
 TTS_CLIENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+
+
+def _caption_source_tokens(text: str) -> List[str]:
+    """Read-only presentation words, using the production occurrence lexer."""
+    return [match.group().casefold() for match in _SOURCE_OCCURRENCE_TOKENS.finditer(str(text or ""))]
+
+
+def _caption_reset_metadata(
+    sentence_items: Sequence[Dict[str, Any]], *, reset_id: str,
+    old_epoch: int, new_epoch: int, canonical_source: str,
+    max_bytes: int = 3 * 1024 * 1024,
+) -> Dict[str, Any]:
+    """Describe a same-recording ledger rebuild without changing that ledger.
+
+    Ranges are half-open positions in the complete ordered word sequence. An
+    identical phrase at two positions remains two occurrences. Oversized
+    snapshots are omitted atomically, never truncated into apparent coverage.
+    """
+    rows = []
+    previous_tokens: List[str] = []
+    for order, item in enumerate(sentence_items):
+        source = str(item.get("zh", "") or "")
+        words = _caption_source_tokens(source)
+        begin = len(previous_tokens)
+        previous_tokens.extend(words)
+        rows.append(dict(id=str(item.get("id", "") or ""),
+                         revision=int(item.get("revision", 0) or 0),
+                         source=source, order=order,
+                         source_begin=begin, source_end=len(previous_tokens)))
+    metadata = dict(
+        caption_reset_id=str(reset_id), old_epoch=int(old_epoch), new_epoch=int(new_epoch),
+        previous_source_rows=rows, previous_source_tokens=previous_tokens,
+        canonical_replacement_source=str(canonical_source or ""),
+        canonical_replacement_tokens=_caption_source_tokens(canonical_source),
+        caption_snapshot_complete=True,
+    )
+    size = len(json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if size > max(0, int(max_bytes)):
+        # Leave headroom for the enclosing protocol event below the native
+        # transport's 4 MiB maximum. Missing proof requires conservative UI.
+        return dict(caption_reset_id=str(reset_id), old_epoch=int(old_epoch),
+                    new_epoch=int(new_epoch), caption_snapshot_complete=False,
+                    caption_snapshot_omitted="message_size",
+                    previous_source_rows=None, previous_source_tokens=None,
+                    canonical_replacement_source=None, canonical_replacement_tokens=None)
+    return metadata
+
+
+def _caption_canonical_range(
+    source: str, ledger_text: str, span: Optional[SourceSpan],
+    canonical_tokens: Optional[Sequence[str]],
+) -> Optional[Tuple[int, int]]:
+    """Resolve only an exact bound source range in the complete reset text."""
+    if span is None or canonical_tokens is None:
+        return None
+    matches = list(_SOURCE_OCCURRENCE_TOKENS.finditer(str(ledger_text or "")))
+    words = [match.group().casefold() for match in matches]
+    if words != list(canonical_tokens):
+        return None
+    indexes = [index for index, match in enumerate(matches)
+               if match.start() >= span.start and match.end() <= span.end]
+    if not indexes:
+        return None
+    begin, end = indexes[0], indexes[-1] + 1
+    if (len(span.tokens) != end - begin or
+            words[begin:end] != _caption_source_tokens(source)):
+        return None
+    return begin, end
 
 
 @dataclass(frozen=True)
@@ -2726,6 +2795,7 @@ def _create_app(
         confirmation_wait_keys = {}
         transferred_source_ranges = {}
         carried_discourse_assembly = None
+        caption_reset_context = None
         qwen_candidates: Dict[int, StableCandidate] = {}
 
         source_text_policy: SourceTextPolicy = ChineseEnglishTextPolicy(
@@ -4947,6 +5017,7 @@ def _create_app(
                     "seq": int(seq_hint or 0),
                     "is_stable": True,
                     "source_token_ids": list(caption_span.tokens) if caption_span else None,
+                    "source_token_epoch": int(tts_runtime.generation),
                 }
             )
             if sentence_id in tts_runtime.released_sources:
@@ -8069,6 +8140,25 @@ def _create_app(
 
         async def _send_json(payload: Dict[str, Any]) -> None:
             payload.setdefault("asr_engine", engine_binding.id)
+            if (payload.get("type") in {"sentence_committed", "sentence_updated", "sentence_translation"}
+                    and caption_reset_context is not None
+                    and caption_reset_context["new_epoch"] == int(tts_runtime.generation)):
+                # Presentation-only proof for remapping a canonical rebuild.
+                # Never search by equal phrase or modify source confirmation.
+                sid = str(payload.get("sentence_id", ""))
+                revision = int(payload.get("revision", 0))
+                index = _find_sentence_item_index(sid)
+                source = (str(payload.get("text", "")) if payload.get("type") != "sentence_translation"
+                          else str(subtitle_state.sentence_items[index].get("zh", ""))
+                          if index is not None else "")
+                source_range = _caption_canonical_range(
+                    source, source_ledger.text, source_ledger.binding(sid, revision),
+                    caption_reset_context.get("canonical_replacement_tokens"),
+                )
+                payload.update(caption_reset_id=caption_reset_context["caption_reset_id"],
+                               new_epoch=int(caption_reset_context["new_epoch"]),
+                               source_begin=source_range[0] if source_range else None,
+                               source_end=source_range[1] if source_range else None)
             if subtitle_trace_log:
                 p = payload if isinstance(payload, dict) else {}
                 msg_type = str(p.get("type", "")).strip()
@@ -8499,6 +8589,7 @@ def _create_app(
 
         async def _audio_consumer() -> None:
             nonlocal seq, finished, state
+            nonlocal caption_reset_context
             nonlocal total_consumed_samples, queue_samples
             nonlocal last_text_snapshot, last_text_advance_at, last_idle_commit_at, last_partial_emit_at
             nonlocal backpressure_runtime
@@ -9135,12 +9226,20 @@ def _create_app(
                     full_audio_samples=int(full_audio_samples),
                     finish_mode=str(finish_mode),
                 )
-                subtitle_state.stream_uid = f"{int(time.time() * 1000)}-{int(time.monotonic_ns() % 1000000)}"
+                reset_uid = f"{int(time.time() * 1000)}-{int(time.monotonic_ns() % 1000000)}"
+                reset_caption_metadata = _caption_reset_metadata(
+                    subtitle_state.sentence_items, reset_id=reset_uid,
+                    old_epoch=int(tts_runtime.generation), new_epoch=int(tts_runtime.generation) + 1,
+                    canonical_source=str(getattr(local_state, "text", "") or ""),
+                )
+                subtitle_state.stream_uid = reset_uid
                 subtitle_state.next_sentence_id = 1
                 subtitle_state.committed_sentences = []
                 subtitle_state.sentence_items = []
                 translation_runtime.latest_by_sentence.clear()
                 await _reset_tts_ordering()
+                reset_caption_metadata["new_epoch"] = int(tts_runtime.generation)
+                caption_reset_context = reset_caption_metadata
                 subtitle_state.commit_base = 0
                 _reset_completed_candidate_cursor()
                 subtitle_state.prev_completed_sentences = []
@@ -9155,7 +9254,8 @@ def _create_app(
                 _reset_early_translation_holdback_state()
                 alignment_runtime.committed_seen = {}
                 alignment_runtime.committed_events = 0
-                await _send_json({"type": "sentence_reset", "reason": "final_redecode"})
+                await _send_json({"type": "sentence_reset", "reason": "final_redecode",
+                                  **reset_caption_metadata})
 
             if not canonical_redecode_applied:
                 guarded_stop_text = _guard_context_final_candidate(
@@ -9244,12 +9344,20 @@ def _create_app(
                     final_hash8=_hash8(str(payload.get("text", "") or "")),
                     committed_hash8=_hash8(str(payload.get("committed_text", "") or "")),
                 )
-                subtitle_state.stream_uid = f"{int(time.time() * 1000)}-{int(time.monotonic_ns() % 1000000)}"
+                reset_uid = f"{int(time.time() * 1000)}-{int(time.monotonic_ns() % 1000000)}"
+                reset_caption_metadata = _caption_reset_metadata(
+                    subtitle_state.sentence_items, reset_id=reset_uid,
+                    old_epoch=int(tts_runtime.generation), new_epoch=int(tts_runtime.generation) + 1,
+                    canonical_source=str(payload.get("text", "") or ""),
+                )
+                subtitle_state.stream_uid = reset_uid
                 subtitle_state.next_sentence_id = 1
                 subtitle_state.committed_sentences = []
                 subtitle_state.sentence_items = []
                 translation_runtime.latest_by_sentence.clear()
                 await _reset_tts_ordering()
+                reset_caption_metadata["new_epoch"] = int(tts_runtime.generation)
+                caption_reset_context = reset_caption_metadata
                 subtitle_state.commit_base = 0
                 _reset_completed_candidate_cursor()
                 subtitle_state.prev_completed_sentences = []
@@ -9264,7 +9372,8 @@ def _create_app(
                 _reset_early_translation_holdback_state()
                 alignment_runtime.committed_seen = {}
                 alignment_runtime.committed_events = 0
-                await _send_json({"type": "sentence_reset", "reason": "final_commit_reconcile"})
+                await _send_json({"type": "sentence_reset", "reason": "final_commit_reconcile",
+                                  **reset_caption_metadata})
                 payload["tentative_text"] = await _update_sentence_commits(
                     payload.get("text", ""),
                     payload.get("language", ""),

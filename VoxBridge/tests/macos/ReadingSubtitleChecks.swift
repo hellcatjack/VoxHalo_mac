@@ -176,9 +176,212 @@ private func checkSupersededPresentationOnly() {
     assert(q.advance(now: 1) && q.text == "当前修订必须保留。")
     print("PASS: presentation-only supersession, stale events, frozen visible cards and independent repeats")
 }
+
+private func checkReplacementFallbackAndEpochs() {
+    func absorbed(_ child: String, by owner: String, revision: Int = 2) -> [String: Any] {
+        ["type": "sentence_superseded", "sentence_id": child, "revision": 1,
+         "replacement_sentence_id": owner, "replacement_revision": revision]
+    }
+    func failed(_ id: String, _ revision: Int) -> [String: Any] {
+        ["type": "sentence_translation_failed", "sentence_id": id, "revision": revision]
+    }
+    var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { [$0] }, fits: { !$0.contains(" ") })
+    q.observe(source("owner"), now: 0)
+    q.observe(translated("owner", "旧首句完整译文。"), now: 0)
+    q.observe(source("child"), now: 0)
+    q.observe(translated("child", "旧子句完整译文。"), now: 0)
+    q.observe(source("owner", 2), now: 0.1)
+    q.observe(absorbed("child", by: "owner"), now: 0.1)
+    q.observe(translated("child", "迟到旧子句不得替换。"), now: 0.2)
+    assert(!q.advance(now: 1), "An unfinished owner translation must not be presented")
+    q.observe(failed("owner", 2), now: 1)
+    assert(q.advance(now: 1) && q.text == "旧首句完整译文。")
+    assert(q.references.map { $0.revision } == [1], "Fallback must retain its actual completed revision")
+    assert(q.advance(now: q.deadline) && q.text == "旧子句完整译文。", "Owner failure lost an already completed child")
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.unresolvedVersions.map { $0.id } == ["owner"],
+           "Readable fallback must not claim the failed latest MT succeeded")
+    q.observe(translated("owner", "重试成功的完整合并译文。", 2), now: 10)
+    assert(q.advance(now: 11) && q.text == "重试成功的完整合并译文。")
+    assert(q.unresolvedVersions.isEmpty, "A successful current retry left stale unresolved failure")
+    q.advance(now: q.deadline); assert(q.pendingCount == 0)
+
+    // A revision failure preserves the unread tail of an earlier complete MT,
+    // without replaying its already-visible prefix or showing an error notice.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { $0.components(separatedBy: " | ") }, fits: { !$0.contains(" ") })
+    q.observe(source("pages"), now: 0)
+    q.observe(translated("pages", "已显示首屏。 | 完整未读尾部。"), now: 0)
+    q.advance(now: 1)
+    let text = q.text, identity = q.identity, deadline = q.deadline
+    q.observe(source("pages", 2), now: 1.1)
+    q.observe(failed("pages", 2), now: 1.2)
+    q.observe(translated("pages", "迟到旧版本。"), now: 1.3)
+    assert(!q.advance(now: deadline - 0.001) && q.text == text && q.identity == identity && q.deadline == deadline)
+    assert(q.advance(now: deadline) && q.text == "完整未读尾部。")
+    assert(q.references.map { $0.revision } == [1])
+    q.advance(now: q.deadline); assert(q.pendingCount == 0 && q.displayedPages == 2)
+
+    // A successful replacement consumes all unread fallback; late retired
+    // events cannot resurrect it, even through a chain of source ownership.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    for id in ["a", "b", "c"] { q.observe(source(id), now: 0) }
+    q.observe(translated("b", "旧中间句。"), now: 0)
+    q.observe(translated("c", "旧最末句。"), now: 0)
+    q.observe(source("b", 2), now: 0.1)
+    q.observe(absorbed("c", by: "b"), now: 0.1)
+    q.observe(source("a", 2), now: 0.2)
+    var middle = absorbed("b", by: "a"); middle["revision"] = 2
+    q.observe(middle, now: 0.2)
+    q.observe(translated("a", "最终完整合并译文。", 2), now: 0.3)
+    q.observe(translated("b", "迟到中间句。", 2), now: 0.4)
+    q.observe(source("c", 9), now: 0.4)
+    q.observe(translated("c", "迟到末句。", 9), now: 0.4)
+    assert(q.advance(now: 1) && q.text == "最终完整合并译文。")
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.displayedPages == 1)
+
+    // If no complete child MT ever existed, failure is explicitly unresolved,
+    // never fabricated as successful source coverage or a caption message.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    for id in ["owner", "missing", "after"] { q.observe(source(id), now: 0) }
+    q.observe(source("owner", 2), now: 0.1)
+    q.observe(absorbed("missing", by: "owner"), now: 0.1)
+    q.observe(failed("owner", 2), now: 0.2)
+    q.observe(translated("after", "后继完整译文。"), now: 0.3)
+    assert(q.advance(now: 1) && q.text == "后继完整译文。")
+    assert(Set(q.unresolvedVersions.map { $0.id }) == Set(["owner", "missing"]))
+    assert(q.displayedPages == 1 && q.coveredVersions.isEmpty)
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.unresolvedVersions.count == 2)
+
+    // A ledger generation can change without sentence_reset (e.g. output
+    // reconfiguration). Reused token IDs from another epoch prove no overlap.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { [$0] }, fits: { !$0.contains(" ") })
+    q.observe(source("first"), now: 0)
+    var first = occurrence("first", "同一段文字。", [0, 1, 2]); first["source_token_epoch"] = 1
+    q.observe(first, now: 0); assert(q.advance(now: 1))
+    q.observe(source("new-occurrence"), now: 1.1)
+    var second = occurrence("new-occurrence", "同一段文字。", [0, 1, 2]); second["source_token_epoch"] = 2
+    q.observe(second, now: 1.1)
+    assert(q.advance(now: q.deadline) && q.references.map { $0.id } == ["new-occurrence"])
+    assert(q.coveredVersions.isEmpty && q.displayedPages == 2)
+    print("PASS: two-phase replacement, revision fallback, ownership chains, unresolved failure and token epochs")
+}
+
+private func checkCanonicalSourceRebuilds() {
+    let tokens = ["alpha", "beta", "gamma", "delta"]
+    func original(_ id: String, _ text: String) -> [String: Any] {
+        ["type": "sentence_committed", "sentence_id": id, "revision": 1, "text": text]
+    }
+    func reset(_ id: String, epoch: Int, previous: [[String: Any]], old: [String] = tokens,
+               replacement: [String] = tokens, complete: Bool = true) -> [String: Any] {
+        ["type": "sentence_reset", "reason": "final_redecode", "caption_reset_id": id,
+         "old_epoch": epoch - 1, "new_epoch": epoch, "previous_source_rows": previous,
+         "previous_source_tokens": old, "canonical_replacement_tokens": replacement,
+         "canonical_replacement_source": replacement.joined(separator: " "), "caption_snapshot_complete": complete]
+    }
+    func snapshot(_ id: String, _ text: String, order: Int, begin: Int, end: Int) -> [String: Any] {
+        ["id": id, "revision": 1, "source": text, "order": order, "source_begin": begin, "source_end": end]
+    }
+    func rebuilt(_ id: String, text: String, resetID: String, epoch: Int, begin: Int, end: Int) -> [String: Any] {
+        var event = original(id, text)
+        event["caption_reset_id"] = resetID; event["new_epoch"] = epoch
+        event["source_begin"] = begin; event["source_end"] = end
+        return event
+    }
+    func result(_ id: String, _ text: String, resetID: String, epoch: Int, begin: Int, end: Int) -> [String: Any] {
+        var event = translated(id, text)
+        event["caption_reset_id"] = resetID; event["new_epoch"] = epoch; event["source_token_epoch"] = epoch
+        event["source_begin"] = begin; event["source_end"] = end
+        return event
+    }
+    let prior = [snapshot("old-a", "alpha beta.", order: 0, begin: 0, end: 2),
+                 snapshot("old-b", "gamma delta.", order: 1, begin: 2, end: 4)]
+    func prepared() -> ReadingSubtitleQueue {
+        var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+        q.configure(splitter: { [$0] }, fits: { !$0.contains(" ") })
+        q.observe(original("old-a", "alpha beta."), now: 0)
+        q.observe(translated("old-a", "首句已完整翻译。"), now: 0)
+        q.observe(original("old-b", "gamma delta."), now: 0)
+        q.observe(translated("old-b", "末句尚未完成阅读。"), now: 0)
+        q.advance(now: 1)
+        return q
+    }
+    var q = prepared()
+    let visible = q.text, identity = q.identity, deadline = q.deadline
+    q.observe(reset("rebuild-1", epoch: 2, previous: prior), now: 2)
+    q.observe(rebuilt("new-merged", text: "alpha beta gamma delta.", resetID: "rebuild-1", epoch: 2, begin: 0, end: 4), now: 2)
+    q.observe(result("new-merged", "重译全文不能强迫旧文再次显示。", resetID: "rebuild-1", epoch: 2, begin: 0, end: 4), now: 2.1)
+    // A second stop reconciliation can regroup the same canonical occurrences
+    // again. It must preserve the original card and the original unread turn.
+    let secondPrior = [snapshot("new-merged", "alpha beta gamma delta.", order: 0, begin: 0, end: 4)]
+    var secondReset = reset("rebuild-2", epoch: 3, previous: secondPrior)
+    secondReset["reason"] = "final_commit_reconcile"
+    q.observe(secondReset, now: 2.2)
+    q.observe(rebuilt("third-a", text: "alpha.", resetID: "rebuild-2", epoch: 3, begin: 0, end: 1), now: 2.3)
+    q.observe(result("third-a", "重建新首行。", resetID: "rebuild-2", epoch: 3, begin: 0, end: 1), now: 2.4)
+    q.observe(rebuilt("third-b", text: "beta gamma delta.", resetID: "rebuild-2", epoch: 3, begin: 1, end: 4), now: 2.3)
+    q.observe(result("third-b", "重建新尾行。", resetID: "rebuild-2", epoch: 3, begin: 1, end: 4), now: 2.4)
+    q.observe(["type": "final"], now: 2.5)
+    assert(!q.advance(now: deadline - 0.001) && q.text == visible && q.identity == identity && q.deadline == deadline)
+    assert(q.advance(now: deadline) && q.text == "末句尚未完成阅读。")
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.displayedPages == 2, "Exact canonical rebuilding replayed or lost an occurrence")
+
+    // Corrected source needs a complete new reading turn, never a token-ratio
+    // cut of target text. A fully successful canonical MT replaces old unread
+    // fallback only after the complete final rebuild has succeeded.
+    q = prepared(); let oldDeadline = q.deadline
+    let corrected = ["alpha", "not", "beta", "gamma", "delta"]
+    q.observe(reset("corrected", epoch: 2, previous: prior, replacement: corrected), now: 2)
+    q.observe(rebuilt("correction", text: "alpha not beta gamma delta.", resetID: "corrected", epoch: 2, begin: 0, end: 5), now: 2.1)
+    q.observe(result("correction", "否定修订后的完整译文及全部尾句。", resetID: "corrected", epoch: 2, begin: 0, end: 5), now: 2.2)
+    assert(!q.advance(now: oldDeadline + 1), "Unfinished canonical transaction discarded fallback early")
+    q.observe(["type": "final"], now: oldDeadline + 1)
+    assert(q.advance(now: oldDeadline + 1) && q.text == "否定修订后的完整译文及全部尾句。")
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.unresolvedVersions.isEmpty && q.displayedPages == 2)
+
+    // Empty/failed canonical MT restores every complete old unread turn and
+    // leaves failed source coverage explicit instead of declaring full success.
+    q = prepared()
+    q.observe(reset("failed-rebuild", epoch: 2, previous: prior, replacement: corrected), now: 2)
+    q.observe(rebuilt("failed-correction", text: "alpha not beta gamma delta.", resetID: "failed-rebuild", epoch: 2, begin: 0, end: 5), now: 2.1)
+    q.observe(["type": "sentence_translation_failed", "sentence_id": "failed-correction", "revision": 1], now: 2.2)
+    q.observe(["type": "final"], now: 2.3)
+    assert(q.advance(now: q.deadline) && q.text == "末句尚未完成阅读。")
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.unresolvedVersions.map { $0.id } == ["failed-correction"])
+    assert(q.displayedPages == 2 && q.coveredVersions.isEmpty)
+
+    // Identical spoken words at distinct canonical positions remain two turns,
+    // including when rebuilt into a single sentence with reused token IDs.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { [$0] }, fits: { !$0.contains(" ") })
+    for (index, id) in ["repeat-a", "repeat-b"].enumerated() {
+        q.observe(original(id, "Yes."), now: 0)
+        var event = occurrence(id, "是的。", [index]); event["source_token_epoch"] = 1
+        q.observe(event, now: 0)
+    }
+    q.advance(now: 1)
+    let repeatedPrior = [snapshot("repeat-a", "Yes.", order: 0, begin: 0, end: 1),
+                         snapshot("repeat-b", "Yes.", order: 1, begin: 1, end: 2)]
+    q.observe(reset("repeat-reset", epoch: 2, previous: repeatedPrior, old: ["yes", "yes"], replacement: ["yes", "yes"]), now: 2)
+    q.observe(rebuilt("repeat-full", text: "Yes. Yes.", resetID: "repeat-reset", epoch: 2, begin: 0, end: 2), now: 2.1)
+    q.observe(result("repeat-full", "是的。 是的。", resetID: "repeat-reset", epoch: 2, begin: 0, end: 2), now: 2.2)
+    q.observe(["type": "final"], now: 2.3)
+    assert(q.advance(now: q.deadline) && q.references.map { $0.id } == ["repeat-b"])
+    q.advance(now: q.deadline); assert(q.pendingCount == 0 && q.displayedPages == 2)
+    print("PASS: frozen rebuild cards, exact canonical continuation, consecutive resets, complete corrections and failed fallback")
+}
 @main struct ReadingSubtitleChecks {
     static func main() {
         checkSupersededPresentationOnly()
+        checkReplacementFallbackAndEpochs()
+        checkCanonicalSourceRebuilds()
         let migrated = try! JSONDecoder().decode(SubtitlePreferences.self, from: Data(#"{"fontSize":42,"backgroundEnabled":true}"#.utf8))
         assert(migrated.mode == .reading && migrated.fontSize == 42 && migrated.backgroundEnabled)
         var saved = migrated; saved.mode = .playback
@@ -187,51 +390,51 @@ private func checkSupersededPresentationOnly() {
         assert(abs(SubtitleReading.seconds(String(repeating: "字", count: 30)) - 5 / 1.35) < 0.001)
         assert(abs(SubtitleReading.seconds("one two three four five six seven eight nine ten eleven twelve fifteen fourteen fifteen") - 5 / 1.35) < 0.001)
         assert(SubtitleReading.work("你好 don't worry") == 1)
-        // Dense Chinese screens get a bounded allowance even when fast speech
-        // feedback would reduce the base hold to its minimum. No mid-page edits.
+        // Chinese holds use a fixed reading budget, independent of speech.
+        // Pure Han screens contain at most 60 characters, with no lost tail.
         for count in [12, 24, 25, 40, 60, 72] {
             let text = String(repeating: "字", count: count)
-            let extra = min(1.5, Double(max(0, count - 24)) * 0.05)
             for fastFeedback in [false, true] {
-                var baseline = ReadingSubtitleQueue(), chinese = ReadingSubtitleQueue()
-                chinese.reset(targetLanguage: "zh")
+                var chinese = ReadingSubtitleQueue(); chinese.reset(targetLanguage: "zh")
                 chinese.observe(["type": "started"], now: 0)
-                assert(chinese.targetLanguage == "zh", "Session events lost the chosen target language")
-                if fastFeedback {
-                    baseline.observeSpeech(text: text, seconds: 0.6)
-                    chinese.observeSpeech(text: text, seconds: 0.6)
-                }
-                baseline.observe(source("long"), now: 0); chinese.observe(source("long"), now: 0)
-                baseline.observe(translated("long", text), now: 0); chinese.observe(translated("long", text), now: 0)
-                baseline.advance(now: 1); chinese.advance(now: 1)
-                assert(abs(chinese.deadline - baseline.deadline - extra) < 0.001)
-                let held = chinese.deadline, identity = chinese.identity
+                assert(chinese.targetLanguage == "zh")
+                if fastFeedback { chinese.observeSpeech(text: text, seconds: 0.6) }
+                chinese.observe(source("long"), now: 0)
+                chinese.observe(translated("long", text), now: 0)
+                assert(chinese.advance(now: 1))
+                let firstText = chinese.text, held = chinese.deadline, identity = chinese.identity
+                assert(firstText.count == min(count, 60))
+                let expected = SubtitleReading.seconds(firstText)
+                    + SubtitleReading.additionalSeconds(firstText, targetLanguage: "zh")
+                assert(abs(held - 1 - expected) < 0.001)
                 chinese.observe(source("next"), now: 1.1)
                 chinese.observe(translated("next", "下一句。"), now: 1.1)
                 chinese.observeSpeech(text: text, seconds: 0.6)
-                assert(!chinese.advance(now: held - 0.001) && chinese.text == text
+                assert(!chinese.advance(now: held - 0.001) && chinese.text == firstText
                        && chinese.identity == identity && chinese.deadline == held)
-                assert(chinese.advance(now: held) && chinese.text == "下一句。")
+                assert(chinese.advance(now: held))
+                let compact: (String) -> String = { $0.filter { !$0.isWhitespace } }
+                assert(compact(firstText + chinese.text) == text + "下一句。")
+                assert(chinese.deadline - held >= 3)
                 chinese.advance(now: chinese.deadline)
-                assert(chinese.pendingCount == 0 && chinese.displayedPages == 2)
-                chinese.reset(targetLanguage: "en")
-                assert(chinese.targetLanguage == "en")
+                assert(chinese.pendingCount == 0 && chinese.displayedPages == (count > 60 ? 3 : 2))
             }
         }
-        // Chinese and Japanese retain the legacy screen clock; Japanese counts
-        // kana in its extra allowance as well as Han characters.
-        let dense = String(repeating: "字", count: 35)
+        // Two short rows share a screen's minimum hold. A third that would
+        // exceed its reading budget remains a complete subsequent turn.
+        let dense = String(repeating: "字", count: 20)
         for language in ["zh", "ja"] {
             var grouped = ReadingSubtitleQueue(); grouped.reset(targetLanguage: language)
             grouped.observeSpeech(text: dense, seconds: 0.6)
-            for id in ["a", "b", "c"] {
+            for id in ["a", "b", "c", "d"] {
                 grouped.observe(source(id), now: 0); grouped.observe(translated(id, dense), now: 0)
             }
-            grouped.advance(now: 1)
+            assert(grouped.advance(now: 1))
             assert(grouped.references.count == 3)
-            assert(abs(grouped.deadline - 1 - (105.0 / 6 / 2.2 + 1.5)) < 0.001)
+            assert(abs(grouped.deadline - 1 - (60.0 / 6 / 1.35 + 1.5)) < 0.001)
+            assert(grouped.advance(now: grouped.deadline) && grouped.references.map { $0.id } == ["d"])
             grouped.advance(now: grouped.deadline)
-            assert(grouped.pendingCount == 0 && grouped.displayedPages == 3)
+            assert(grouped.pendingCount == 0 && grouped.displayedPages == 4)
         }
         assert(SubtitleReading.additionalSeconds(String(repeating: "あ", count: 40), targetLanguage: "ja") == 0.8)
         assert(SubtitleReading.additionalSeconds(String(repeating: "あ", count: 40), targetLanguage: "zh") == 0)
@@ -394,11 +597,12 @@ private func checkSupersededPresentationOnly() {
         q.advance(now: 13)
         assert(q.pendingCount == 0 && q.displayedPages == 4, "Identical completed revisions must not replay")
 
-        // Twelve minutes of continuous fast speech, one screen every 3 s.
-        // Old per-page serial holds accumulated minutes of visual delay here.
+        // Twelve minutes of 24-character Chinese turns at a sustainable 3 s.
+        // Short completed turns must not accumulate artificial display delay.
         q = ReadingSubtitleQueue()
         q.configure(splitter: { [$0] }, fits: { SubtitleReading.work($0) <= 8 })
-        let fast = String(repeating: "实时字幕需要提前显示", count: 3)
+        q.reset(targetLanguage: "zh")
+        let fast = String(repeating: "实时字幕需要提前", count: 3)
         var shown = Set<String>()
         for index in 0..<240 {
             let id = "fast-\(index)", now = Double(index) * 3
