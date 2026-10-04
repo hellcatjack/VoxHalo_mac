@@ -184,6 +184,8 @@ Mac 启动脚本默认监听 `0.0.0.0:8024`，并使用 `--public-listener-url a
 ## 日志和验收
 
 - `logs/macos-app.log`、`logs/macos-translation.log`：启动与运行日志。
+- 排查确认／朗读等待时，可先结束传译并停止服务，再用 `VOXBRIDGE_SUBTITLE_TRACE_FILE="$PWD/artifacts/macos/subtitle-trace.jsonl" ./macos.sh start` 显式启用逐次解码的状态记录。它只增加诊断参数，不改变模型、语速或确认门限；记录包含本机识别与译文。诊断结束后停止服务并以普通方式启动，即恢复默认不记录的状态。
+- build 41 的十分钟英中实测、逐句阶段时序与已定位问题见[快速英文延迟复测](MACOS-FAST-ENGLISH-ASSESSMENT.md)。记录中的首 PCM 发布不等于物理扬声器发声时间。
 - `artifacts/macos-service/`：本机 PID 记录、管理锁及权限 0600 的原生生产者控制凭据。原生模式的识别 WebSocket 只接受回环地址和该凭据；不要把凭据放进网页或 URL。
 - `artifacts/macos/`：本地测试时的音频、事件及输出，不随仓库发布；普通使用不会保存录音。
 - `tools/macos_e2e.py`：按100ms真实节奏输入本地PCM16 WAV，验证ASR→翻译→Kokoro→AAC/HLS、双听众共享与退出清理；静默运行，不播放音频。

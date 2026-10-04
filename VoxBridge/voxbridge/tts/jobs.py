@@ -5,7 +5,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass, replace
-from typing import Callable
+from typing import Callable, Sequence
 
 
 class TTSJobError(Exception):
@@ -62,6 +62,22 @@ class TTSRevisionRegistration:
     previous_ready: bool = False
     released_revision: int | None = None
     elapsed_since_release_ms: int = 0
+    superseded: bool = False
+    replacement_sentence_id: str | None = None
+    replacement_revision: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TTSSourceSupersession:
+    """A terminal source occurrence whose coverage belongs to another row."""
+
+    sentence_id: str
+    revision: int
+    source_order: int
+    replacement_sentence_id: str
+    replacement_revision: int
+    replacement_source_order: int
+    superseded_at: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +147,7 @@ class RevisionStableTTSBuffer:
         self._sentence_orders: dict[str, int] = {}
         self._order_sentences: dict[int, str] = {}
         self._released: dict[str, tuple[int, int, float]] = {}
+        self._superseded: dict[str, TTSSourceSupersession] = {}
         self._next_order = 0
         self._highest_source_order = -1
         self._confirmed_through = -1
@@ -159,6 +176,21 @@ class RevisionStableTTSBuffer:
             raise ValueError("revision and source_order must not be negative")
         now = self._clock()
         with self._lock:
+            superseded = self._superseded.get(sid)
+            if superseded is not None:
+                return TTSRevisionRegistration(
+                    accepted=False,
+                    reset=False,
+                    late_after_release=False,
+                    sentence_id=sid,
+                    revision=int(revision),
+                    source_order=superseded.source_order,
+                    previous_revision=superseded.revision,
+                    superseded=True,
+                    replacement_sentence_id=superseded.replacement_sentence_id,
+                    replacement_revision=superseded.replacement_revision,
+                )
+
             known_order = self._sentence_orders.get(sid)
             if known_order is not None and known_order != source_order:
                 raise ValueError("sentence_id cannot change source_order")
@@ -245,6 +277,139 @@ class RevisionStableTTSBuffer:
                 previous_ready=previous_ready,
             )
 
+    def is_committed(self, sentence_id: str) -> bool:
+        """Whether the occurrence has crossed the immutable shared-PCM boundary."""
+        sid = self._require_sentence_id(sentence_id)
+        with self._lock:
+            return sid in self._released
+
+    def is_superseded(self, sentence_id: str) -> bool:
+        sid = self._require_sentence_id(sentence_id)
+        with self._lock:
+            return sid in self._superseded
+
+    def supersession(self, sentence_id: str) -> TTSSourceSupersession | None:
+        sid = self._require_sentence_id(sentence_id)
+        with self._lock:
+            return self._superseded.get(sid)
+
+    def _supersession_entries_locked(
+        self,
+        replacement_sentence_id: str,
+        replacement_revision: int,
+        superseded: Sequence[tuple[str, int]],
+        *,
+        expected_owner_revision: int | None = None,
+    ) -> tuple[_RevisionStableEntry, list[_RevisionStableEntry]] | None:
+        owner_sid = self._require_sentence_id(replacement_sentence_id)
+        if replacement_revision < 0 or (
+            expected_owner_revision is not None and expected_owner_revision < 0
+        ):
+            raise ValueError("revision must not be negative")
+        owner_revision = (
+            replacement_revision if expected_owner_revision is None else expected_owner_revision
+        )
+        if replacement_revision < owner_revision:
+            return None
+        owner = self._current_entry(owner_sid, owner_revision)
+        if owner is None or owner.status not in {"waiting", "ready"} or not superseded:
+            return None
+        entries: list[_RevisionStableEntry] = []
+        seen: set[str] = set()
+        for sentence_id, revision in superseded:
+            sid = self._require_sentence_id(sentence_id)
+            if revision < 0:
+                raise ValueError("revision must not be negative")
+            if sid == owner_sid or sid in seen:
+                return None
+            seen.add(sid)
+            entry = self._current_entry(sid, revision)
+            # Only a preceding live owner can absorb an uncommitted occurrence.
+            # Token coverage is proved by the caller before entering this buffer.
+            if entry is None or entry.source_order <= owner.source_order:
+                return None
+            entries.append(entry)
+        return owner, entries
+
+    def can_supersede_many(
+        self,
+        replacement_sentence_id: str,
+        replacement_revision: int,
+        superseded: Sequence[tuple[str, int]],
+        *,
+        expected_owner_revision: int | None = None,
+    ) -> bool:
+        """Preflight exact occurrences without mutating their release state.
+
+        The optional expected revision checks a live owner before a caller
+        registers its replacement revision. The caller must serialize that
+        registration and supersession with the shared-PCM commit transition.
+        """
+        with self._lock:
+            return self._supersession_entries_locked(
+                replacement_sentence_id,
+                replacement_revision,
+                superseded,
+                expected_owner_revision=expected_owner_revision,
+            ) is not None
+
+    def supersede_many(
+        self,
+        replacement_sentence_id: str,
+        replacement_revision: int,
+        superseded: Sequence[tuple[str, int]],
+    ) -> bool:
+        """Retire a proved group atomically; no committed occurrence can retire."""
+        with self._lock:
+            validated = self._supersession_entries_locked(
+                replacement_sentence_id, replacement_revision, superseded,
+            )
+            if validated is None:
+                return False
+            owner, entries = validated
+            now = self._clock()
+            for entry in entries:
+                entry.status = "superseded"
+                entry.offered = False
+                self._superseded[entry.sentence_id] = TTSSourceSupersession(
+                    sentence_id=entry.sentence_id,
+                    revision=entry.revision,
+                    source_order=entry.source_order,
+                    replacement_sentence_id=owner.sentence_id,
+                    replacement_revision=owner.revision,
+                    replacement_source_order=owner.source_order,
+                    superseded_at=now,
+                )
+            # The absorbed tail is no longer a successor proving that the
+            # owner is safe to release. Preserve the latest-source hold/grace.
+            self._highest_source_order = max(
+                (entry.source_order for entry in self._entries.values()
+                 if entry.status != "superseded"),
+                default=-1,
+            )
+            self._advance_superseded_locked()
+            return True
+
+    def supersede(
+        self,
+        sentence_id: str,
+        revision: int,
+        *,
+        replacement_sentence_id: str,
+        replacement_revision: int,
+    ) -> bool:
+        return self.supersede_many(
+            replacement_sentence_id, replacement_revision, [(sentence_id, revision)],
+        )
+
+    def _advance_superseded_locked(self) -> None:
+        while True:
+            entry = self._entries.get(self._next_order)
+            if entry is None or entry.status != "superseded":
+                return
+            del self._entries[self._next_order]
+            self._next_order += 1
+
     def seal_through(self, source_order: int) -> bool:
         if source_order < 0:
             raise ValueError("source_order must not be negative")
@@ -253,7 +418,7 @@ class RevisionStableTTSBuffer:
             changed = next_value != self._sealed_through
             self._sealed_through = next_value
             for entry in self._entries.values():
-                if entry.source_order <= source_order:
+                if entry.status != "superseded" and entry.source_order <= source_order:
                     changed |= not entry.sealed
                     entry.sealed = True
             return changed
@@ -266,7 +431,7 @@ class RevisionStableTTSBuffer:
             changed = next_value != self._confirmed_through
             self._confirmed_through = next_value
             for entry in self._entries.values():
-                if entry.source_order <= source_order:
+                if entry.status != "superseded" and entry.source_order <= source_order:
                     changed |= not entry.confirmed
                     entry.confirmed = True
             return changed
@@ -306,6 +471,7 @@ class RevisionStableTTSBuffer:
             self._released[sentence_id] = (revision, entry.source_order, self._clock())
             del self._entries[self._next_order]
             self._next_order += 1
+            self._advance_superseded_locked()
             return True
 
     def can_commit(self, sentence_id: str, revision: int) -> bool:
@@ -387,7 +553,7 @@ class RevisionStableTTSBuffer:
         if order is None:
             return None
         entry = self._entries.get(order)
-        if entry is None or entry.revision != revision:
+        if entry is None or entry.revision != revision or entry.status == "superseded":
             return None
         return entry
 
@@ -476,7 +642,10 @@ class RevisionStableTTSBuffer:
             result = []
             for order in sorted(self._entries)[:max(0, min(limit, 128))]:
                 entry = self._entries[order]
-                required, policy, _, _ = self._release_policy(entry)
+                required, policy, _, _ = (
+                    (None, "source_superseded", False, False)
+                    if entry.status == "superseded" else self._release_policy(entry)
+                )
                 age = self._elapsed_ms(self._stable_since(entry), now)
                 result.append(dict(
                     sentence_id=entry.sentence_id, revision=entry.revision,
@@ -487,6 +656,13 @@ class RevisionStableTTSBuffer:
                     remaining_ms=None if required is None else max(0, round(required * 1000) - age),
                     translation_ready_age_ms=None if entry.translation_ready_at is None
                     else self._elapsed_ms(entry.translation_ready_at, now)))
+                if entry.status == "superseded":
+                    replacement = self._superseded[entry.sentence_id]
+                    result[-1].update(
+                        replacement_sentence_id=replacement.replacement_sentence_id,
+                        replacement_revision=replacement.replacement_revision,
+                        replacement_source_order=replacement.replacement_source_order,
+                    )
             return result
 
     def drain(self, *, force: bool = False) -> list[TTSReadyItem]:
@@ -494,6 +670,7 @@ class RevisionStableTTSBuffer:
         ready: list[TTSReadyItem] = []
         with self._lock:
             while True:
+                self._advance_superseded_locked()
                 entry = self._entries.get(self._next_order)
                 if entry is None or entry.status == "waiting":
                     break
@@ -540,7 +717,7 @@ class RevisionStableTTSBuffer:
     @property
     def pending_count(self) -> int:
         with self._lock:
-            return len(self._entries)
+            return sum(entry.status != "superseded" for entry in self._entries.values())
 
     def reset(self) -> None:
         with self._lock:
@@ -548,6 +725,7 @@ class RevisionStableTTSBuffer:
             self._sentence_orders.clear()
             self._order_sentences.clear()
             self._released.clear()
+            self._superseded.clear()
             self._next_order = 0
             self._highest_source_order = -1
             self._confirmed_through = -1

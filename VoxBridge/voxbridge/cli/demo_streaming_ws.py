@@ -66,8 +66,8 @@ from voxbridge.streaming.submission_policy import DecodeObservation, PendingClau
 from voxbridge.streaming.text_pool import dedup_segment_join, trim_prefix_overlap
 from voxbridge.streaming.translation_quality import translation_output_issue, recovery_translation_prompt
 from voxbridge.streaming.spoken_source import unspoken_extension, after_spoken_prefix
-from voxbridge.interpretation.source_commit import SourceCommitCoordinator
-from voxbridge.streaming.semantic_units import repair_semantic_units, open_conditional
+from voxbridge.interpretation.source_commit import SourceCommitCoordinator, SourceCommitRow
+from voxbridge.streaming.semantic_units import repair_carried_discourse_units, repair_semantic_units, open_conditional
 from voxbridge.streaming.church_terms import terminology_hint
 from voxbridge.streaming.vad_support import AudioPreRollBuffer, create_silero_onnx_observer
 from voxbridge.tts.broadcast import (
@@ -2724,6 +2724,8 @@ def _create_app(
         source_commit = SourceCommitCoordinator()
         source_ledger = source_commit.ledger
         confirmation_wait_keys = {}
+        transferred_source_ranges = {}
+        carried_discourse_assembly = None
         qwen_candidates: Dict[int, StableCandidate] = {}
 
         source_text_policy: SourceTextPolicy = ChineseEnglishTextPolicy(
@@ -3951,6 +3953,7 @@ def _create_app(
             return dropped
 
         async def _reset_tts_ordering() -> None:
+            nonlocal carried_discourse_assembly
             async with tts_transition_lock:
                 tts_runtime.generation += 1
                 tts_runtime.next_source_order = 0
@@ -3962,6 +3965,8 @@ def _create_app(
                 tts_runtime.supplemented_sources.clear()
                 tts_runtime.pending_additions.clear()
                 source_commit.reset()
+                transferred_source_ranges.clear()
+                carried_discourse_assembly = None
                 confirmation_wait_keys.clear()
                 tts_runtime.ordered.reset()
                 tts_runtime.last_wait_key = None
@@ -4039,66 +4044,65 @@ def _create_app(
             )
             return bool(tts_runtime.enabled)
 
-        async def _register_tts_source(sentence_id: str, revision: int, source_text: str = "") -> None:
+        def _register_tts_source_locked(sentence_id: str, revision: int, source_text: str = ""):
             if not _tts_output_active():
                 return
             sid = str(sentence_id or "")
-            if not sid:
+            if not sid or tts_runtime.ordered.is_superseded(sid):
                 return
-            async with tts_transition_lock:
-                # A prepared supplement is still revisable. Recompute a newer
-                # parent revision from actually published coverage, not from
-                # text that only reached translation/synthesis preparation.
-                for extra_id, addition in list(tts_runtime.pending_additions.items()):
-                    parent_id, parent_revision, _, _ = addition
-                    if parent_id == sid and parent_revision < int(revision):
-                        tts_runtime.ordered.mark_failed(extra_id, parent_revision)
-                        del tts_runtime.pending_additions[extra_id]
-                        tts_runtime.stability_wake.set()
-                        _trace_event("tts_pending_addition_replaced",
-                                     sentence_hash8=_opaque_identifier_hash8(extra_id),
-                                     previous_revision=parent_revision, new_revision=int(revision))
-                tts_runtime.source_versions[(sid, int(revision))] = str(source_text)
-                tts_runtime.source_segments[(sid, int(revision))] = int(segment_runtime.id)
-                generation = int(tts_runtime.generation)
-                registered = tts_runtime.sentence_orders.get(sid)
-                if registered is None:
-                    source_order = int(tts_runtime.next_source_order)
-                    tts_runtime.next_source_order += 1
-                    tts_runtime.sentence_orders[sid] = (source_order, generation)
-                else:
-                    source_order, registered_generation = registered
-                    if int(registered_generation) != generation:
-                        return
-                registration = tts_runtime.ordered.register(
-                    sid,
-                    int(revision),
-                    int(source_order),
-                )
-                if registration.accepted:
-                    if native_pcm_enabled:
-                        speech_output.revise_source(sid, int(revision), int(source_order))
+            # A prepared supplement is still revisable. Recompute a newer
+            # parent revision from actually published coverage, not from
+            # text that only reached translation/synthesis preparation.
+            for extra_id, addition in list(tts_runtime.pending_additions.items()):
+                parent_id, parent_revision, _, _ = addition
+                if parent_id == sid and parent_revision < int(revision):
+                    tts_runtime.ordered.mark_failed(extra_id, parent_revision)
+                    del tts_runtime.pending_additions[extra_id]
                     tts_runtime.stability_wake.set()
-                if registration.reset:
-                    tts_runtime.last_wait_key = None
-                    _trace_event(
-                        "tts_stability_reset",
-                        sentence_hash8=_opaque_identifier_hash8(sid),
-                        source_order=int(registration.source_order),
-                        previous_revision=int(registration.previous_revision or 0),
-                        new_revision=int(registration.revision),
-                        previous_quiet_age_ms=int(registration.previous_quiet_age_ms),
-                        previous_ready=bool(registration.previous_ready),
-                    )
-                elif registration.late_after_release:
-                    _trace_event(
-                        "tts_late_revision_after_release",
-                        sentence_hash8=_opaque_identifier_hash8(sid),
-                        source_order=int(registration.source_order),
-                        released_revision=int(registration.released_revision or 0),
-                        incoming_revision=int(registration.revision),
-                        elapsed_since_release_ms=int(registration.elapsed_since_release_ms),
-                    )
+                    _trace_event("tts_pending_addition_replaced",
+                                 sentence_hash8=_opaque_identifier_hash8(extra_id),
+                                 previous_revision=parent_revision, new_revision=int(revision))
+            tts_runtime.source_versions[(sid, int(revision))] = str(source_text)
+            tts_runtime.source_segments[(sid, int(revision))] = int(segment_runtime.id)
+            generation = int(tts_runtime.generation)
+            registered = tts_runtime.sentence_orders.get(sid)
+            if registered is None:
+                source_order = int(tts_runtime.next_source_order)
+                tts_runtime.next_source_order += 1
+                tts_runtime.sentence_orders[sid] = (source_order, generation)
+            else:
+                source_order, registered_generation = registered
+                if int(registered_generation) != generation:
+                    return
+            registration = tts_runtime.ordered.register(
+                sid,
+                int(revision),
+                int(source_order),
+            )
+            if registration.accepted:
+                if native_pcm_enabled:
+                    speech_output.revise_source(sid, int(revision), int(source_order))
+                tts_runtime.stability_wake.set()
+            if registration.reset:
+                tts_runtime.last_wait_key = None
+                _trace_event(
+                    "tts_stability_reset",
+                    sentence_hash8=_opaque_identifier_hash8(sid),
+                    source_order=int(registration.source_order),
+                    previous_revision=int(registration.previous_revision or 0),
+                    new_revision=int(registration.revision),
+                    previous_quiet_age_ms=int(registration.previous_quiet_age_ms),
+                    previous_ready=bool(registration.previous_ready),
+                )
+            elif registration.late_after_release:
+                _trace_event(
+                    "tts_late_revision_after_release",
+                    sentence_hash8=_opaque_identifier_hash8(sid),
+                    source_order=int(registration.source_order),
+                    released_revision=int(registration.released_revision or 0),
+                    incoming_revision=int(registration.revision),
+                    elapsed_since_release_ms=int(registration.elapsed_since_release_ms),
+                )
             _trace_event(
                 "tts_source_registered",
                 sentence_id=sid,
@@ -4106,6 +4110,120 @@ def _create_app(
                 source_order=int(source_order),
                 generation=generation,
             )
+            return registration
+
+        async def _register_tts_source(sentence_id: str, revision: int, source_text: str = "") -> None:
+            async with tts_transition_lock:
+                _register_tts_source_locked(sentence_id, revision, source_text)
+
+        async def _reconcile_unpublished_source_rows(commit_base: int, completed: List[str]):
+            """Transfer complete occurrences before any revised translation awaits.
+
+            The shared PCM boundary runs on this event loop. Holding the existing
+            transition lock and doing no awaits during the transfer keeps source
+            ownership, ordered release, and synthesis fences in one transaction.
+            """
+            if (not native_pcm_enabled or not _tts_output_active()
+                    or translation_runtime.source_language != "English"):
+                return []
+            applied = []
+            async with tts_transition_lock:
+                generation = int(tts_runtime.generation)
+                rows = []
+                for index, item in enumerate(subtitle_state.sentence_items):
+                    sid = str(item["id"])
+                    registered = tts_runtime.sentence_orders.get(sid)
+                    if registered is None or registered[1] != generation:
+                        continue
+                    rows.append(SourceCommitRow(
+                        sid, int(item["revision"]), int(registered[0]),
+                        published=tts_runtime.ordered.is_committed(sid),
+                        partial=index < commit_base or sid in tts_runtime.covered_sources,
+                        has_addition=any(addition[0] == sid for addition in tts_runtime.pending_additions.values()),
+                    ))
+                plans = source_commit.reconciliation_plan(rows)
+                # This initial implementation only changes punctuation/unit
+                # boundaries inside the already registered occurrence prefix.
+                # A recovered new prefix needs a broader order reconciliation;
+                # it must never be consumed under the old index cursor here.
+                replacements = {plan.anchor.sentence_id: plan.span for plan in plans}
+                absorbed = {row.sentence_id for plan in plans for row in plan.absorbed_rows}
+                expected = [sid for sid in subtitle_state.candidate_sentence_ids if sid not in absorbed]
+                current_spans = source_ledger.spans(completed)
+                revisions = {row.sentence_id: row.revision for row in rows}
+                expected_spans = [replacements.get(sid) or source_ledger.binding(sid, revisions.get(sid, -1))
+                                  for sid in expected]
+                if plans and (len(current_spans) < len(expected_spans) or any(
+                        old is None or current is None or old.tokens != current.tokens
+                        for old, current in zip(expected_spans, current_spans))):
+                    _trace_event("source_reconciliation_prefix_deferred", plans=len(plans),
+                                 registered_units=len(expected_spans), current_units=len(current_spans))
+                    return []
+                # Prefix positions were validated for the complete plan set.
+                # Refusing any group must refuse all groups before mutation.
+                for plan in plans:
+                    indexes = [_find_sentence_item_index(row.sentence_id) for row in plan.rows]
+                    if (any(index is None or index < commit_base for index in indexes)
+                            or any(row.sentence_id not in subtitle_state.candidate_sentence_ids for row in plan.rows)
+                            or not tts_runtime.ordered.can_supersede_many(
+                                plan.anchor.sentence_id, plan.anchor.revision + 1,
+                                [(row.sentence_id, row.revision) for row in plan.absorbed_rows],
+                                expected_owner_revision=plan.anchor.revision)):
+                        _trace_event("source_reconciliation_transaction_deferred", plans=len(plans))
+                        return []
+                for plan in plans:
+                    sid = plan.anchor.sentence_id
+                    revision = plan.anchor.revision + 1
+                    children = [(row.sentence_id, row.revision) for row in plan.absorbed_rows]
+                    candidates = list(subtitle_state.candidate_sentence_ids)
+                    indexes = [_find_sentence_item_index(row.sentence_id) for row in plan.rows]
+                    registration = _register_tts_source_locked(sid, revision, plan.source)
+                    if registration is None or not registration.accepted:
+                        raise RuntimeError("source owner changed inside its publication transaction")
+                    # Preflight and mutation are serialized with no suspension.
+                    if not tts_runtime.ordered.supersede_many(sid, revision, children):
+                        raise RuntimeError("source transfer changed inside its publication transaction")
+                    source_ledger.bind(sid, revision, plan.span)
+                    parent_index = _find_sentence_item_index(sid)
+                    parent = subtitle_state.sentence_items[parent_index]
+                    parent.update(zh=plan.source, revision=revision, en="")
+                    subtitle_state.committed_sentences[parent_index] = plan.source
+                    _mark_latest_translation_request(sid, revision, plan.source, translation_runtime.direction)
+                    absorbed_ids = {row.sentence_id for row in plan.absorbed_rows}
+                    required = list(transferred_source_ranges.get(sid, ()))
+                    for row in plan.absorbed_rows:
+                        bound = source_ledger.binding(row.sentence_id, row.revision)
+                        required.append(bound.tokens)
+                        transferred_source_ranges.pop(row.sentence_id, None)
+                        # Fence even audio that has already been offered but has
+                        # not crossed its irreversible first-PCM boundary.
+                        speech_output.revise_source(row.sentence_id, row.revision + 1, row.order)
+                        source_ledger.unbind(row.sentence_id, row.revision)
+                        translation_runtime.latest_by_sentence.pop(row.sentence_id, None)
+                        subtitle_state.deferred_sentence_upgrades.pop(row.sentence_id, None)
+                        confirmation_wait_keys.pop(row.sentence_id, None)
+                    transferred_source_ranges[sid] = tuple(required)
+                    while len(transferred_source_ranges) > 256:
+                        transferred_source_ranges.pop(next(iter(transferred_source_ranges)))
+                    for index in sorted(indexes[1:], reverse=True):
+                        del subtitle_state.sentence_items[index]
+                        del subtitle_state.committed_sentences[index]
+                    # Remove retired cursor slots instead of backfilling them
+                    # when the decoder now exposes fewer completed units.
+                    kept = [(key, plan.source if key == sid else text)
+                            for key, text in zip(candidates, subtitle_state.candidate_texts)
+                            if key not in absorbed_ids]
+                    subtitle_state.candidate_sentence_ids = [key for key, _ in kept]
+                    subtitle_state.candidate_texts = [text for _, text in kept]
+                    subtitle_state.processed_completed_count = len(kept)
+                    subtitle_state.prev_completed_sentences = list(subtitle_state.candidate_texts)
+                    tts_runtime.last_wait_key = None
+                    tts_runtime.stability_wake.set()
+                    _trace_event("source_rows_reconciled", sentence_id=sid, revision=revision,
+                                 source_order=plan.anchor.order, absorbed_ids=sorted(absorbed_ids),
+                                 source_tokens=len(plan.span.tokens), source_hash8=_hash8(plan.source))
+                    applied.append((plan, revision))
+            return applied
 
         def _record_published_source(item, source: str) -> None:
             tts_runtime.released_sources[item.sentence_id] = source
@@ -4703,6 +4821,7 @@ def _create_app(
             expected = (queued_generation, queued_revision, src, queued_direction)
             is_current = bool(
                 current_item is not None
+                and not tts_runtime.ordered.is_superseded(sid)
                 and queued_generation == int(state_generation)
                 and current_revision == queued_revision
                 and current_text == src
@@ -6407,6 +6526,7 @@ def _create_app(
             final_reconcile: bool = False,
             allow_early_translation_promotion: bool = True,
         ) -> str:
+            nonlocal carried_discourse_assembly
             seq_no = int(seq_hint or 0)
             decoder_text = str(getattr(state, "text", "") or "").strip()
             raw_full_text = str(full_text or "").strip()
@@ -6427,6 +6547,40 @@ def _create_app(
             effective_full_text = _compose_effective_text_for_commit(full_text, seq_no)
             completed, tail = _split_subtitle_units(effective_full_text,
                                                   group_final_short_units=bool(force_tail and final_reconcile))
+            if (translation_runtime.source_language == "English" and pending_prefix_before
+                    and not force_tail and not final_reconcile
+                    and effective_full_text.startswith(pending_prefix_before)):
+                # Occurrence positions, not equal strings elsewhere in a decode,
+                # prove that these complete units belong wholly to the carry.
+                carried_indexes = []
+                position = 0
+                for index, unit in enumerate(completed):
+                    start = effective_full_text.find(unit, position)
+                    if start < 0:
+                        break
+                    position = start + len(unit)
+                    # Composition may restore a terminal period that the carry
+                    # text itself did not retain. That period is not a fresh word.
+                    word_end = start + len(unit.rstrip(" ."))
+                    if word_end <= len(pending_prefix_before):
+                        carried_indexes.append(index)
+                repaired, repaired_tail = repair_carried_discourse_units(
+                    completed, tail, carried_unit_indexes=carried_indexes,
+                    unregistered_start=(carried_discourse_assembly[1]
+                                        if carried_discourse_assembly is not None
+                                        and carried_discourse_assembly[0] == (int(segment_runtime.id), pending_prefix_before)
+                                        else int(subtitle_state.processed_completed_count)),
+                )
+                if repaired != completed or repaired_tail != tail:
+                    if (carried_discourse_assembly is None
+                            or carried_discourse_assembly[0] != (int(segment_runtime.id), pending_prefix_before)):
+                        carried_discourse_assembly = ((int(segment_runtime.id), pending_prefix_before),
+                                                     int(subtitle_state.processed_completed_count))
+                    subtitle_state.pending_prefix_retain_for_alignment = True
+                    _trace_event("carried_discourse_assembled", seq=seq_no,
+                                 previous_units=len(completed), units=len(repaired),
+                                 carried_indexes=carried_indexes, tail_chars=len(repaired_tail))
+                    completed, tail = repaired, repaired_tail
             qwen_chunk = getattr(state, "chunk_id", None)
             qwen_evidence_available = type(qwen_chunk) is int and qwen_chunk > 0
             observation = (int(segment_runtime.id), qwen_chunk) if qwen_evidence_available else None
@@ -6445,6 +6599,31 @@ def _create_app(
                             tts_runtime.stability_wake.set()
                             _trace_event("tts_confirmation_revoked", sentence_hash8=_opaque_identifier_hash8(sid),
                                          revision=revision, reason="decoder_withdrawal")
+            reconciled = await _reconcile_unpublished_source_rows(commit_base, completed)
+            if reconciled:
+                total_committed_count = len(subtitle_state.committed_sentences)
+                prev_committed_count = total_committed_count - commit_base
+                canonical_existing_text = _join_segments(subtitle_state.committed_sentences[commit_base:])
+                canonical_existing_compact = _compact_asr_compare_text(canonical_existing_text)
+                prev_completed_count = len(subtitle_state.prev_completed_sentences)
+                for plan, revision in reconciled:
+                    event = dict(type="sentence_updated", sentence_id=plan.anchor.sentence_id,
+                                 revision=revision, text=plan.source, language=str(language or ""),
+                                 seq=seq_no, ts_ms=int(time.time() * 1000), slice_commit=bool(slice_commit))
+                    _attach_stability(event, is_stable=True, phase="solidified",
+                                      reason="source_reconciliation", sentence_id=plan.anchor.sentence_id)
+                    await _send_json(event)
+                    for row in plan.absorbed_rows:
+                        await _send_json(dict(type="sentence_superseded", sentence_id=row.sentence_id,
+                                             revision=row.revision,
+                                             replacement_sentence_id=plan.anchor.sentence_id,
+                                             replacement_revision=revision))
+                    if translate_now:
+                        await _translate_sentence_now(plan.anchor.sentence_id, revision,
+                                                      plan.source, language, seq_hint)
+                    else:
+                        _request_sentence_translation(plan.anchor.sentence_id, revision,
+                                                      plan.source, language, seq_hint)
             qwen_now = time.monotonic()
             qwen_scoped = (
                 qwen_submission_mode in {"shadow", "adaptive"}
@@ -7201,6 +7380,20 @@ def _create_app(
                 evaluated_sentence_ids.add(sentence_id)
                 upgraded = str(completed[i] or "").strip()
                 current = str(subtitle_state.committed_sentences[global_idx] or "").strip()
+                required_ranges = transferred_source_ranges.get(sentence_id, ())
+                span = candidate_spans[i]
+                if (required_ranges and not tts_runtime.ordered.is_committed(sentence_id)
+                        and any(span is None or tokens[0] not in span.tokens or tokens[-1] not in span.tokens
+                            or span.tokens.index(tokens[0]) > span.tokens.index(tokens[-1])
+                            for tokens in required_ranges)):
+                    # A child cannot retire and then disappear in a later owner
+                    # revision. Its bounding occurrences must remain in order;
+                    # interior ASR word/number corrections keep normal revision
+                    # and fresh decoder confirmation instead of freezing text.
+                    _trace_event("source_transfer_contraction_rejected", seq=seq_no,
+                                 sentence_id=sentence_id, revision=int(subtitle_state.sentence_items[global_idx]["revision"]),
+                                 required_ranges=len(required_ranges), candidate_hash8=_hash8(upgraded))
+                    continue
                 if (
                     canonical_segment_correction
                     and _canonical_correction_drops_committed_suffix(current, upgraded)

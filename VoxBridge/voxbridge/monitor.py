@@ -16,6 +16,8 @@ class MonitorState:
 
     def reset(self) -> None:
         self.rows: OrderedDict[str, dict] = OrderedDict()
+        self._superseded_ids: set[str] = set()
+        self.superseded_rows: OrderedDict[str, dict] = OrderedDict()
         self.session = {'status': 'idle', 'direction': 'zh2en', 'last_error': ''}
         self._set_direction('zh2en')
         self.tentative = ''
@@ -38,10 +40,12 @@ class MonitorState:
             self.session['status'] = 'ready'
         elif kind == 'sentence_reset':
             self.rows.clear()
+            self._superseded_ids.clear()
+            self.superseded_rows.clear()
             self.tentative = ''
         elif kind in ('sentence_committed', 'sentence_updated'):
             sid = str(event.get('sentence_id', ''))
-            if not sid:
+            if not sid or sid in self._superseded_ids:
                 return
             revision = int(event.get('revision', 0))
             old = self.rows.get(sid)
@@ -55,6 +59,30 @@ class MonitorState:
             while len(self.rows) > self.max_rows:
                 self.rows.popitem(last=False)
             self.tentative = ''
+        elif kind == 'sentence_superseded':
+            sid = str(event.get('sentence_id', ''))
+            replacement = str(event.get('replacement_sentence_id', ''))
+            revision = int(event.get('revision', -1))
+            replacement_revision = int(event.get('replacement_revision', -1))
+            if not sid or not replacement or sid == replacement or revision < 0 or replacement_revision < 0:
+                return
+            row = self.rows.get(sid)
+            if sid in self._superseded_ids or (row is not None and (
+                row['revision'] != revision or row.get('spoken')
+            )):
+                return
+            # Keep bounded correction history, but never advertise an absorbed
+            # source occurrence as another pending translation or speech row.
+            self._superseded_ids.add(sid)
+            historical = dict(row) if row is not None else dict(
+                id=sid, revision=revision, source='', translation='',
+            )
+            historical.update(status='superseded', replacement_sentence_id=replacement,
+                              replacement_revision=replacement_revision)
+            self.superseded_rows[sid] = historical
+            self.rows.pop(sid, None)
+            while len(self.superseded_rows) > self.max_rows:
+                self.superseded_rows.popitem(last=False)
         elif kind == 'sentence_translation':
             row = self.rows.get(str(event.get('sentence_id', '')))
             if row is not None and int(event.get('revision', 0)) == row['revision']:
@@ -97,6 +125,7 @@ class MonitorState:
 
     def snapshot(self) -> dict:
         return {'session': dict(self.session), 'rows': deepcopy(list(self.rows.values())),
+                'superseded_rows': deepcopy(list(self.superseded_rows.values())),
                 'tentative': self.tentative, 'updated_at_ms': self.updated_at_ms,
                 'version': self.version}
 

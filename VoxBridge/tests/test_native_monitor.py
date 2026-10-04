@@ -124,6 +124,74 @@ def test_monitor_keeps_spoken_snapshot_when_source_and_translation_are_corrected
     assert [part['text'] for part in state.snapshot()['rows'][0]['spoken']] == ['我们可以离开。', '直到明天。']
 
 
+def test_superseded_source_leaves_active_monitor_and_late_events_cannot_restore_it():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState()
+    for sid in ['owner', 'absorbed', 'independent-repeat']:
+        state.observe(dict(type='sentence_committed', sentence_id=sid, revision=1, text=sid))
+        state.observe(dict(type='sentence_translation', sentence_id=sid, revision=1,
+                           translation='相同的译文。', source_token_ids=[1, 2]))
+    state.observe(dict(type='sentence_updated', sentence_id='owner', revision=2,
+                       text='owner including absorbed'))
+    event = dict(type='sentence_superseded', sentence_id='absorbed', revision=1,
+                 replacement_sentence_id='owner', replacement_revision=2)
+    version = state.version
+    state.observe(event)
+    assert state.version > version
+    snapshot = state.snapshot()
+    assert [row['id'] for row in snapshot['rows']] == ['owner', 'independent-repeat']
+    historical = snapshot['superseded_rows'][0]
+    assert historical['id'] == 'absorbed'
+    assert historical['translation'] == '相同的译文。'
+    assert historical['status'] == 'superseded'
+    assert historical['replacement_sentence_id'] == 'owner'
+    assert historical['replacement_revision'] == 2
+    historical['source_token_ids'].append(9)
+    assert state.snapshot()['superseded_rows'][0]['source_token_ids'] == [1, 2]
+
+    for kind, revision in [('sentence_translation', 1), ('sentence_updated', 2), ('sentence_committed', 3)]:
+        state.observe(dict(type=kind, sentence_id='absorbed', revision=revision,
+                           text='cannot revive', translation='不能重新显示。'))
+    state.observe(event)
+    assert [row['id'] for row in state.snapshot()['rows']] == ['owner', 'independent-repeat']
+    assert len(state.snapshot()['superseded_rows']) == 1
+    state.observe(dict(type='sentence_translation', sentence_id='owner', revision=2,
+                       translation='完整合并译文。', source_token_ids=[1, 2, 3]))
+    assert state.snapshot()['rows'][0]['translation'] == '完整合并译文。'
+
+
+def test_monitor_does_not_retire_a_current_revision_for_a_stale_or_spoken_event():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState()
+    state.observe(dict(type='sentence_committed', sentence_id='child', revision=2, text='Current.'))
+    event = dict(type='sentence_superseded', sentence_id='child', revision=1,
+                 replacement_sentence_id='owner', replacement_revision=3)
+    state.observe(event)
+    assert state.snapshot()['rows'][0]['revision'] == 2
+    assert state.snapshot()['superseded_rows'] == []
+    state.observe(dict(type='speech_committed', sentence_id='child', revision=2,
+                       source='Current.', translation='已经发布。'))
+    state.observe(dict(event, revision=2))
+    assert state.snapshot()['rows'][0]['spoken'][0]['text'] == '已经发布。'
+    assert state.snapshot()['superseded_rows'] == []
+
+
+def test_monitor_supersession_history_is_bounded_and_reset_allows_a_new_occurrence():
+    from voxbridge.monitor import MonitorState
+    state = MonitorState(max_rows=1)
+    for sid in ['a', 'b', 'c']:
+        state.observe(dict(type='sentence_committed', sentence_id=sid, revision=1, text=sid))
+        state.observe(dict(type='sentence_superseded', sentence_id=sid, revision=1,
+                           replacement_sentence_id='owner', replacement_revision=2))
+    assert [row['id'] for row in state.snapshot()['superseded_rows']] == ['c']
+    state.observe(dict(type='sentence_updated', sentence_id='a', revision=10, text='late'))
+    assert state.snapshot()['rows'] == []
+    state.observe(dict(type='sentence_reset'))
+    assert state.snapshot()['superseded_rows'] == []
+    state.observe(dict(type='sentence_committed', sentence_id='a', revision=1, text='new occurrence'))
+    assert state.snapshot()['rows'][0]['source'] == 'new occurrence'
+
+
 def test_native_control_token_is_stable_private_and_in_environment(monkeypatch,tmp_path):
     from tools import macos_service as service
     monkeypatch.setattr(service,'STATE',tmp_path)

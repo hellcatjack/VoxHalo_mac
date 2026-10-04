@@ -105,6 +105,10 @@ def build_commands():
            '--disable-debug-file', '--native-console']
     if os.environ.get('VOXBRIDGE_SPECULATIVE_TRANSLATION') == '1':
         app.append('--translation-speculative')
+    trace_file = os.environ.get('VOXBRIDGE_SUBTITLE_TRACE_FILE', '').strip()
+    if trace_file:
+        app += ['--subtitle-trace-log', '--subtitle-trace-log-file',
+                str(Path(trace_file).expanduser()), '--subtitle-trace-log-partial-every', '1']
     app += ['--public-listener-url', os.environ.get('VOXBRIDGE_LISTENER_URL') or 'auto']
     mt = [str(LLAMA), '--model', str(MT_MODEL), '--alias', 'hy-mt',
           '--host', '127.0.0.1', '--port', '8876', '--gpu-layers', '99',

@@ -90,6 +90,22 @@ def test_source_bindings_and_published_history_are_bounded():
     assert len(ledger._bindings) == len(ledger._published) == 4
 
 
+def test_binding_retirement_is_revision_fenced_and_preserves_published_history():
+    ledger = SourceLedger()
+    text = 'The source must remain fully covered.'
+    ledger.observe(text, 1, raw=text)
+    span = ledger.spans([text])[0]
+    ledger.bind('first', 2, span)
+    ledger.publish('first', 2)
+    assert ledger.overlapping_bindings(span) == [('first', 2, span)]
+    assert not ledger.unbind('first', 1)
+    assert ledger.binding('first', 2) == span
+    assert ledger.unbind('first', 2)
+    assert ledger.overlapping_bindings(span) == []
+    assert ledger.overlaps_published(span)
+    assert ledger.covered_by(span) == 'first'
+
+
 def test_dependency_repairs_preserve_subject_and_object_in_evaluation_cases():
     incomplete = ["We don't need any.", "They're asking to be.",
                   'I also have a lot of confidence in in,',

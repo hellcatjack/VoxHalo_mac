@@ -2,6 +2,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+
+
+_CARRIED_DISCOURSE_FRAGMENT = re.compile(
+    r"(?:(?:yeah|well|so|okay)(?:\s*,\s*|\s+)){1,4}"
+    r"(?:first(?:\s+of\s+all)?|secondly)\s*\.",
+    re.I,
+)
 
 
 def open_conditional(text: str) -> bool:
@@ -83,4 +91,79 @@ def repair_semantic_units(sentences: list[str], tail: str) -> tuple[list[str], s
             units.append(current)
     if pending:
         tail = _join(pending, tail) if tail else pending
+    return units, tail
+
+
+def repair_carried_discourse_units(
+    sentences: list[str],
+    tail: str,
+    *,
+    carried_unit_indexes: Iterable[int],
+    unregistered_start: int = 0,
+) -> tuple[list[str], str]:
+    """Assemble an explicitly carried discourse fragment before registration.
+
+    The caller supplies occurrence indexes proved to be wholly inside the
+    carried prefix; text equality alone cannot identify those occurrences.
+    Registered units and fresh short sentences keep their existing boundaries.
+    This repair neither observes a decoder callback nor grants speech evidence.
+    It retains every word, including a genuinely repeated phrase in fresh raw
+    text, and should not run during final reconciliation of a stopped source.
+    """
+    carried = frozenset(carried_unit_indexes)
+    first_unregistered = max(0, int(unregistered_start))
+    units: list[str] = []
+    index = 0
+
+    def carried_fragment(position: int) -> bool:
+        return bool(
+            position >= first_unregistered
+            and position in carried
+            and _CARRIED_DISCOURSE_FRAGMENT.fullmatch(sentences[position].strip())
+        )
+
+    while index < len(sentences):
+        if not carried_fragment(index):
+            units.append(sentences[index])
+            index += 1
+            continue
+
+        run_start = index
+        pending = sentences[index]
+        index += 1
+        while index < len(sentences) and carried_fragment(index):
+            pending = _join(pending, sentences[index])
+            index += 1
+
+        if index < len(sentences) and index in carried:
+            # A different carried sentence still separates the fragment from
+            # fresh speech. Preserve order and its boundaries rather than move
+            # the fragment past that sentence or silently fold old content.
+            units.extend(sentences[run_start:index])
+            continue
+
+        if index == len(sentences):
+            # No completed fresh neighbour exists yet. Keep the complete
+            # fragment in the tail instead of creating an unconfirmable head.
+            tail = _join(pending, tail) if tail else re.sub(r'\.$', '', pending).rstrip()
+            break
+
+        current = _join(pending, sentences[index])
+        index += 1
+        if dependent_phrase(current) or open_english_complement(current):
+            # Existing semantic safeguards also apply after assembly. Continue
+            # only through adjacent fresh units; never pull another carry in.
+            while index < len(sentences) and index not in carried:
+                current = _join(current, sentences[index])
+                index += 1
+                if not dependent_phrase(current) and not open_english_complement(current):
+                    break
+            if dependent_phrase(current) or open_english_complement(current):
+                if index < len(sentences):
+                    units.extend(sentences[run_start:index])
+                    continue
+                tail = _join(current, tail) if tail else re.sub(r'\.$', '', current).rstrip()
+                break
+        units.append(current)
+
     return units, tail

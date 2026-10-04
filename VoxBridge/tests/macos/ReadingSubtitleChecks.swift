@@ -117,8 +117,68 @@ private func checkLanguageTimingAndCoverage() {
     assert(q.advance(now: q.deadline) && q.text == tail)
     print("PASS: eight-language timing, fixed English clock, Hindi graphemes, occurrence coverage and safe corrections")
 }
+
+private func checkSupersededPresentationOnly() {
+    let absorbed: [String: Any] = ["type": "sentence_superseded", "sentence_id": "child", "revision": 1,
+                                  "replacement_sentence_id": "owner", "replacement_revision": 2]
+    var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { [$0] }, fits: { !$0.contains(" ") })
+    q.observe(source("owner"), now: 0)
+    q.observe(source("child"), now: 0)
+    q.observe(translated("child", "待显示的旧子句。"), now: 0)
+    q.observe(source("owner", 2), now: 0.1)
+    q.observe(absorbed, now: 0.1)
+    for revision in [1, 2, 99] {
+        q.observe(source("child", revision), now: 0.2)
+        q.observe(translated("child", "迟到子句。", revision), now: 0.2)
+    }
+    q.observe(translated("owner", "完整合并后的内容。", 2), now: 0.3)
+    assert(q.advance(now: 1) && q.text == "完整合并后的内容。")
+    assert(q.references.map { $0.id } == ["owner"])
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0, "Absorbed child left a pending row or replayed")
+    q.observe(source("independent-repeat"), now: 10)
+    q.observe(translated("independent-repeat", "待显示的旧子句。"), now: 10)
+    assert(q.advance(now: 11) && q.references.map { $0.id } == ["independent-repeat"])
+
+    // A visible card must finish its original reading time. Supersession only
+    // cancels queued pages, and never replaces the card mid-reading.
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "zh")
+    q.configure(splitter: { $0.components(separatedBy: " | ") }, fits: { !$0.contains(" ") })
+    q.observe(source("owner"), now: 0)
+    q.observe(translated("owner", "先读完整首句。"), now: 0)
+    q.observe(source("child"), now: 0)
+    q.observe(translated("child", "子句第一屏。 | 子句未读尾部。"), now: 0)
+    q.advance(now: 1)
+    assert(q.text == "先读完整首句。")
+    assert(q.advance(now: q.deadline) && q.text == "子句第一屏。")
+    let visible = q.text, identity = q.identity, until = q.deadline
+    q.observe(source("owner", 2), now: until - 1)
+    q.observe(translated("owner", "合并后仍保留完整尾部。", 2), now: until - 1)
+    q.observe(absorbed, now: until - 1)
+    assert(!q.advance(now: until - 0.001))
+    assert(q.text == visible && q.identity == identity && q.deadline == until)
+    assert(q.advance(now: until) && q.text == "合并后仍保留完整尾部。")
+    assert(q.references.map { $0.id } == ["owner"])
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0)
+
+    q.observe(["type": "sentence_reset"], now: 100)
+    q.observe(source("child"), now: 100)
+    q.observe(translated("child", "新源序列中的同名行。"), now: 100)
+    assert(q.advance(now: 101) && q.references.map { $0.id } == ["child"])
+
+    // A stale retirement cannot cancel a newer source revision.
+    q = ReadingSubtitleQueue()
+    q.observe(source("child", 2), now: 0)
+    q.observe(absorbed, now: 0.1)
+    q.observe(translated("child", "当前修订必须保留。", 2), now: 0.2)
+    assert(q.advance(now: 1) && q.text == "当前修订必须保留。")
+    print("PASS: presentation-only supersession, stale events, frozen visible cards and independent repeats")
+}
 @main struct ReadingSubtitleChecks {
     static func main() {
+        checkSupersededPresentationOnly()
         let migrated = try! JSONDecoder().decode(SubtitlePreferences.self, from: Data(#"{"fontSize":42,"backgroundEnabled":true}"#.utf8))
         assert(migrated.mode == .reading && migrated.fontSize == 42 && migrated.backgroundEnabled)
         var saved = migrated; saved.mode = .playback

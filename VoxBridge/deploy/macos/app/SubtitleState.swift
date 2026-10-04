@@ -131,6 +131,7 @@ struct ReadingSubtitleQueue {
     private struct Part { let id: String; var revision: Int; let page: Int; let text: String }
     private struct Card { var parts: [Part]; let text: String; var readingEnd: Double; var deadline: Double }
     private var rows: [Row] = []
+    private var supersededIDs: Set<String> = []
     private var cards: [Card] = []
     private var serial = 0
     private var pausedAt: Double?
@@ -235,6 +236,18 @@ struct ReadingSubtitleQueue {
         switch event["type"] as? String {
         case "started", "sentence_reset": reset()
         case "final": finished = true
+        case "sentence_superseded":
+            guard let id = event["sentence_id"] as? String, !id.isEmpty,
+                  let revision = event["revision"] as? Int, revision >= 0,
+                  let replacement = event["replacement_sentence_id"] as? String,
+                  !replacement.isEmpty, replacement != id,
+                  let replacementRevision = event["replacement_revision"] as? Int,
+                  replacementRevision >= 0 else { return }
+            if let row = rows.first(where: { $0.id == id }), row.revision != revision { return }
+            supersededIDs.insert(id)
+            rows.removeAll { $0.id == id }
+            // Preserve an already visible card for its complete reading turn.
+            // Only its remaining pages and late source/MT events are retired.
         case "sentence_translation_failed":
             // Operational notices belong in the App/monitor, never the overlay.
             guard let id = event["sentence_id"] as? String,
@@ -244,6 +257,7 @@ struct ReadingSubtitleQueue {
             rows[index].pages = []; rows[index].nextPage = 0
         case "sentence_committed", "sentence_updated":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
+                  !supersededIDs.contains(id),
                   let revision = event["revision"] as? Int, revision >= 0,
                   let source = event["text"] as? String else { return }
             if let index = rows.firstIndex(where: { $0.id == id }) {

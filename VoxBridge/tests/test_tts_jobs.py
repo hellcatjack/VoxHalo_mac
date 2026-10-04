@@ -609,3 +609,191 @@ def test_invalid_confirmation_history_is_rejected(age):
     buffer = RevisionStableTTSBuffer(stable_sec=3)
     with pytest.raises(ValueError):
         buffer.confirm_revision('s', 1, evidence_age_sec=age)
+
+
+@pytest.mark.parametrize('child_state', ['waiting', 'ready', 'offered'])
+def test_superseded_occurrence_is_terminal_for_late_translation_and_source_events(child_state):
+    clock = FakeClock(0)
+    buffer = RevisionStableTTSBuffer(
+        stable_sec=3, defer_commit=True, require_confirmation=True, clock=clock,
+    )
+    buffer.register('owner', 1, 0)
+    buffer.register('absorbed', 1, 1)
+    if child_state != 'waiting':
+        buffer.mark_ready('absorbed', 1, '重复的旧译文。', 'Chinese')
+    if child_state == 'offered':
+        # An unpublished preparation may already have been offered by the
+        # surrounding scheduler. Supersession must revoke this flag as well.
+        buffer._entries[1].offered = True
+
+    assert buffer.register('owner', 2, 0).accepted
+    assert buffer.supersede('absorbed', 1, replacement_sentence_id='owner', replacement_revision=2)
+    replacement = buffer.supersession('absorbed')
+    assert replacement is not None
+    assert (replacement.sentence_id, replacement.revision, replacement.source_order) == ('absorbed', 1, 1)
+    assert (replacement.replacement_sentence_id, replacement.replacement_revision,
+            replacement.replacement_source_order) == ('owner', 2, 0)
+    assert buffer.is_superseded('absorbed')
+    assert not buffer.is_committed('absorbed')
+    assert buffer.pending_count == 1
+    row = next(item for item in buffer.diagnostics() if item['sentence_id'] == 'absorbed')
+    assert row['status'] == 'superseded'
+    assert row['release_policy'] == 'source_superseded'
+    assert row['replacement_sentence_id'] == 'owner'
+    assert row['replacement_revision'] == 2
+    assert not row['offered']
+
+    for revision in (0, 1, 2, 50):
+        registration = buffer.register('absorbed', revision, 1)
+        assert not registration.accepted and registration.superseded
+        assert registration.replacement_sentence_id == 'owner'
+        assert registration.replacement_revision == 2
+        assert not buffer.mark_ready('absorbed', revision, '迟到译文。', 'Chinese')
+        assert not buffer.mark_failed('absorbed', revision)
+        assert not buffer.confirm_revision('absorbed', revision, evidence_age_sec=100)
+        assert not buffer.revoke_confirmation('absorbed', revision)
+        assert not buffer.retry_pending('absorbed', revision)
+        assert not buffer.can_commit('absorbed', revision)
+        assert not buffer.commit('absorbed', revision)
+    # A late callback with a stale order is terminal too, not a service error.
+    assert buffer.register('absorbed', 2, 99).superseded
+
+    buffer.mark_ready('owner', 2, '合并后保留了完整内容。', 'Chinese')
+    clock.advance(100)
+    assert buffer.drain() == []  # Supersession does not weaken confirmation.
+    buffer.confirm_through(1)
+    buffer.seal_through(1)
+    assert [(item.sentence_id, item.revision) for item in buffer.drain(force=True)] == [('owner', 2)]
+    assert buffer.pending_count == 0
+    assert buffer.is_committed('owner')
+    assert buffer.is_superseded('absorbed')
+    assert not buffer.can_commit('absorbed', 1)
+    assert not buffer.mark_ready('absorbed', 1, '不能恢复。', 'Chinese')
+    assert buffer.drain(force=True) == []
+
+
+def test_supersession_preflight_checks_old_owner_revision_without_mutating_it():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    buffer.register('owner', 4, 0)
+    buffer.register('first-child', 1, 1)
+    buffer.register('second-child', 3, 2)
+    children = [('first-child', 1), ('second-child', 3)]
+    assert buffer.can_supersede_many('owner', 5, children, expected_owner_revision=4)
+    assert not buffer.can_supersede_many('owner', 5, children)
+    assert not buffer.can_supersede_many('owner', 5, children, expected_owner_revision=3)
+    assert not buffer.can_supersede_many('owner', 3, children, expected_owner_revision=4)
+    assert not buffer.is_superseded('first-child')
+    assert buffer.pending_count == 3
+
+    assert buffer.register('owner', 5, 0).accepted
+    assert buffer.can_supersede_many('owner', 5, children)
+    assert buffer.supersede_many('owner', 5, children)
+    assert buffer.pending_count == 1
+    buffer.mark_ready('owner', 5, '完整合并译文。', 'Chinese')
+    assert [item.sentence_id for item in buffer.drain()] == ['owner']
+    assert buffer.commit('owner', 5)
+    # Cursor advances across retired slots without an extra callback or drain.
+    buffer.register('next', 1, 3)
+    buffer.mark_ready('next', 1, '下一句。', 'Chinese')
+    assert not buffer.wait_state('next').blocked_by_earlier
+    assert buffer.next_deadline() is not None
+    assert [item.sentence_id for item in buffer.drain()] == ['next']
+
+
+@pytest.mark.parametrize('children', [
+    [('first-child', 1), ('missing', 1)],
+    [('first-child', 1), ('second-child', 2)],
+    [('first-child', 1), ('first-child', 1)],
+    [('first-child', 1), ('owner', 1)],
+    [],
+])
+def test_supersession_invalid_group_cannot_partially_retire_children(children):
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for sid, order in [('owner', 0), ('first-child', 1), ('second-child', 2)]:
+        buffer.register(sid, 1, order)
+        buffer.mark_ready(sid, 1, sid, 'English')
+    before = buffer.diagnostics()
+    assert not buffer.can_supersede_many('owner', 1, children)
+    assert not buffer.supersede_many('owner', 1, children)
+    assert buffer.pending_count == 3
+    assert not buffer.is_superseded('first-child')
+    assert not buffer.is_superseded('second-child')
+    assert [(row['sentence_id'], row['status']) for row in buffer.diagnostics()] == [
+        (row['sentence_id'], row['status']) for row in before
+    ]
+    assert [item.sentence_id for item in buffer.drain(force=True)] == ['owner', 'first-child', 'second-child']
+
+
+def test_committed_source_or_committed_owner_can_never_be_superseded():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for sid, order in [('owner', 0), ('child', 1), ('later', 2)]:
+        buffer.register(sid, 1, order)
+        buffer.mark_ready(sid, 1, sid, 'English')
+    buffer.drain()
+    assert buffer.commit('owner', 1)
+    assert buffer.is_committed('owner')
+    assert not buffer.supersede_many('owner', 1, [('child', 1)])
+    buffer.drain()
+    assert buffer.commit('child', 1)
+    assert buffer.is_committed('child')
+    assert not buffer.supersede('child', 1, replacement_sentence_id='later', replacement_revision=1)
+    assert not buffer.is_superseded('child')
+    assert buffer.can_commit('child', 1)
+    assert buffer.register('child', 2, 1).late_after_release
+    assert [item.sentence_id for item in buffer.drain()] == ['later']
+
+
+def test_supersession_does_not_dedupe_an_independent_repeated_sentence():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    for sid, order in [('owner', 0), ('absorbed', 1), ('independent-repeat', 2)]:
+        buffer.register(sid, 1, order)
+    buffer.register('owner', 2, 0)
+    buffer.mark_ready('owner', 2, '我们必须谨慎，我们必须谨慎。', 'Chinese')
+    buffer.mark_ready('absorbed', 1, '我们必须谨慎。', 'Chinese')
+    buffer.mark_ready('independent-repeat', 1, '我们必须谨慎。', 'Chinese')
+    assert buffer.supersede_many('owner', 2, [('absorbed', 1)])
+    assert [(item.sentence_id, item.text) for item in buffer.drain(force=True)] == [
+        ('owner', '我们必须谨慎，我们必须谨慎。'),
+        ('independent-repeat', '我们必须谨慎。'),
+    ]
+
+
+@pytest.mark.parametrize('hold_latest', [False, True])
+def test_absorbed_successor_cannot_remove_owners_latest_source_hold_or_grace(hold_latest):
+    clock = FakeClock(0)
+    buffer = RevisionStableTTSBuffer(
+        stable_sec=3, latest_revision_grace_sec=4,
+        hold_latest_until_sealed=hold_latest, defer_commit=True, clock=clock,
+    )
+    buffer.register('owner', 1, 0)
+    buffer.register('absorbed-tail', 1, 1)
+    buffer.register('owner', 2, 0)
+    assert buffer.supersede_many('owner', 2, [('absorbed-tail', 1)])
+    buffer.mark_ready('owner', 2, '整个最新源句。', 'Chinese')
+    clock.advance(3)
+    assert buffer.drain() == []
+    state = buffer.wait_state('owner')
+    assert state is not None
+    assert state.waiting_for_segment_seal == hold_latest
+    assert state.waiting_for_latest_grace != hold_latest
+    clock.advance(4)
+    if hold_latest:
+        assert buffer.drain() == []
+        buffer.seal_through(1)
+    assert [item.sentence_id for item in buffer.drain()] == ['owner']
+
+
+def test_superseded_owner_and_children_reset_only_at_new_session():
+    buffer = RevisionStableTTSBuffer(stable_sec=0, defer_commit=True)
+    buffer.register('owner', 1, 0)
+    buffer.register('child', 1, 1)
+    assert buffer.supersede_many('owner', 1, [('child', 1)])
+    buffer.mark_ready('owner', 1, '完整译文。', 'Chinese')
+    buffer.drain(force=True)
+    buffer.reset()
+    assert not buffer.is_committed('owner')
+    assert not buffer.is_superseded('child')
+    assert buffer.supersession('child') is None
+    assert buffer.register('child', 1, 0).accepted
+    buffer.mark_ready('child', 1, '新会话。', 'Chinese')
+    assert [item.sentence_id for item in buffer.drain(force=True)] == ['child']

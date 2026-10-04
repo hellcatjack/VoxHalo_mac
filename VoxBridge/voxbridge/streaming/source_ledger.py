@@ -106,6 +106,24 @@ class SourceLedger:
         value = self._bindings.get(sentence_id)
         return value[1] if value and value[0] == revision else None
 
+    def unbind(self, sentence_id: str, revision: int) -> bool:
+        """Retire an exact pending revision without erasing published coverage."""
+        value = self._bindings.get(sentence_id)
+        if value is None or value[0] != revision:
+            return False
+        del self._bindings[sentence_id]
+        return True
+
+    def overlapping_bindings(self, span: SourceSpan) -> list[tuple[str, int, SourceSpan]]:
+        """Return bindings sharing occurrence tokens, including partial overlaps."""
+        tokens = set(span.tokens)
+        return [(sid, revision, bound) for sid, (revision, bound) in self._bindings.items()
+                if tokens.intersection(bound.tokens)]
+
+    def overlaps_published(self, span: SourceSpan) -> bool:
+        tokens = set(span.tokens)
+        return any(tokens.intersection(known.tokens) for known in self._published.values())
+
     def publish(self, sentence_id: str, revision: int) -> None:
         span = self.binding(sentence_id, revision)
         if span is not None:
