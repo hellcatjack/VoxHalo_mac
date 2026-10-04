@@ -38,11 +38,22 @@ the audible wording matters more than seeing a completed translation early.
   CJK characters**), in addition to actual fixed-font geometry. A pure Chinese
   30-character screen gets about 4.0 s, 40 gets about 5.7 s and 60 about 8.9 s.
   Longer translations continue on complete subsequent pages without truncation.
-- English, French, Spanish, Italian, Portuguese and Hindi retain separate policy
-  entries, initially `max(3.5, 0.5 + words / 3.5)` seconds and a whole-screen limit
-  of approximately 36 words. Mixed CJK consumes proportional reading work.
-  Contractions remain one word and Indic combining marks stay with their word.
-  These are engineering defaults, not a universal reading-speed claim.
+- English uses `max(3.5, 0.2 + words / 4.8)` seconds from build 44: a fixed
+  288-word/minute pace with a **3.5-second minimum**, independent of speech or
+  backlog. Its work limit remains approximately 36 words. Complete-word
+  boundaries and balanced long-text pages avoid charging a full minimum hold
+  for a tiny leftover tail. If actual font geometry subdivides those pages, the
+  queue compares semantic-first and physical-first candidates and keeps the
+  lower total reading cost, after lossless-content, fit and word-limit checks.
+  Current visible screens keep their entire budget. An identical translation
+  retains its actual read cursor even after manual font reflow, including a
+  completed fallback waiting for a newer source revision's translation.
+- French, Spanish, Italian, Portuguese and Hindi keep their separate original
+  `max(3.5, 0.5 + words / 3.5)` policies and approximately 36-word screen limit.
+  Mixed CJK consumes proportional reading work; contractions remain one word
+  and Indic combining marks stay with their word. These are engineering defaults,
+  not a universal reading-speed claim. Large fonts, slower readers or sustained
+  input above visual capacity can still require a reading queue.
 - Long text paginates at punctuation/word boundaries and the user's actual font
   and display capacity. Every non-whitespace character is retained. There is no
   automatic font shrinking, inserted newline or second overlay pagination timer.

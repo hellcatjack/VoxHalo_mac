@@ -80,6 +80,82 @@ enum SubtitleReading {
         if !rest.isEmpty { result.append(rest) }
         return result
     }
+
+    /// English display pagination only. Include the whole last word, and avoid
+    /// a tiny final screen charging another minimum reading turn. The result is
+    /// determined by text and capacity, never audio speed or queued material.
+    static func englishPages(_ text: String, budget: Double = 12) -> [String] {
+        let normalized = SubtitlePresentation.singleLine(text)
+        guard !normalized.isEmpty else { return [] }
+        guard budget.isFinite, budget > 0, work(normalized) > budget else { return [normalized] }
+        let words = normalized.split(separator: " ").map(String.init)
+        let amounts = words.map(work)
+        // Mixed-script text can contain a single unspaced CJK run larger than a
+        // screen. Retain the existing lossless character/word fallback for it.
+        guard amounts.allSatisfy({ $0 <= budget + 0.000_001 }) else { return pages(normalized, budget: budget) }
+        var prefix = [0.0]
+        for amount in amounts { prefix.append(prefix.last! + amount) }
+        var protected = Set<Int>(), openQuotes: [Character: Int] = [:]
+        func wordCharacter(_ c: Character?) -> Bool {
+            c?.unicodeScalars.contains { CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0) } == true
+        }
+        for index in words.indices {
+            let characters = Array(words[index])
+            for offset in characters.indices {
+                let character = characters[offset]
+                guard "'’‘\"“”".contains(character) else { continue }
+                let before = offset > 0 ? characters[offset - 1] : nil
+                let after = offset + 1 < characters.count ? characters[offset + 1] : nil
+                let key: Character = "'’‘".contains(character) ? "'" : "\""
+                if key == "'", wordCharacter(before), wordCharacter(after) { continue }
+                if let start = openQuotes.removeValue(forKey: key) {
+                    if prefix[index + 1] - prefix[start] <= min(6, budget), start < index {
+                        protected.formUnion((start + 1)...index)
+                    }
+                } else if !wordCharacter(before), after != nil, character != "’", character != "”" {
+                    openQuotes[key] = index
+                }
+            }
+        }
+        func clauseEnd(_ word: String) -> Bool {
+            var suffix = word[...]
+            while let last = suffix.last, "'’\"”)]}".contains(last) { suffix = suffix.dropLast() }
+            return suffix.last.map { ".!?;:,。！？；：，".contains($0) } == true
+        }
+        var result: [String] = [], start = 0
+        while start < words.count {
+            let remaining = prefix.last! - prefix[start]
+            if remaining <= budget + 0.000_001 {
+                result.append(words[start...].joined(separator: " ")); break
+            }
+            let screens = max(2, Int(ceil(remaining / budget - 0.000_001)))
+            let target = remaining / Double(screens)
+            let minimum = remaining - budget * Double(screens - 1)
+            var candidates: [(end: Int, amount: Double)] = []
+            for end in (start + 1)...words.count {
+                let amount = prefix[end] - prefix[start]
+                if amount > budget + 0.000_001 { break }
+                candidates.append((end, amount))
+            }
+            // Protect short quotations when a whole-word boundary outside them
+            // can retain the minimum screen count. Physical capacity still wins
+            // over an atomic quote which would otherwise force an extra screen.
+            let required = candidates.filter { $0.amount + 0.000_001 >= minimum }
+            let eligible = required.isEmpty ? candidates : required
+            let outsideQuotes = eligible.filter { !protected.contains($0.end) }
+            let safe = outsideQuotes.isEmpty ? eligible : outsideQuotes
+            let natural = safe.filter { !protected.contains($0.end) && clauseEnd(words[$0.end - 1])
+                && abs($0.amount - target) <= max(0.5, target * 0.25) }
+            let choices = natural.isEmpty ? safe : natural
+            guard let selected = choices.min(by: {
+                let left = abs($0.amount - target), right = abs($1.amount - target)
+                return abs(left - right) < 0.000_001 ? $0.end > $1.end : left < right
+            }) else { return pages(normalized, budget: budget) }
+            result.append(words[start..<selected.end].joined(separator: " "))
+            start = selected.end
+        }
+        return result
+    }
 }
 
 /// Target-language defaults are independent entries so later tuning one locale
@@ -103,7 +179,7 @@ struct SubtitleTimingPolicy {
     let orientationSeconds: Double
     let screenWorkLimit: Double
     static let wordLanguages: [String: SubtitleTimingPolicy] = [
-        "en": .init(wordsPerSecond: 3.5, minimumSeconds: 3.5, orientationSeconds: 0.5, screenWorkLimit: 12),
+        "en": .init(wordsPerSecond: 4.8, minimumSeconds: 3.5, orientationSeconds: 0.2, screenWorkLimit: 12),
         "fr": .init(wordsPerSecond: 3.5, minimumSeconds: 3.5, orientationSeconds: 0.5, screenWorkLimit: 12),
         "es": .init(wordsPerSecond: 3.5, minimumSeconds: 3.5, orientationSeconds: 0.5, screenWorkLimit: 12),
         "it": .init(wordsPerSecond: 3.5, minimumSeconds: 3.5, orientationSeconds: 0.5, screenWorkLimit: 12),
@@ -181,6 +257,26 @@ struct ReadingSubtitleQueue {
     private var timing: SubtitleTimingPolicy? { SubtitleTimingPolicy.wordLanguages[targetLanguage] }
     private var screenWorkLimit: Double {
         SubtitleTimingPolicy.characterLanguages[targetLanguage]?.screenWorkLimit ?? timing?.screenWorkLimit ?? 12
+    }
+    private func englishDisplayPages(_ text: String, budget: Double) -> [String] {
+        let balanced = SubtitleReading.englishPages(text, budget: budget).flatMap(splitToFit)
+            .map(SubtitlePresentation.singleLine)
+        let physical = splitToFit(text).flatMap { SubtitleReading.englishPages($0, budget: budget) }
+            .flatMap(splitToFit).map(SubtitlePresentation.singleLine)
+        let content = text.filter { !$0.isWhitespace }
+        func valid(_ pages: [String]) -> Bool {
+            !pages.isEmpty && pages.allSatisfy { !$0.isEmpty && fits($0) && SubtitleReading.work($0) <= budget }
+                && pages.joined().filter { !$0.isWhitespace } == content
+        }
+        let balancedValid = valid(balanced), physicalValid = valid(physical)
+        if !balancedValid { return physicalValid ? physical : [text] }
+        guard physicalValid, let timing else { return balanced }
+        let balancedSeconds = balanced.reduce(0) { $0 + timing.seconds($1) }
+        let physicalSeconds = physical.reduce(0) { $0 + timing.seconds($1) }
+        // A large selected font may otherwise split each balanced semantic page
+        // again, creating several tiny tails. Deterministic physical-first pages
+        // win only when their complete reading turns cost less; ties stay stable.
+        return physicalSeconds < balancedSeconds - 0.000_001 ? physical : balanced
     }
     private(set) var targetLanguage = ""
     private(set) var readingRate = 1.35
@@ -432,6 +528,22 @@ struct ReadingSubtitleQueue {
         self.targetLanguage = language
     }
 
+    private mutating func rewindReflowPart(id: String, revision: Int, page: Int) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        if targetLanguage == "en", rows[index].pages == nil,
+           let prior = rows[index].previousCompleted, prior.revision == revision {
+            // A newer source may still be awaiting MT. Its visible old part
+            // belongs to the completed fallback, including same-revision edits.
+            let next = min(prior.nextPage, page)
+            rows[index].previousCompleted = CompletedVersion(revision: prior.revision, translation: prior.translation,
+                sourceTokens: prior.sourceTokens, sourceTokenEpoch: prior.sourceTokenEpoch,
+                pages: prior.pages, nextPage: next, readyAt: prior.readyAt)
+            rows[index].previousNextPage = next
+        } else if (rows[index].displayRevision ?? rows[index].revision) == revision {
+            rows[index].nextPage = min(rows[index].nextPage, page)
+        }
+    }
+
     mutating func configure(splitter: @escaping (String) -> [String], fits: @escaping (String) -> Bool) {
         splitToFit = splitter; self.fits = fits
         let reflowed = Set(cards.flatMap { $0.parts.map { $0.id } } + references.map { $0.id })
@@ -440,22 +552,28 @@ struct ReadingSubtitleQueue {
         // visible parts with full reading time; never discard unread text.
         for card in cards {
             for part in card.parts {
-                if let index = rows.firstIndex(where: { $0.id == part.id && ($0.displayRevision ?? $0.revision) == part.revision }) {
-                    rows[index].nextPage = min(rows[index].nextPage, part.page)
-                }
+                rewindReflowPart(id: part.id, revision: part.revision, page: part.page)
             }
         }
         if cards.isEmpty {
             for part in references {
-                if let index = rows.firstIndex(where: { $0.id == part.id && ($0.displayRevision ?? $0.revision) == part.revision }) {
-                    rows[index].nextPage = min(rows[index].nextPage, part.page)
-                }
+                rewindReflowPart(id: part.id, revision: part.revision, page: part.page)
             }
         }
         for index in rows.indices {
-            guard let pages = rows[index].pages else { continue }
-            let start = rows[index].nextPage
-            rows[index].pages = Array(pages.prefix(start)) + pages.dropFirst(start).flatMap(splitter)
+            if let pages = rows[index].pages {
+                let start = rows[index].nextPage
+                rows[index].pages = Array(pages.prefix(start)) + pages.dropFirst(start).flatMap(splitter)
+            } else if targetLanguage == "en", let prior = rows[index].previousCompleted {
+                // Reflow the actual completed cursor without making unfinished
+                // MT visible. Its success/failure will recover these safe pages.
+                let start = prior.nextPage
+                let pages = Array(prior.pages.prefix(start)) + prior.pages.dropFirst(start).flatMap(splitter)
+                rows[index].previousCompleted = CompletedVersion(revision: prior.revision, translation: prior.translation,
+                    sourceTokens: prior.sourceTokens, sourceTokenEpoch: prior.sourceTokenEpoch,
+                    pages: pages, nextPage: start, readyAt: prior.readyAt)
+                rows[index].previousPages = pages; rows[index].previousNextPage = start
+            }
         }
         cards.removeAll(); pausedAt = nil
     }
@@ -533,6 +651,7 @@ struct ReadingSubtitleQueue {
             // Use the actual fixed-font capacity instead of pre-cutting every
             // 18–36 characters and charging another minimum hold per fragment.
             let fullText = SubtitlePresentation.singleLine(translation)
+            let completedEnglish = targetLanguage == "en" ? (rows[index].completed ?? rows[index].previousCompleted) : nil
             rows[index].failedRevision = nil
             rows[index].translation = fullText
             rows[index].sourceTokens = Self.tokens(event["source_token_ids"])
@@ -541,6 +660,23 @@ struct ReadingSubtitleQueue {
                epoch.doubleValue >= 0, epoch.doubleValue == Double(epoch.intValue) {
                 rows[index].sourceTokenEpoch = "ledger:\(epoch.intValue)"
             } else { rows[index].sourceTokenEpoch = "visual:\(sourceEpoch)" }
+            if let prior = completedEnglish, prior.translation == fullText {
+                // Manual font reflow may have changed the physical pages since
+                // the original MT arrived. The same whole translation keeps its
+                // actual unread cursor, rather than recomputing a different page
+                // array and replaying already-read text at page zero.
+                rows[index].pages = prior.pages; rows[index].nextPage = prior.nextPage
+                rows[index].readyAt = prior.readyAt; rows[index].displayRevision = revision
+                for card in cards.indices {
+                    for part in cards[card].parts.indices where cards[card].parts[part].id == id {
+                        cards[card].parts[part].revision = revision
+                    }
+                }
+                for part in references.indices where references[part].id == id { references[part].revision = revision }
+                rows[index].previousPages = nil; rows[index].previousNextPage = 0; rows[index].previousCompleted = nil
+                completeReplacement(id, revision: revision)
+                return
+            }
             var displayText = fullText
             // Trim only an exact already-displayed prefix of the same source
             // occurrence. Rephrased/corrected translations retain a full turn.
@@ -552,7 +688,10 @@ struct ReadingSubtitleQueue {
                prior.text.last.map({ ".!?。！？।॥".contains($0) }) == true {
                 displayText = String(fullText.dropFirst(prior.text.count)).trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            let pages = SubtitleReading.pages(displayText, budget: min(12, screenWorkLimit)).flatMap(splitToFit)
+            let budget = min(12, screenWorkLimit)
+            let pages = targetLanguage == "en"
+                ? englishDisplayPages(displayText, budget: budget)
+                : SubtitleReading.pages(displayText, budget: budget).flatMap(splitToFit)
             if rows[index].pages == pages {
                 rows[index].displayRevision = revision
                 for card in cards.indices {

@@ -19,7 +19,10 @@ private func checkLanguageTimingAndCoverage() {
     for (language, text) in samples {
         let policy = SubtitleTimingPolicy.wordLanguages[language]!
         assert(policy.seconds("Hi.") == 3.5)
-        assert(abs(policy.seconds(Array(repeating: "word", count: 26).joined(separator: " ")) - (0.5 + 26 / 3.5)) < 0.001)
+        let pace = language == "en" ? 4.8 : 3.5
+        let orientation = language == "en" ? 0.2 : 0.5
+        assert(policy.wordsPerSecond == pace && policy.orientationSeconds == orientation)
+        assert(abs(policy.seconds(Array(repeating: "word", count: 26).joined(separator: " ")) - (orientation + 26 / pace)) < 0.001)
         var q = ReadingSubtitleQueue(); q.reset(targetLanguage: language)
         q.observeSpeech(text: String(repeating: text + " ", count: 6), seconds: 0.6)
         var seen = Set<String>()
@@ -97,9 +100,11 @@ private func checkLanguageTimingAndCoverage() {
 
     // A correction cannot prove coverage until all its pages are visible.
     q.reset(targetLanguage: "en")
-    q.configure(splitter: { $0.components(separatedBy: " | ") }, fits: { !$0.contains(". ") })
+    q.configure(splitter: { value in
+        value.components(separatedBy: ". ").map { $0.hasSuffix(".") ? $0 : $0 + "." }
+    }, fits: { !$0.contains(". ") })
     q.observe(source("long"), now: 0)
-    q.observe(occurrence("long", first + " | " + tail, Array(1...9)), now: 0)
+    q.observe(occurrence("long", first + " " + tail, Array(1...9)), now: 0)
     q.advance(now: 1); assert(q.text == first)
     q.observe(source("long", 2), now: 2)
     q.observe(occurrence("long", "A new plan.", Array(40...43), 2), now: 2)
@@ -377,11 +382,243 @@ private func checkCanonicalSourceRebuilds() {
     q.advance(now: q.deadline); assert(q.pendingCount == 0 && q.displayedPages == 2)
     print("PASS: frozen rebuild cards, exact canonical continuation, consecutive resets, complete corrections and failed fallback")
 }
+
+private func checkEnglishBalancedPagination() {
+    func words(_ count: Int) -> String { (0..<count).map { "word\($0)" }.joined(separator: " ") + "." }
+    let compact: (String) -> String = { $0.filter { !$0.isWhitespace } }
+    for count in [36, 37, 39, 42, 72, 73] {
+        let text = words(count), pages = SubtitleReading.englishPages(text)
+        assert(pages.count == Int(ceil(Double(count) / 36)), "English pagination created an avoidable extra screen")
+        assert(pages.allSatisfy { SubtitleReading.work($0) <= 12 })
+        assert(compact(pages.joined()) == compact(text), "Balanced English lost or reordered characters")
+        if count > 36 { assert(pages.allSatisfy { SubtitleReading.work($0) >= 6 }, "A tiny English tail charged another minimum hold") }
+        var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "en")
+        q.configure(splitter: { [$0] }, fits: { SubtitleReading.work($0) <= 12 })
+        q.observe(source("balanced"), now: 0); q.observe(translated("balanced", text), now: 0)
+        q.observe(["type": "final"], now: 0)
+        var shown: [String] = [], now = 0.0
+        while q.pendingCount > 0 {
+            if q.advance(now: now) {
+                shown.append(q.text)
+                let expected = SubtitleTimingPolicy.wordLanguages["en"]!.seconds(q.text)
+                assert(abs(q.deadline - now - expected) < 0.001 && expected >= 3.5)
+                let frozen = q.text, identity = q.identity, end = q.deadline
+                q.observe(source("incoming-\(shown.count)"), now: now + 0.1)
+                // A source may arrive while its translation is still pending.
+                // It cannot alter the current text or its full reading budget.
+                q.observe(["type": "sentence_translation_failed", "sentence_id": "incoming-\(shown.count)", "revision": 1], now: now + 0.2)
+                assert(!q.advance(now: end - 0.001) && q.text == frozen && q.identity == identity && q.deadline == end)
+            }
+            now = q.deadline
+        }
+        assert(compact(shown.joined()) == compact(text) && shown.count == pages.count)
+    }
+    // Real font capacity can be smaller than the semantic 36-word budget.
+    // Never turn a balanced 20+19 split into four 18+2/18+1 screens when three
+    // direct physical pages preserve the same complete text and reading floor.
+    for count in [39, 42, 72] {
+        let text = words(count)
+        let splitter: (String) -> [String] = { value in
+            let parts = value.split(separator: " ").map(String.init)
+            return stride(from: 0, to: parts.count, by: 18).map {
+                parts[$0..<min($0 + 18, parts.count)].joined(separator: " ")
+            }
+        }
+        var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "en")
+        q.configure(splitter: splitter, fits: { SubtitleReading.work($0) <= 6 })
+        q.observe(source("physical"), now: 0); q.observe(translated("physical", text), now: 0)
+        q.observe(["type": "final"], now: 0)
+        var shown: [String] = [], now = 0.0
+        while q.pendingCount > 0 {
+            if q.advance(now: now) {
+                shown.append(q.text)
+                assert(SubtitleReading.work(q.text) <= 6 && q.deadline >= now + 3.5)
+            }
+            now = q.deadline
+        }
+        assert(compact(shown.joined()) == compact(text))
+        assert(shown.count == Int(ceil(Double(count) / 18)), "Semantic balancing multiplied short physical pages")
+        let directCost = splitter(text).reduce(0) { $0 + SubtitleTimingPolicy.wordLanguages["en"]!.seconds($1) }
+        assert(now <= directCost + 0.001, "English geometry introduced unnecessary reading time")
+    }
+    let quoted = (0..<18).map { "before\($0)" }.joined(separator: " ")
+        + " 'alpha, beta gamma' " + (0..<40).map { "after\($0)" }.joined(separator: " ") + "."
+    let quotedPages = SubtitleReading.englishPages(quoted)
+    assert(quotedPages.count == 2 && quotedPages.contains { $0.contains("'alpha, beta gamma'") },
+           "A quoted comma split a short phrase or created another screen")
+    for text in [String(repeating: "Don't split James' book, ‘quoted words’ or 1,234.56 dollars. ", count: 12),
+                 String(repeating: "We paid $1,234.56 at 12:30; don't change 50% or U.S. names. ", count: 12),
+                 String(repeating: "An unfinished 'quotation must keep moving without losing any text ", count: 12)] {
+        let pages = SubtitleReading.englishPages(text)
+        assert(compact(pages.joined()) == compact(text) && pages.allSatisfy { SubtitleReading.work($0) <= 12 })
+        if text.contains("1,234.56") { assert(pages.filter { $0.contains("1,234.56") }.count > 0) }
+        assert(!pages.contains { $0.hasSuffix("Don") || $0.hasPrefix("'t ") }, "A contraction was cut across a page")
+    }
+    // Identical completed MT stays at the existing page after a source revision;
+    // balanced presentation must not restart a previously displayed prefix.
+    var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "en")
+    q.configure(splitter: { [$0] }, fits: { SubtitleReading.work($0) <= 12 })
+    let text = words(72), pages = SubtitleReading.englishPages(text)
+    q.observe(source("revised"), now: 0); q.observe(translated("revised", text), now: 0)
+    q.advance(now: 0); let firstDeadline = q.deadline
+    q.observe(source("revised", 2), now: 1); q.observe(translated("revised", text, 2), now: 1)
+    assert(!q.advance(now: firstDeadline - 0.001) && q.text == pages[0])
+    assert(q.advance(now: firstDeadline) && q.text == pages[1])
+    q.advance(now: q.deadline)
+    assert(q.pendingCount == 0 && q.displayedPages == 2)
+    q.observe(source("revised", 3), now: 30); q.observe(translated("revised", text, 3), now: 30)
+    assert(!q.advance(now: 31) && q.pendingCount == 0 && q.displayedPages == 2)
+
+    // A manual font change reflows the current and unread physical pages. Equal
+    // MT events, both at the same and a later source revision, keep that actual
+    // reflow cursor instead of switching to a newly computed page-zero layout.
+    var capacity = 36
+    let reflowSplitter: (String) -> [String] = { value in
+        let parts = value.split(separator: " ").map(String.init)
+        return stride(from: 0, to: parts.count, by: capacity).map {
+            parts[$0..<min($0 + capacity, parts.count)].joined(separator: " ")
+        }
+    }
+    q = ReadingSubtitleQueue(); q.reset(targetLanguage: "en")
+    q.configure(splitter: reflowSplitter, fits: { SubtitleReading.work($0) * 3 <= Double(capacity) })
+    let reflowText = words(39)
+    q.observe(source("font-reflow"), now: 0); q.observe(translated("font-reflow", reflowText), now: 0)
+    q.observe(["type": "final"], now: 0); q.advance(now: 0)
+    capacity = 18
+    q.configure(splitter: reflowSplitter, fits: { SubtitleReading.work($0) * 3 <= Double(capacity) })
+    assert(q.advance(now: 1))
+    var reflowShown = [q.text]
+    let reflowFirst = q.text, reflowIdentity = q.identity, reflowDeadline = q.deadline
+    q.observe(translated("font-reflow", reflowText), now: 1.1)
+    q.observe(source("font-reflow", 2), now: 1.2)
+    q.observe(translated("font-reflow", reflowText, 2), now: 1.3)
+    assert(!q.advance(now: reflowDeadline - 0.001) && q.text == reflowFirst
+           && q.identity == reflowIdentity && q.deadline == reflowDeadline)
+    var reflowNow = reflowDeadline
+    while q.pendingCount > 0 {
+        if q.advance(now: reflowNow) { reflowShown.append(q.text) }
+        reflowNow = q.deadline
+    }
+    assert(compact(reflowShown.joined()) == compact(reflowText), "Equal MT replayed or lost text after font reflow")
+    assert(reflowShown.count == 4 && q.displayedPages == 5)
+    q.observe(source("font-reflow", 3), now: 40); q.observe(translated("font-reflow", reflowText, 3), now: 40)
+    assert(!q.advance(now: 41) && q.pendingCount == 0 && q.displayedPages == 5)
+
+    // English-only routing leaves the legacy splitter and every other target
+    // language's source grouping and reading policy unchanged.
+    let legacy = SubtitleReading.pages(words(39), budget: 12)
+    assert(legacy.map { Int(SubtitleReading.work($0) * 3) } == [35, 4])
+    for language in ["zh", "ja", "fr", "es", "it", "pt", "hi"] {
+        var other = ReadingSubtitleQueue(); other.reset(targetLanguage: language)
+        other.configure(splitter: { [$0] }, fits: { SubtitleReading.work($0) <= 12 })
+        other.observe(source("unchanged"), now: 0); other.observe(translated("unchanged", words(39)), now: 0)
+        other.observe(["type": "final"], now: 0)
+        other.advance(now: 0)
+        let budget = SubtitleTimingPolicy.characterLanguages[language]?.screenWorkLimit ?? 12
+        assert(other.text == SubtitleReading.pages(words(39), budget: budget).first)
+    }
+    print("PASS: English complete-word balanced pages, short tails, quotations/numbers, frozen screens and identical revision progress")
+}
+
+private func checkEnglishPendingFontReflow() {
+    let original = (0..<39).map { "word\($0)" }.joined(separator: " ") + "."
+    let compact: (String) -> String = { $0.filter { !$0.isWhitespace } }
+    func drain(_ queue: inout ReadingSubtitleQueue, now initial: Double, capacity: Int) -> [String] {
+        var shown: [String] = [], now = initial
+        for _ in 0..<20 {
+            if queue.advance(now: now) {
+                shown.append(queue.text)
+                assert(queue.text.split(separator: " ").count <= capacity, "A restored English page no longer fits the selected font")
+                let minimum = SubtitleTimingPolicy.wordLanguages[queue.targetLanguage]?.minimumSeconds ?? 3
+                assert(queue.deadline >= now + minimum)
+            } else { assert(queue.pendingCount == 0, "Pending font reflow left an unrenderable unread page") }
+            if queue.pendingCount == 0 { break }
+            now = queue.deadline
+        }
+        assert(queue.pendingCount == 0)
+        return shown
+    }
+    for outcome in ["same", "failed", "corrected", "same-revision", "references", "double-revision"] {
+        var capacity = 36
+        let splitter: (String) -> [String] = { value in
+            let words = value.split(separator: " ").map(String.init)
+            return stride(from: 0, to: words.count, by: capacity).map {
+                words[$0..<min($0 + capacity, words.count)].joined(separator: " ")
+            }
+        }
+        let id = "pending-font-\(outcome)"
+        var q = ReadingSubtitleQueue(); q.reset(targetLanguage: "en")
+        q.configure(splitter: splitter, fits: { $0.split(separator: " ").count <= capacity })
+        q.observe(source(id), now: 0); q.observe(translated(id, original), now: 0)
+        q.observe(["type": "final"], now: 0); assert(q.advance(now: 0))
+        let oldText = q.text, oldIdentity = q.identity, oldDeadline = q.deadline
+        var revision = 2, eventNow = 1.1
+        if outcome == "same-revision" {
+            revision = 1
+            q.observe(["type": "sentence_updated", "sentence_id": id, "revision": revision, "text": "changed source"], now: 1)
+        } else { q.observe(source(id, revision), now: 1) }
+        assert(!q.advance(now: 1.01) && q.text == oldText && q.identity == oldIdentity && q.deadline == oldDeadline)
+        if outcome == "references" {
+            // Expired cards leave the currently visible reference available for
+            // manual reflow while the next source revision still awaits MT.
+            assert(!q.advance(now: oldDeadline)); eventNow = oldDeadline + 0.1
+        }
+        capacity = 18
+        q.configure(splitter: splitter, fits: { $0.split(separator: " ").count <= capacity })
+        assert(!q.advance(now: eventNow - 0.01) && q.text == oldText && q.identity == oldIdentity,
+               "Font reflow displayed a source whose MT has not completed")
+        if outcome == "double-revision" {
+            revision = 3
+            q.observe(source(id, revision), now: eventNow)
+            q.observe(translated(id, "Late stale translation.", 2), now: eventNow)
+            assert(!q.advance(now: eventNow) && q.text == oldText)
+        }
+        let expected = outcome == "corrected" ? "We will not meet on the 15th. " + original : original
+        if outcome == "failed" {
+            q.observe(["type": "sentence_translation_failed", "sentence_id": id, "revision": revision], now: eventNow)
+            assert(q.unresolvedVersions.count == 1 && q.unresolvedVersions[0].revision == revision)
+        } else { q.observe(translated(id, expected, revision), now: eventNow) }
+        let shown = drain(&q, now: eventNow + 0.1, capacity: capacity)
+        assert(compact(shown.joined()) == compact(expected), "Pending font reflow lost, reordered or replayed completed text")
+        if outcome != "corrected" { assert(shown.count == 4 && q.displayedPages == 5) }
+        let count = q.displayedPages
+        // Even a retry after failure must preserve the now-read actual pages.
+        q.observe(translated(id, expected, revision), now: 100)
+        assert(q.unresolvedVersions.isEmpty && !q.advance(now: 101) && q.displayedPages == count)
+    }
+
+    // Preserve the existing pending-font behavior outside English. The same
+    // complete MT follows each target's original semantic and physical pages.
+    for language in ["zh", "ja", "fr", "es", "it", "pt", "hi"] {
+        var capacity = 36
+        let splitter: (String) -> [String] = { value in
+            let words = value.split(separator: " ").map(String.init)
+            return stride(from: 0, to: words.count, by: capacity).map {
+                words[$0..<min($0 + capacity, words.count)].joined(separator: " ")
+            }
+        }
+        var q = ReadingSubtitleQueue(); q.reset(targetLanguage: language)
+        q.configure(splitter: splitter, fits: { $0.split(separator: " ").count <= capacity })
+        q.observe(source("other-pending"), now: 0); q.observe(translated("other-pending", original), now: 0)
+        q.observe(["type": "final"], now: 0); q.advance(now: 0)
+        q.observe(source("other-pending", 2), now: 1)
+        capacity = 18
+        q.configure(splitter: splitter, fits: { $0.split(separator: " ").count <= capacity })
+        q.observe(translated("other-pending", original, 2), now: 1.1)
+        let shown = drain(&q, now: 1.2, capacity: capacity)
+        let expectedCounts = ["zh", "ja"].contains(language) ? [18, 11, 10] : [18, 17, 4]
+        assert(shown.map { $0.split(separator: " ").count } == expectedCounts && q.displayedPages == 4)
+        assert(compact(shown.joined()) == compact(original))
+    }
+    print("PASS: pending English MT font reflow, complete corrections, failed fallback, stale revisions and other-language preservation")
+}
 @main struct ReadingSubtitleChecks {
     static func main() {
         checkSupersededPresentationOnly()
         checkReplacementFallbackAndEpochs()
         checkCanonicalSourceRebuilds()
+        checkEnglishBalancedPagination()
+        checkEnglishPendingFontReflow()
         let migrated = try! JSONDecoder().decode(SubtitlePreferences.self, from: Data(#"{"fontSize":42,"backgroundEnabled":true}"#.utf8))
         assert(migrated.mode == .reading && migrated.fontSize == 42 && migrated.backgroundEnabled)
         var saved = migrated; saved.mode = .playback
