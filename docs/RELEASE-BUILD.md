@@ -60,3 +60,9 @@ The command refuses to overwrite existing ZIP/DMG files and verifies the complet
 The `Standalone Mac release` workflow builds on the standard Apple Silicon `macos-14` runner. Pushes to `release/**` build and test an artifact without publishing a Release. A `lingocove-v1.0.*` tag additionally runs a separate publish job with repository-scoped `contents: write` permission. That job verifies `SHA256SUMS.txt`, creates a draft with the built-in `GITHUB_TOKEN`, downloads and verifies the uploaded assets, then publishes it as the latest Release. The `lingocove-` tag namespace preserves the original VoxHalo `v1.0.0` source tag. The 1.0.0 launch also removes the previous v1.8.0 Release after verification while retaining its source tag. No maintainer token is embedded in the App or source.
 
 Run `./scripts/bootstrap_release.sh` to reproduce the same build locally. The current workflow intentionally publishes an **ad-hoc signed, unnotarized** App. Do not label it notarized without a successful Developer ID signing and Apple notarization result. Publishing future versions requires updating the App builder, payload builder and installer version/build constants and adding `docs/releases/<version>.md`; expand the tag pattern when releasing beyond 1.0.x.
+
+The build 44 refresh keeps the public App version at **1.0.0** and uses the new
+tag `lingocove-v1.0.0-build44`, with release notes in
+`docs/releases/1.0.0-build44.md`. The native App and payload both record build 44;
+the packaging contract checks that their defaults agree. This creates a new
+latest Release without replacing the original 1.0.0 tag or its historical assets.

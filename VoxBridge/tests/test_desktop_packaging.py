@@ -24,6 +24,13 @@ def builder():
     return module
 
 
+def test_release_payload_defaults_match_native_app_version_and_build():
+    from tools.build_macos_app import APP_BUILD, APP_VERSION
+
+    release = builder()
+    assert (release.VERSION, release.BUILD) == (APP_VERSION, APP_BUILD)
+
+
 def write(root, name, content='public'):
     path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)

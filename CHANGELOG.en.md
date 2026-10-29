@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 44 · 2026-10-29 (Release refresh)
+
+- Align the standalone payload with the verified build 44 App and add a version-consistency contract. Publish new DMG, ZIP and SHA-256 files while preserving the original 1.0.0 tag and historical assets.
+- Consolidate builds 42–44: Reading first displays completed translations in source order independently of speech confirmation, synthesis and playback. Preserve fixed fonts, complete pagination, minimum holds, pause while hidden and conservative revision coverage.
+- Give English an independent 288-word/minute reading budget with a 3.5-second minimum. Improve whole-word paging, short tails and reading progress after manual font changes. Preserve Chinese/other-language timing, models, prompts and TTS.
+- The prior 10-minute-28-second live test observed a median 2.2 seconds / P95 7.2 seconds to first display from the published-translation proxy, not end-to-end latency. All 117 successful translations retained their full text. One model translation failure remains documented separately; this is not a zero-omission guarantee. See [verification and limits](VoxBridge/docs/MACOS-FAST-ZH2EN-CAPTIONS-VERIFICATION.md).
+
 ## LingoCove 1.0.0 · build 41 · 2026-10-03
 
 - Input levels update the meter without repeatedly laying out captions, checking service files or refreshing the entire console. Caption updates precede coalesced history-window updates.

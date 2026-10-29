@@ -10,7 +10,7 @@ We want people to express themselves in the language they know and understand vo
 
 Today, LingoCove runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**Current source build: 1.0.0 · build 41** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**Current source build: 1.0.0 · build 44** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
 
 The App is named **LingoCove** in Finder, the Dock and every interface language. Previously named VoxHalo / 同声传译, it keeps existing preferences and model files. For older installations, see [upgrading from the previous App](docs/en/INSTALLATION.md#9-update-or-rebuild).
 

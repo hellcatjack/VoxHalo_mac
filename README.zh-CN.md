@@ -10,7 +10,7 @@
 
 目前，LingoCove 在 **Apple Silicon Mac** 上独立运行，支持 **8 种语言、56 个互译方向**，将语音识别、翻译、译音朗读与同步字幕连接成一套完整系统。全语言覆盖是项目的长期目标；我们会在识别、翻译、朗读和本机运行表现经过验证后，逐步开放更多语言。
 
-**当前源码构建：1.0.0 · build 41** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
+**当前源码构建：1.0.0 · build 44** · **维护者：[hellcatjack](https://github.com/hellcatjack)**
 
 当前 App 在 Finder、Dock 和所有界面语言中统一显示为 **LingoCove**，中文产品名称为 **LingoCove · 同声传译**。原 VoxHalo／同声传译的偏好设置和模型文件继续沿用。旧版升级方法见[源码安装指南](docs/zh-CN/INSTALLATION.md)。
 
