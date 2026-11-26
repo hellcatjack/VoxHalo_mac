@@ -233,9 +233,25 @@ struct ReadingSubtitleQueue {
     private struct Coverage { let id: String; let tokens: [Int]; let epoch: String; let text: String }
     private struct Part { let id: String; var revision: Int; let page: Int; let text: String }
     private struct Card { var parts: [Part]; let text: String; var readingEnd: Double; var deadline: Double }
+    private struct DraftPage {
+        let displayText: String
+        let sourcePrefix: String
+        let translationPrefix: String
+    }
     private struct Draft {
         let text: String
+        let source: String?
+        let anchor: String
+        var baseSource: String?
+        var delta: String?
         var replacementID: String?
+        var shownPages: [DraftPage] = []
+        var displayPages: [String] = []
+        var nextDisplayPage = 0
+    }
+    private struct PendingCaptionTail {
+        var event: [String: Any]
+        let expiresAt: Double
     }
     private let compact: Bool
     private var rows: [Row] = []
@@ -247,7 +263,9 @@ struct ReadingSubtitleQueue {
     private var rebuildProjection: RebuildProjection?
     private var rebuildFallback: RebuildFallback?
     private var cards: [Card] = []
-    private var draft: Draft?
+    private var drafts: [Draft] = []
+    private var shownDrafts: [String: Draft] = [:]
+    private var pendingCaptionTails: [String: PendingCaptionTail] = [:]
     private var latestSourceID = ""
     private var latestDraftAnchor: String?
     private var serial = 0
@@ -288,6 +306,131 @@ struct ReadingSubtitleQueue {
         // again, creating several tiny tails. Deterministic physical-first pages
         // win only when their complete reading turns cost less; ties stay stable.
         return physicalSeconds < balancedSeconds - 0.000_001 ? physical : balanced
+    }
+
+    private static func englishSuffix(of full: String, after prefix: String, preview: Bool = false) -> String? {
+        guard !prefix.isEmpty else { return nil }
+        if full == prefix { return "" }
+        if full.hasPrefix(prefix) && (!preview || prefix.last.map({ ".,;:".contains($0) }) == true) {
+            let tail = full.dropFirst(prefix.count)
+            if tail.first?.isWhitespace == true { return String(tail.drop(while: \.isWhitespace)) }
+        }
+        // Standalone MT can end a source clause with a period that becomes a
+        // comma in context. Keep exact wording and require a clause boundary.
+        if preview, let end = prefix.last, ".,:…".contains(end) {
+            let clause = prefix.dropLast()
+            guard !clause.isEmpty, full.hasPrefix(clause) else { return nil }
+            let tail = full.dropFirst(clause.count)
+            if ":…".contains(end), tail.first?.isWhitespace == true {
+                return String(tail.drop(while: \.isWhitespace))
+            }
+            if let stop = tail.first, ".,".contains(stop) {
+                let rest = tail.dropFirst()
+                if rest.isEmpty || rest.first?.isWhitespace == true {
+                    return String(rest.drop(while: \.isWhitespace))
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func sourceExtendsPreview(_ preview: String, _ source: String) -> Bool {
+        let rawDraft = preview.filter { !$0.isWhitespace }
+        let rawFull = source.filter { !$0.isWhitespace }
+        guard !rawDraft.isEmpty else { return false }
+        if rawFull.hasPrefix(rawDraft) { return true }
+        let draft = captionSourceWords(preview)
+        let full = captionSourceWords(source)
+        if full.hasPrefix(draft) { return true }
+        let punctuation = "。.,，;；:："
+        let words = draft.dropLast()
+        return !words.isEmpty && words.last?.isNumber != true
+            && draft.last.map(punctuation.contains) == true && full.hasPrefix(words)
+            && full.dropFirst(words.count).first.map(punctuation.contains) == true
+    }
+
+    private static func equalCaptionSource(_ left: String, _ right: String) -> Bool {
+        func normalized(_ text: String) -> String {
+            String(captionSourceWords(text).reversed()
+                .drop(while: { "。.,，;；:：".contains($0) }).reversed())
+        }
+        let prefix = normalized(left)
+        return !prefix.isEmpty && prefix == normalized(right)
+    }
+
+    private static func captionSourceWords(_ text: String) -> String {
+        text.filter { !$0.isWhitespace }
+            .replacingOccurrences(of: #"(?<=\p{Han})[，,](?=\p{Han})"#, with: "", options: .regularExpression)
+    }
+
+    private mutating func finishPendingCaptionTail(_ id: String, now: Double, tail: String? = nil) {
+        guard var pending = pendingCaptionTails.removeValue(forKey: id) else { return }
+        pending.event.removeValue(forKey: "caption_tail_expected")
+        if let tail, !tail.isEmpty { pending.event["caption_tail_translation"] = tail }
+        else { pending.event.removeValue(forKey: "caption_prefix") }
+        observe(pending.event, now: now)
+    }
+
+    private static func englishDraftContinuation(of full: String, after prefix: String) -> String? {
+        if let suffix = englishSuffix(of: full, after: prefix, preview: true) { return suffix }
+        // The standalone and whole-sentence translations can choose the same
+        // contrast marker in different forms. The remaining words must agree.
+        for marker in [#"^(?:But,?\s+|However,\s+)"#,
+                       #"^(?:One last point:\s+|The last point is that\s+)"#] {
+            if let first = prefix.range(of: marker, options: .regularExpression),
+               let second = full.range(of: marker, options: .regularExpression) {
+                return englishSuffix(of: String(full[second.upperBound...]),
+                                     after: String(prefix[first.upperBound...]), preview: true)
+            }
+        }
+        return nil
+    }
+
+    private static func sharedEnglishClause(from preview: String, in full: String) -> (String, String)? {
+        // Keep only words that match through a genuine punctuation boundary.
+        // Revised claims after that point still take their own reading turn.
+        for stop in preview.indices.reversed() where ",;:".contains(preview[stop]) {
+            let next = preview.index(after: stop)
+            guard next < preview.endIndex, preview[next].isWhitespace else { continue }
+            let prefix = String(preview[..<next])
+            guard SubtitleReading.work(prefix) >= 4.0 / 3.0,
+                  let suffix = englishDraftContinuation(of: full, after: prefix),
+                  !suffix.isEmpty, suffix.first?.isNumber != true else { continue }
+            return (prefix, suffix)
+        }
+        return nil
+    }
+
+    private func previewPages(_ text: String) -> [String] {
+        let pages = targetLanguage == "en" ? englishDisplayPages(text, budget: screenWorkLimit) : [text]
+        return pages.allSatisfy { !$0.isEmpty && fits($0) && SubtitleReading.work($0) <= screenWorkLimit + 0.000_001 }
+            ? pages : []
+    }
+
+    private func previewCoverage(id: String, prefix: String) -> (read: [String], waiting: [String])? {
+        let shown = shownDrafts.values.first { $0.replacementID == id }
+        var source = shown?.source ?? ""
+        var read = shown?.shownPages.map(\.displayText) ?? []
+        var waiting: [String] = []
+        if Self.equalCaptionSource(source, prefix) { return (read, waiting) }
+        if let shown, let page = shown.shownPages.lastIndex(where: {
+            Self.equalCaptionSource($0.sourcePrefix, prefix)
+        }) {
+            return (Array(read.prefix(page + 1)), [])
+        }
+        for draft in drafts where draft.replacementID == id {
+            guard let nextSource = draft.source else { return nil }
+            if let base = draft.baseSource {
+                guard Self.equalCaptionSource(source, base) else { return nil }
+            } else if !source.isEmpty { return nil }
+            let pages = draft.displayPages.isEmpty ? previewPages(draft.delta ?? draft.text) : draft.displayPages
+            guard !pages.isEmpty else { return nil }
+            read += pages.prefix(draft.nextDisplayPage)
+            waiting += pages.dropFirst(draft.nextDisplayPage)
+            source = nextSource
+            if Self.equalCaptionSource(source, prefix) { return (read, waiting) }
+        }
+        return nil
     }
     private(set) var targetLanguage = ""
     private(set) var readingRate = 1.35
@@ -586,7 +729,7 @@ struct ReadingSubtitleQueue {
                 rows[index].previousPages = pages; rows[index].previousNextPage = start
             }
         }
-        cards.removeAll(); pausedAt = nil
+        cards.removeAll(); pausedAt = nil; shownDrafts.removeAll()
     }
 
     mutating func observe(_ event: [String: Any], now: Double) {
@@ -594,19 +737,52 @@ struct ReadingSubtitleQueue {
         case "started": reset()
         case "caption_preview":
             guard !finished, let anchor = event["after_sentence_id"] as? String,
-                  anchor == latestSourceID, anchor != latestDraftAnchor,
+                  anchor == latestSourceID,
                   let translation = event["translation"] as? String else { return }
             let text = SubtitlePresentation.singleLine(translation)
-            if !text.isEmpty, SubtitleReading.work(text) <= screenWorkLimit + 0.000_001 {
+            let source = event["preview_source"] as? String
+            var draft = Draft(text: text, source: source, anchor: anchor)
+            let baseSource = event["preview_base_source"] as? String
+            if anchor == latestDraftAnchor {
+                guard targetLanguage == "en", let source,
+                      let prior = drafts.last(where: { $0.anchor == anchor }) ?? shownDrafts[anchor],
+                      let previousSource = prior.source, source != previousSource else { return }
+                if let baseSource {
+                    let prefix = prior.text + " "
+                    guard Self.equalCaptionSource(previousSource, baseSource),
+                          text.hasPrefix(prefix) else { return }
+                    draft.baseSource = baseSource
+                    draft.delta = String(text.dropFirst(prefix.count))
+                } else if !Self.sourceExtendsPreview(previousSource, source) {
+                    return
+                }
+            } else if baseSource != nil {
+                return
+            }
+            let reading = draft.delta ?? text
+            if !reading.isEmpty, SubtitleReading.work(reading) <= screenWorkLimit + 0.000_001
+                || (targetLanguage == "en" && source != nil && !previewPages(reading).isEmpty)
+                || (source != nil && shownDrafts[anchor] != nil) {
+                if draft.delta == nil { drafts.removeAll { $0.anchor == anchor } }
+                guard drafts.count < 8 else { return }
                 latestDraftAnchor = anchor
-                draft = Draft(text: text)
+                drafts.append(draft)
             }
         case "sentence_reset":
-            draft = nil; latestSourceID = ""; latestDraftAnchor = nil
+            drafts.removeAll(); shownDrafts.removeAll(); pendingCaptionTails.removeAll(); latestSourceID = ""; latestDraftAnchor = nil
             if ["final_redecode", "final_commit_reconcile"].contains(event["reason"] as? String ?? "") {
                 observeSourceRebuild(event)
             } else { reset() }
-        case "final": draft = nil; finished = true; finishSourceRebuild()
+        case "final":
+            for id in Array(pendingCaptionTails.keys) { finishPendingCaptionTail(id, now: now) }
+            drafts.removeAll(); shownDrafts.removeAll(); finished = true; finishSourceRebuild()
+        case "caption_tail":
+            guard let id = event["sentence_id"] as? String,
+                  let waiting = pendingCaptionTails[id],
+                  let revision = event["revision"] as? Int, revision == waiting.event["revision"] as? Int,
+                  let prefix = event["caption_prefix"] as? String, prefix == waiting.event["caption_prefix"] as? String
+            else { return }
+            finishPendingCaptionTail(id, now: now, tail: event["translation"] as? String)
         case "sentence_superseded":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
                   let revision = event["revision"] as? Int, revision >= 0,
@@ -616,7 +792,11 @@ struct ReadingSubtitleQueue {
                   replacementRevision >= 0 else { return }
             if let row = rows.first(where: { $0.id == id }), row.revision != revision { return }
             supersededIDs.insert(id)
-            if draft?.replacementID == id { draft?.replacementID = replacement }
+            pendingCaptionTails.removeValue(forKey: id)
+            for index in drafts.indices where drafts[index].replacementID == id {
+                drafts[index].replacementID = replacement
+            }
+            shownDrafts = shownDrafts.filter { $0.value.replacementID != id }
             pendingReplacements[id] = Replacement(id: replacement, revision: replacementRevision)
             if let index = rows.firstIndex(where: { $0.id == id }) { restoreCompletedFallback(at: index) }
             if let owner = rows.first(where: { $0.id == replacement }),
@@ -634,7 +814,9 @@ struct ReadingSubtitleQueue {
                   let index = rows.firstIndex(where: { $0.id == id && $0.revision == revision }),
                   rows[index].pages == nil else { return }
             rows[index].failedRevision = revision
-            if draft?.replacementID == id { draft = nil }
+            pendingCaptionTails.removeValue(forKey: id)
+            drafts.removeAll { $0.replacementID == id }
+            shownDrafts = shownDrafts.filter { $0.value.replacementID != id }
             restoreCompletedFallback(at: index)
         case "sentence_committed", "sentence_updated":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
@@ -642,8 +824,17 @@ struct ReadingSubtitleQueue {
                   let revision = event["revision"] as? Int, revision >= 0,
                   let source = event["text"] as? String else { return }
             if event["type"] as? String == "sentence_committed" {
+                if var continuation = event["caption_continuation"] as? [String: Any] {
+                    continuation["type"] = "caption_preview"
+                    observe(continuation, now: now)
+                }
+                for index in drafts.indices where drafts[index].replacementID == nil {
+                    drafts[index].replacementID = id
+                }
+                if shownDrafts[latestSourceID]?.replacementID == nil {
+                    shownDrafts[latestSourceID]?.replacementID = id
+                }
                 latestSourceID = id
-                if draft?.replacementID == nil { draft?.replacementID = id }
             }
             if suppressRebuiltSource(event, id: id, revision: revision) { return }
             if let index = rows.firstIndex(where: { $0.id == id }) {
@@ -676,7 +867,19 @@ struct ReadingSubtitleQueue {
                 rows[index].canonicalRange = Self.canonicalRange(event, limit: limit)
             }
             let fullText = SubtitlePresentation.singleLine(translation)
-            if draft?.replacementID == id { draft = nil }
+            let prefix = event["caption_prefix"] as? String
+            let preview = shownDrafts.values.first { $0.replacementID == id }
+            let coverage = targetLanguage == "en" ? prefix.flatMap { previewCoverage(id: id, prefix: $0) } : nil
+            if let coverage, event["caption_tail_expected"] as? Bool == true,
+               !coverage.waiting.isEmpty || preview?.shownPages.last.map({
+                   Self.englishDraftContinuation(of: fullText, after: $0.translationPrefix) == nil
+               }) == true {
+                pendingCaptionTails[id] = PendingCaptionTail(event: event, expiresAt: now + 1.45)
+                return
+            }
+            pendingCaptionTails.removeValue(forKey: id)
+            drafts.removeAll { $0.replacementID == id }
+            if let preview { shownDrafts.removeValue(forKey: preview.anchor) }
             let completedEnglish = targetLanguage == "en" ? (rows[index].completed ?? rows[index].previousCompleted) : nil
             rows[index].failedRevision = nil
             rows[index].translation = fullText
@@ -704,9 +907,60 @@ struct ReadingSubtitleQueue {
                 return
             }
             var displayText = fullText
+            var readPages: [String] = []
+            var stagedPages: [String] = []
+            if let coverage,
+               let suffix = event["caption_tail_translation"] as? String
+                   ?? ((event["caption_tail_expected"] as? Bool == false) ? "" : nil) {
+                readPages = coverage.read
+                stagedPages = coverage.waiting
+                displayText = SubtitlePresentation.singleLine(suffix)
+                if let last = readPages.last, references.isEmpty && text == last {
+                    references = [(id, revision, readPages.count - 1)]
+                }
+            } else if targetLanguage == "en", let preview {
+                for page in preview.shownPages.indices.reversed() {
+                    let shown = preview.shownPages[page]
+                    guard Self.sourceExtendsPreview(shown.sourcePrefix, rows[index].source),
+                          let suffix = Self.englishDraftContinuation(of: fullText, after: shown.translationPrefix)
+                    else { continue }
+                    displayText = suffix
+                    readPages = preview.shownPages.prefix(page + 1).map(\.displayText)
+                    // Keep the current turn frozen. Its reference can be
+                    // confirmed only when the actual visible page still agrees.
+                    if page == preview.shownPages.count - 1 {
+                        if let card = cards.firstIndex(where: { $0.parts.isEmpty && $0.text == shown.displayText }) {
+                            cards[card].parts = [Part(id: id, revision: revision, page: page, text: shown.displayText)]
+                        }
+                        if references.isEmpty && text == shown.displayText {
+                            references = [(id, revision, page)]
+                        }
+                    }
+                    break
+                }
+                if readPages.isEmpty, let first = preview.shownPages.first,
+                   Self.sourceExtendsPreview(first.sourcePrefix, rows[index].source),
+                   let (known, suffix) = Self.sharedEnglishClause(from: first.displayText, in: fullText) {
+                    readPages = [known]
+                    displayText = suffix
+                }
+            } else if let prior = completedEnglish, prior.pages.count > 1,
+                      prior.sourceTokenEpoch == rows[index].sourceTokenEpoch,
+                      let first = prior.sourceTokens?.first, first == rows[index].sourceTokens?.first {
+                // Compare the actual pages that reached the screen, before
+                // applying the new sentence's wrapping and page boundaries.
+                var priorRemaining = prior.translation
+                for page in prior.pages.prefix(prior.nextPage) {
+                    guard let oldSuffix = Self.englishSuffix(of: priorRemaining, after: page),
+                          let newSuffix = Self.englishSuffix(of: displayText, after: page) else { break }
+                    readPages.append(page)
+                    displayText = newSuffix
+                    priorRemaining = oldSuffix
+                }
+            }
             // Trim only an exact already-displayed prefix of the same source
             // occurrence. Rephrased/corrected translations retain a full turn.
-            if let tokens = rows[index].sourceTokens,
+            if readPages.isEmpty, let tokens = rows[index].sourceTokens,
                let prior = displayedCoverage.last(where: { $0.id == id
                    && $0.epoch == rows[index].sourceTokenEpoch
                    && tokens.count > $0.tokens.count && tokens.starts(with: $0.tokens)
@@ -715,9 +969,10 @@ struct ReadingSubtitleQueue {
                 displayText = String(fullText.dropFirst(prior.text.count)).trimmingCharacters(in: .whitespacesAndNewlines)
             }
             let budget = min(12, screenWorkLimit)
-            let pages = targetLanguage == "en"
+            let unreadPages = displayText.isEmpty ? [] : (targetLanguage == "en"
                 ? englishDisplayPages(displayText, budget: budget)
-                : SubtitleReading.pages(displayText, budget: budget).flatMap(splitToFit)
+                : SubtitleReading.pages(displayText, budget: budget).flatMap(splitToFit))
+            let pages = readPages + stagedPages + unreadPages
             if rows[index].pages == pages {
                 rows[index].displayRevision = revision
                 for card in cards.indices {
@@ -731,20 +986,22 @@ struct ReadingSubtitleQueue {
                 return
             }
             let unchanged = rows[index].previousPages == pages
-            rows[index].pages = pages; rows[index].nextPage = 0; rows[index].readyAt = now
+            rows[index].pages = pages; rows[index].nextPage = readPages.count; rows[index].readyAt = now
             rows[index].displayRevision = revision
             // Identical multi-page revisions preserve both visible and already
             // read progress. A source re-decode must not replay the entire row.
-            if unchanged {
-                rows[index].nextPage = rows[index].previousNextPage
+            if unchanged || !readPages.isEmpty {
+                if unchanged { rows[index].nextPage = max(readPages.count, rows[index].previousNextPage) }
                 for card in cards.indices {
-                    for part in cards[card].parts.indices where cards[card].parts[part].id == id {
+                    for part in cards[card].parts.indices where cards[card].parts[part].id == id
+                        && (unchanged || cards[card].parts[part].page < readPages.count) {
                         cards[card].parts[part].revision = revision
                     }
                 }
                 // Keep revision bookkeeping current without changing the
                 // visible page identity or restarting its reading time.
-                for part in references.indices where references[part].id == id {
+                for part in references.indices where references[part].id == id
+                    && (unchanged || references[part].page < readPages.count) {
                     references[part].revision = revision
                 }
             } else if pages.count == 1 {
@@ -762,6 +1019,9 @@ struct ReadingSubtitleQueue {
     }
 
     @discardableResult mutating func advance(now: Double, visible: Bool = true) -> Bool {
+        for id in pendingCaptionTails.compactMap({ $0.value.expiresAt <= now ? $0.key : nil }) {
+            finishPendingCaptionTail(id, now: now)
+        }
         if !visible { if pausedAt == nil { pausedAt = now }; return false }
         if let pausedAt {
             for index in cards.indices {
@@ -813,7 +1073,9 @@ struct ReadingSubtitleQueue {
                 if cards.contains(where: { $0.parts.contains(where: { $0.id == row.id && ($0.revision != displayRevision || $0.page == row.nextPage) }) }) { break }
                 let page = pages[row.nextPage]
                 let candidate = SubtitlePresentation.joined([combined, page])
-                if compact && (parts.count >= 2 || SubtitleReading.work(combined) >= 3) { break }
+                let englishCondition = targetLanguage == "en" && parts.count == 1 && row.nextPage == 0
+                    && combined.lowercased().hasPrefix("if ") && (combined.hasSuffix("…") || combined.hasSuffix("..."))
+                if compact && (parts.count >= 2 || (SubtitleReading.work(combined) >= 3 && !englishCondition)) { break }
                 if !combined.isEmpty && (SubtitleReading.work(combined) >= 8 || SubtitleReading.work(candidate) > 12) { break }
                 let screen = SubtitlePresentation.joined(cards.map { $0.text } + [candidate])
                 if SubtitleReading.work(screen) > screenWorkLimit + 0.000_001 { break }
@@ -852,15 +1114,47 @@ struct ReadingSubtitleQueue {
             cards.append(Card(parts: parts, text: combined, readingEnd: readingEnd, deadline: until))
             displayedPages += parts.count
         }
-        // A preview gets a complete, separate reading turn. It cannot take
-        // the place of an older unresolved row or add a tail to a visible card.
-        if cards.isEmpty, !finished, let draft {
+        // A confirmed clause can use an idle screen while an older row awaits
+        // translation. Its reading turn never consumes that older row.
+        if cards.isEmpty, !finished, var draft = drafts.first {
             let next = rows.first(where: { $0.pages == nil || $0.nextPage < $0.pages!.count })
-            if next == nil || (next?.id == draft.replacementID && next?.pages == nil) {
-                self.draft = nil
-                if fits(draft.text) {
-                    let until = now + compactSeconds(draft.text)
-                    cards.append(Card(parts: [], text: draft.text, readingEnd: until, deadline: until))
+            if draft.replacementID.flatMap({ pendingCaptionTails[$0] }) == nil,
+               next == nil || (next?.pages == nil && (next?.id == draft.replacementID
+                   || (targetLanguage == "en" && draft.source != nil))) {
+                if draft.displayPages.isEmpty {
+                    var nextText: String? = draft.text
+                    if let prior = shownDrafts[draft.anchor] {
+                        if let base = draft.baseSource {
+                            nextText = Self.equalCaptionSource(prior.source ?? "", base) ? draft.delta : nil
+                        } else {
+                            nextText = Self.englishDraftContinuation(of: draft.text, after: prior.text)
+                        }
+                        draft.shownPages = prior.shownPages
+                    } else if draft.baseSource != nil {
+                        nextText = nil
+                    }
+                    draft.displayPages = nextText.map(previewPages) ?? []
+                }
+                if draft.nextDisplayPage < draft.displayPages.count {
+                    let nextText = draft.displayPages[draft.nextDisplayPage]
+                    draft.nextDisplayPage += 1
+                    if draft.nextDisplayPage == draft.displayPages.count {
+                        drafts.removeFirst()
+                        if targetLanguage == "en", let source = draft.source {
+                            draft.shownPages += draft.displayPages.indices.map { index in
+                                let last = index == draft.displayPages.count - 1
+                                return DraftPage(displayText: draft.displayPages[index], sourcePrefix: last ? source : "",
+                                                 translationPrefix: last ? draft.text : "")
+                            }
+                            shownDrafts[draft.anchor] = draft
+                        }
+                    } else {
+                        drafts[0] = draft
+                    }
+                    let until = now + compactSeconds(nextText)
+                    cards.append(Card(parts: [], text: nextText, readingEnd: until, deadline: until))
+                } else {
+                    drafts.removeFirst()
                 }
             }
         }
@@ -881,9 +1175,8 @@ struct ReadingSubtitleQueue {
         guard !cards.isEmpty else { return false } // Keep final text visible.
         let updated = SubtitlePresentation.joined(cards.map { $0.text })
         let refs = cards.flatMap { $0.parts.map { ($0.id, $0.revision, $0.page) } }
-        if let replacement = draft?.replacementID, refs.contains(where: { $0.0 == replacement }) {
-            draft = nil
-        }
+        let presented = Set(refs.map { $0.0 })
+        drafts.removeAll { $0.replacementID.map(presented.contains) == true }
         let refKey = refs.map { "\($0.0):\($0.1):\($0.2)" }
         let oldKey = references.map { "\($0.id):\($0.revision):\($0.page)" }
         guard updated != text || refKey != oldKey else { return false }

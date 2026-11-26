@@ -57,15 +57,24 @@ class NativePCMBuffer:
             self._bytes -= size
         return dict(chunk)
 
-    def snapshot(self, after: int, epoch: str | None = None) -> dict:
+    def _validate_cursor(self, after: int, epoch: str | None) -> None:
         if epoch is not None and epoch != self.epoch:
             raise PCMEpochMismatch('PCM epoch changed')
         if type(after) is not int or after < -1 or after > self._seq:
             raise PCMInvalidCursor('invalid PCM cursor')
+        floor = self._chunks[0][0]['seq'] - 1 if self._chunks else self._seq
+        if after != -1 and after < floor:
+            raise PCMCursorExpired('PCM cursor was evicted')
+
+    def unreceived_duration_ms(self, after: int, epoch: str) -> int:
+        if after == -1:
+            raise PCMInvalidCursor('playback position is unknown')
+        self._validate_cursor(after, epoch)
+        return round(sum(size for chunk, size in self._chunks if chunk['seq'] > after) / 48)
+
+    def snapshot(self, after: int, epoch: str | None = None) -> dict:
+        self._validate_cursor(after, epoch)
         if after == -1:
             return dict(epoch=self.epoch, cursor=self._seq, chunks=[])
-        floor = self._chunks[0][0]['seq'] - 1 if self._chunks else self._seq
-        if after < floor:
-            raise PCMCursorExpired('PCM cursor was evicted')
         chunks = [dict(chunk) for chunk, _ in self._chunks if chunk['seq'] > after][:4]
         return dict(epoch=self.epoch, cursor=chunks[-1]['seq'] if chunks else after, chunks=chunks)

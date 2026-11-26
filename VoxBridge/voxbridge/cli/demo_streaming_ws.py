@@ -55,7 +55,9 @@ from voxbridge.monitor import MonitorState, MONITOR_HTML
 from voxbridge.asr import ASREngineRegistry, EngineBinding
 from voxbridge.asr.text import StablePrefixGate, split_unpunctuated_chinese
 from voxbridge.streaming.backpressure import QueueBackpressureController
-from voxbridge.streaming.caption_preview import CaptionPreview, Preview
+from voxbridge.streaming.caption_preview import (
+    CaptionPreview, Preview, caption_source_remainder, caption_tail_for_translation, committed_caption_remainder,
+)
 from voxbridge.streaming.context_schedule import (
     ContextSchedule,
     normalize_session_context_terms,
@@ -1910,6 +1912,9 @@ def _create_app(
     app.state.tts_hls = SharedHLSTTSPublisher(
         synthesizer=tts_synthesizer,
         chunked_synthesis=bool(getattr(args, "tts_stream_chunks", False)),
+        native_unplayed_ms=(
+            lambda pcm: app.state.native_playback.unplayed_duration_ms(pcm)
+        ) if native_pcm_enabled else None,
         encoder_factory=tts_hls_encoder_factory,
         root_dir=tts_hls_root,
         listener_ttl_sec=max(
@@ -2099,6 +2104,8 @@ def _create_app(
         elapsed_sec: float = 0.0,
         session_context_terms: Optional[Tuple[str, ...]] = None,
         engine: Optional[EngineBinding] = None,
+        *,
+        chunk_size_sec: Optional[float] = None,
     ):
         engine = engine or asr_registry.get()
         if not engine.supports_context:
@@ -2116,7 +2123,7 @@ def _create_app(
             context=streaming_context,
             unfixed_chunk_num=args.unfixed_chunk_num,
             unfixed_token_num=args.unfixed_token_num,
-            chunk_size_sec=args.chunk_size_sec,
+            chunk_size_sec=args.chunk_size_sec if chunk_size_sec is None else chunk_size_sec,
         )
         if force_language is not None:
             kwargs["language"] = force_language
@@ -2680,8 +2687,10 @@ def _create_app(
         use_vllm_streaming = engine_binding.streaming
         capture_started = False
         caption_preview: CaptionPreview | None = None
+        caption_tail_task: asyncio.Task[None] | None = None
         session_force_language = _normalize_force_language(getattr(args, "force_language", None))
         session_context_terms: Optional[Tuple[str, ...]] = None
+        session_chunk_size_sec: Optional[float] = None
         state = None
         state_generation = 0
         speculation_stream = secrets.token_hex(16)
@@ -4309,8 +4318,10 @@ def _create_app(
             tts_runtime.covered_sources.setdefault(item.sentence_id, source)
             addition = tts_runtime.pending_additions.pop(item.sentence_id, None)
             if addition is not None:
-                parent_id, _, full_source, extra_source = addition
+                parent_id, parent_revision, full_source, extra_source = addition
                 tts_runtime.covered_sources[parent_id] = full_source
+                if native_pcm_enabled and translation_runtime.source_language == "Chinese":
+                    source_ledger.publish(parent_id, parent_revision)
                 prior = tts_runtime.supplemented_sources.get(parent_id, "")
                 tts_runtime.supplemented_sources[parent_id] = (prior + " " + extra_source).strip()
 
@@ -4947,6 +4958,7 @@ def _create_app(
             target_language: str,
             direction: str,
         ) -> str:
+            nonlocal caption_tail_task
             current_item = _current_translation_item(
                 sentence_id,
                 revision,
@@ -4958,7 +4970,9 @@ def _create_app(
             if current_item is None:
                 return ""
             if caption_preview is not None:
-                caption_preview.cancel()
+                caption_preview.yield_inference()
+            if caption_tail_task is not None and not caption_tail_task.done():
+                caption_tail_task.cancel()
 
             async def compute_translation():
                 return await _translate_sentence_once(
@@ -5020,6 +5034,30 @@ def _create_app(
             # Read-only occurrence evidence for presentation. Missing bindings
             # mean the UI retains the full text; this never commits/cancels TTS.
             caption_span = source_ledger.binding(str(sentence_id), int(revision))
+            caption_prefix = str(current_item.get("caption_prefix", ""))
+            caption_tail = committed_caption_remainder(sentence_text, caption_prefix)
+            caption_words = " ".join(str(current_item.get("caption_preview_translation", "")).split()).rstrip(".,;:…")
+            formal_text = " ".join(translated.split())
+            literal_tail = formal_text.removeprefix(caption_words) if caption_words else formal_text
+            follows_literally = literal_tail != formal_text and (
+                not literal_tail or literal_tail[0].isspace() or literal_tail[0] in ".,;:…"
+            )
+            tail_for_mt = (caption_tail_for_translation(caption_tail)
+                if caption_tail and not follows_literally
+                and not finish_requested and translation_runtime.queue.empty()
+                else ""
+            )
+            prepare_caption_tail = bool(tail_for_mt)
+            visual = {}
+            if caption_tail and follows_literally:
+                visual = {"caption_prefix": caption_prefix,
+                          "caption_tail_translation": literal_tail.lstrip(" .,;:…")}
+            elif caption_tail == "" or prepare_caption_tail:
+                visual = {"caption_prefix": caption_prefix, "caption_tail_expected": prepare_caption_tail}
+            if visual:
+                _trace_event("caption_final_coverage", sentence_id=str(sentence_id), revision=int(revision),
+                             prefix_chars=len(caption_prefix), tail_chars=len(caption_tail or ""),
+                             separate_tail=prepare_caption_tail)
             await _send_json(
                 {
                     "type": "sentence_translation",
@@ -5030,6 +5068,7 @@ def _create_app(
                     "is_stable": True,
                     "source_token_ids": list(caption_span.tokens) if caption_span else None,
                     "source_token_epoch": int(tts_runtime.generation),
+                    **visual,
                 }
             )
             if sentence_id in tts_runtime.released_sources:
@@ -5039,7 +5078,12 @@ def _create_app(
                 item_index = _find_sentence_item_index(sentence_id)
                 following = [str(item.get("zh", "")) for item in
                              subtitle_state.sentence_items[(item_index or 0) + 1:]]
-                extra_source = unspoken_extension(previous_source, sentence_text, following)
+                revised_tail_start = None
+                if native_pcm_enabled and translation_runtime.source_language == "Chinese":
+                    revised_tail_start = source_ledger.revised_tail_start(
+                        sentence_id, revision, previous_source, sentence_text)
+                extra_source = unspoken_extension(previous_source, sentence_text, following,
+                                                  revised_tail_start=revised_tail_start)
                 if extra_source:
                     extra_id = f"{sentence_id}:addition:{revision}"
                     await _register_tts_source(extra_id, revision, extra_source)
@@ -5059,7 +5103,8 @@ def _create_app(
                         item_index = _find_sentence_item_index(sentence_id)
                         following = [str(item.get("zh", "")) for item in
                                      subtitle_state.sentence_items[(item_index or 0) + 1:]]
-                        if unspoken_extension(previous_source, sentence_text, following):
+                        if unspoken_extension(previous_source, sentence_text, following,
+                                             revised_tail_start=revised_tail_start):
                             await _mark_tts_translation_ready(extra_id, revision, extra_translation, target_language)
                             _trace_event("tts_late_addition_recovered", sentence_id=sentence_id,
                                          revision=revision, source_chars=len(extra_source))
@@ -5099,7 +5144,26 @@ def _create_app(
                             await _mark_tts_translation_ready(sentence_id, revision, speech_translation, target_language)
                         else:
                             await _mark_tts_translation_failed(sentence_id, revision)
+            if prepare_caption_tail and translation_runtime.queue.empty():
+                caption_tail_task = asyncio.create_task(_publish_caption_tail(
+                    sentence_id, revision, sentence_text, state_gen_hint, direction,
+                    caption_prefix, tail_for_mt, target_language,
+                ))
             return translated
+
+        async def _publish_caption_tail(
+            sentence_id: str, revision: int, source: str, generation: int, direction: str,
+            prefix: str, tail: str, target: str,
+        ) -> None:
+            try:
+                text = await asyncio.wait_for(translator.translate_caption(tail, target, max_tokens=128), timeout=1.2)
+            except Exception:
+                text = ""
+            if _current_translation_item(sentence_id, revision, source, generation,
+                                         direction, phase="caption_tail") is not None:
+                if not finished:
+                    await _send_json({"type": "caption_tail", "sentence_id": sentence_id,
+                                      "revision": revision, "caption_prefix": prefix, "translation": text})
 
         async def _translation_worker() -> None:
             await run_translation_queue(translation_runtime, _translate_and_publish_current)
@@ -6358,6 +6422,14 @@ def _create_app(
                         terminal_hash8=_hash8(pending_prefix_terminal_text),
                         carry_hash8=_hash8(pending_prefix),
                     )
+            if (pending_prefix and native_pcm_enabled and translation_runtime.source_language == "Chinese"
+                    and subtitle_state.sentence_items and source_ledger.segment == segment_runtime.id):
+                last = subtitle_state.sentence_items[-1]
+                if source_ledger.registered_carry(
+                        pending_prefix, str(last["id"]), int(last["revision"]), str(last["zh"])):
+                    _trace_event("registered_carry_omitted", segment_id=int(segment_runtime.id),
+                                 chars=len(pending_prefix), sentence_id=str(last["id"]))
+                    pending_prefix = pending_prefix_terminal_text = ""
             overlap_cap_chars = int(getattr(subtitle_state, "boundary_overlap_cap_chars", 12) or 12)
             boundary_anchor_chars = max(4, overlap_cap_chars * 2)
             boundary_anchor = str(final_text[-boundary_anchor_chars:] if final_text else "").strip()
@@ -6407,6 +6479,7 @@ def _create_app(
                 context_elapsed_sec,
                 session_context_terms,
                 engine_binding,
+                chunk_size_sec=session_chunk_size_sec,
             )
             _trace_asr_context(
                 session_force_language,
@@ -8182,19 +8255,38 @@ def _create_app(
                 and (speculation is None or not speculation.pending)
             )
 
-        async def _publish_caption_preview(preview: Preview, text: str) -> None:
-            await _send_json({
+        def _caption_preview_payload(preview: Preview, text: str) -> Dict[str, Any]:
+            result = {
                 "type": "caption_preview",
                 "after_sentence_id": preview.after_sentence_id,
+                "preview_source": preview.source,
                 "translation": text,
-            })
+            }
+            if preview.base_source:
+                result["preview_base_source"] = preview.base_source
+            return result
 
-        async def _send_json(payload: Dict[str, Any]) -> None:
+        async def _publish_caption_preview(preview: Preview, text: str) -> bool:
+            return await _send_json(_caption_preview_payload(preview, text))
+
+        async def _send_json(payload: Dict[str, Any]) -> bool:
             payload.setdefault("asr_engine", engine_binding.id)
             kind = payload.get("type")
-            if caption_preview is not None and kind in {
-                "sentence_committed", "sentence_updated", "sentence_superseded", "sentence_reset", "final"
-            }:
+            if caption_preview is not None and kind == "sentence_committed":
+                index = _find_sentence_item_index(str(payload.get("sentence_id", "")))
+                if index is not None:
+                    anchor = str(subtitle_state.sentence_items[index - 1]["id"]) if index else ""
+                    prepared = caption_preview.prepared_for_commit(str(payload.get("text", "")), anchor)
+                    coverage = caption_preview.committed_caption_prefix(str(payload.get("text", "")), anchor)
+                    if prepared is not None and (
+                        not coverage or caption_source_remainder(prepared[0].source, coverage[0])
+                    ):
+                        payload["caption_continuation"] = _caption_preview_payload(*prepared)
+                        coverage = prepared[0].source, prepared[1]
+                    if coverage:
+                        item = subtitle_state.sentence_items[index]
+                        item["caption_prefix"], item["caption_preview_translation"] = coverage
+            if caption_preview is not None and kind in {"sentence_committed", "sentence_reset", "final"}:
                 caption_preview.cancel()
             if (kind in {"sentence_committed", "sentence_updated", "sentence_translation"}
                     and caption_reset_context is not None
@@ -8259,9 +8351,14 @@ def _create_app(
                 if kind == "caption_preview" and (
                     not _caption_slot_idle() or payload.get("after_sentence_id") != _caption_anchor()
                 ):
-                    return
+                    return False
                 await websocket.send_json(payload)
-                if native_console and kind != "caption_preview":
+                if kind in {"caption_preview", "caption_tail"}:
+                    _trace_event("caption_sent", type=kind, anchor=payload.get("after_sentence_id"),
+                                 sentence_id=payload.get("sentence_id"),
+                                 source_chars=len(str(payload.get("preview_source", ""))),
+                                 continuation=bool(payload.get("preview_base_source")))
+                if native_console and kind not in {"caption_preview", "caption_tail"}:
                     # Passive snapshots have no observers, queues or awaits on this path.
                     app.state.monitor.observe(payload)
             chunk = getattr(state, "chunk_id", None) if caption_preview is not None and kind == "partial" else None
@@ -8271,6 +8368,7 @@ def _create_app(
                     str(translation_runtime.target_language),
                     observation=(int(state_generation), int(segment_runtime.id), chunk),
                 )
+            return True
 
         def _flush_audio_spill() -> bool:
             nonlocal audio_spill_generation, audio_spill_samples
@@ -9720,6 +9818,11 @@ def _create_app(
                             **context_metadata,
                         )
                         try:
+                            requested_chunk_size_sec = None
+                            if (native_console and requested_binding.id == "qwen3-asr"
+                                    and getattr(args, "backend", "") == "mlx"
+                                    and requested_pair.source.code == "zh" and requested_pair.target.code == "en"):
+                                requested_chunk_size_sec = getattr(args, "native_zh2en_chunk_size_sec", None)
                             if requested_binding.streaming:
                                 new_state = await asyncio.to_thread(
                                     _new_vllm_state,
@@ -9727,6 +9830,7 @@ def _create_app(
                                     0.0,
                                     requested_context_terms,
                                     requested_binding,
+                                    chunk_size_sec=requested_chunk_size_sec,
                                 )
                                 _trace_asr_context(
                                     requested_force_language,
@@ -9769,6 +9873,10 @@ def _create_app(
                                     and callable(caption_translate)):
                                 caption_preview = CaptionPreview(
                                     caption_translate, _publish_caption_preview, _caption_slot_idle,
+                                    complete_chinese_clause=(
+                                        requested_pair.source.code == "zh"
+                                        and requested_pair.target.code == "en"
+                                    ),
                                 )
                             capture_started = True
                             native_prefix_gate.clear()
@@ -9777,6 +9885,7 @@ def _create_app(
                             qwen_candidates.clear()
                             session_force_language = requested_force_language
                             session_context_terms = requested_context_terms
+                            session_chunk_size_sec = requested_chunk_size_sec
                             finish_mode = "stop"
                             finish_reason = "stop"
                             finish_requested = False
@@ -10077,6 +10186,10 @@ def _create_app(
             except Exception:
                 pass
         finally:
+            if caption_tail_task is not None:
+                caption_tail_task.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await caption_tail_task
             if caption_preview is not None:
                 await caption_preview.close()
             if speculation is not None:
@@ -10244,6 +10357,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--unfixed-chunk-num", type=int, default=2)
     p.add_argument("--unfixed-token-num", type=int, default=5)
     p.add_argument("--chunk-size-sec", type=float, default=2.0)
+    p.add_argument("--native-zh2en-chunk-size-sec", type=float,
+                   help="Override the MLX decode chunk for native Chinese-to-English sessions")
     p.add_argument(
         "--min-audio-sec",
         type=float,
@@ -10805,7 +10920,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ssl-certfile", default=None, help="Path to TLS certificate file (enables HTTPS/WSS)")
     p.add_argument("--ssl-keyfile", default=None, help="Path to TLS private key file")
     p.add_argument("--log-level", default="info", choices=["critical", "error", "warning", "info", "debug"])
-    return p.parse_args()
+    parsed = p.parse_args()
+    interval = parsed.native_zh2en_chunk_size_sec
+    if interval is not None and (not np.isfinite(interval) or interval <= 0):
+        p.error("--native-zh2en-chunk-size-sec must be finite and positive")
+    return parsed
 
 
 def _uvicorn_run_options(args: argparse.Namespace) -> Dict[str, Any]:

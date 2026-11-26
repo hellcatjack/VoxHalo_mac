@@ -919,6 +919,7 @@ class SharedHLSTTSPublisher:
         baseline_tts_speed: float = 1.05,
         auto_speed_enabled: bool = True,
         chunked_synthesis: bool = False,
+        native_unplayed_ms: Callable[[NativePCMBuffer], int | None] | None = None,
         clock: Callable[[], float] = time.monotonic,
         worker_start_gate: asyncio.Event | None = None,
     ) -> None:
@@ -946,6 +947,7 @@ class SharedHLSTTSPublisher:
         if self._chunked_synthesis and sample_rate != 24000:
             raise ValueError("native PCM requires 24000 Hz")
         self.native_pcm = NativePCMBuffer()
+        self._native_unplayed_ms = native_unplayed_ms
         self._chunk_states: dict[ItemKey, _ChunkPreparation] = {}
         self._chunk_publish_active = False
         self._chunk_release_serial = 0
@@ -1026,7 +1028,9 @@ class SharedHLSTTSPublisher:
             last_error=self._last_error,
         )
 
-    def _backlog_snapshot(self) -> tuple[int, int, int, bool]:
+    def _backlog_snapshot(
+        self, *, native_unplayed_ms: int | None = None,
+    ) -> tuple[int, int, int, bool]:
         if not self._leases or self._encoder is None or not self._speech_epoch_id:
             return 0, 0, 0, False
         pending_audio_ms = max(
@@ -1050,9 +1054,10 @@ class SharedHLSTTSPublisher:
             else:
                 future_audio_ms += self._estimate_item_audio_ms(item)
                 backlog_estimated = True
+        published_audio_ms = pending_audio_ms if native_unplayed_ms is None else native_unplayed_ms
         return (
             pending_audio_ms,
-            pending_audio_ms + future_audio_ms,
+            published_audio_ms + future_audio_ms,
             len(self._known_items),
             backlog_estimated,
         )
@@ -1100,12 +1105,15 @@ class SharedHLSTTSPublisher:
         audio_ms: int,
         *,
         displayed_multiplier: float,
+        pause_ms: int | None = None,
     ) -> None:
         text_chars = len(str(item.text or "").strip())
         if text_chars < 1:
             return
         language = self._language_key(item.target_language)
-        speech_audio_ms = max(1, int(audio_ms) - self._sentence_pause_ms)
+        if pause_ms is None:
+            pause_ms = self._sentence_pause_ms
+        speech_audio_ms = max(1, int(audio_ms) - pause_ms)
         baseline_speech_ms = speech_audio_ms * max(1.0, displayed_multiplier)
         observed = baseline_speech_ms / text_chars
         previous = self._audio_ms_per_char.get(language)
@@ -1120,14 +1128,20 @@ class SharedHLSTTSPublisher:
         self,
         key: ItemKey,
         kind: str,
+        *,
+        native_unplayed_ms: int | None = None,
     ) -> tuple[float, float, int]:
-        _, backlog_ms, _, _ = self._backlog_snapshot()
+        _, backlog_ms, _, _ = self._backlog_snapshot(native_unplayed_ms=native_unplayed_ms)
         force_join_baseline = (
             kind == "release" and key == self._first_epoch_item_key
         )
         multiplier = 1.0
         if self._auto_speed_enabled and not force_join_baseline:
             multiplier = select_global_tts_multiplier(backlog_ms)
+            if native_unplayed_ms is not None:
+                # Keep Chinese at 1.20× below 2 s of audio, then rise
+                # smoothly to 1.50× at 7 s as native playback falls behind.
+                multiplier = 1.0 + min(0.5, max(0, backlog_ms - 2_000) / 10_000)
         effective_speed = self._baseline_tts_speed * multiplier
         if self._auto_speed_enabled:
             effective_speed = speech_policy(key[2]).automatic_speed(self._baseline_tts_speed, multiplier)
@@ -1615,7 +1629,18 @@ class SharedHLSTTSPublisher:
                 continue
             self._inflight_item, self._inflight_key = item, key
             self._inflight_kind = "prepare"
-            multiplier, speed, _ = self._select_synthesis_speed_locked(key, "release" if state.released else "prepare")
+            native_unplayed_ms = None
+            if self._auto_speed_enabled and self._native_unplayed_ms is not None and self._language_key(item.target_language) == "chinese":
+                native_unplayed_ms = self._native_unplayed_ms(self.native_pcm)
+            multiplier, speed, backlog_ms = self._select_synthesis_speed_locked(
+                key, "release" if state.released else "prepare",
+                native_unplayed_ms=native_unplayed_ms,
+            )
+            pause_ms = self._sentence_pause_ms
+            if native_unplayed_ms is not None:
+                # The model's own cadence is preserved. Only the silence
+                # added by this publisher shrinks while we are catching up.
+                pause_ms = min(pause_ms, max(80, 300 - max(0, backlog_ms - 2_000) // 15))
             started = time.monotonic()
             try:
                 if not state.texts:
@@ -1627,7 +1652,7 @@ class SharedHLSTTSPublisher:
                 pcm = decode_mono_pcm16_wav(audio.wav_bytes, expected_rate=self._sample_rate)
                 cue_start, cue_end = _pcm_activity_bounds_ms(pcm, sample_rate=self._sample_rate)
                 if index == len(state.texts) - 1:
-                    pcm += bytes(round(self._sample_rate * self._sentence_pause_ms / 1000) * 2)
+                    pcm += bytes(round(self._sample_rate * pause_ms / 1000) * 2)
                 if len(pcm) > min(self.native_pcm.max_bytes, self._preparation_max_bytes):
                     raise ValueError("oversized PCM chunk")
                 while not self._make_preparation_room(required_bytes=len(pcm)):
@@ -1648,9 +1673,13 @@ class SharedHLSTTSPublisher:
                 state.synthesis_ms += synthesis_ms
                 state.done = state.next_index == len(state.texts)
                 if index == 0:
-                    logger.info("shared TTS first chunk synthesized epoch=%s source_order=%d first_chunk_ms=%d", self._speech_epoch_id, item.source_order, synthesis_ms)
+                    logger.info(
+                        "shared TTS first chunk synthesized epoch=%s source_order=%d first_chunk_ms=%d speed=%.3f backlog_ms=%d native_unplayed_ms=%s",
+                        self._speech_epoch_id, item.source_order, synthesis_ms, speed, backlog_ms,
+                        native_unplayed_ms,
+                    )
                 if state.done:
-                    self._observe_item_audio_ms(item, state.total_audio_ms, displayed_multiplier=multiplier)
+                    self._observe_item_audio_ms(item, state.total_audio_ms, displayed_multiplier=multiplier, pause_ms=pause_ms)
                     logger.info("shared TTS chunks synthesis completed source_order=%d audio_ms=%d total_synthesis_ms=%d", item.source_order, state.total_audio_ms, state.synthesis_ms)
                 # Drop local references before sleeping or starting another inference.
                 del pcm, audio, prepared

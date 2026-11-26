@@ -95,6 +95,25 @@ class SourceLedger:
         return bool(span and self._raw_start < len(self._matches)
                     and span.end > self._matches[self._raw_start].start())
 
+    def registered_carry(self, text: str, sentence_id: str, revision: int, source: str) -> bool:
+        """A rollover need not carry an exact suffix already owned by the last row."""
+        bound = self.binding(sentence_id, revision)
+        marks = " \t\r\n。.,，;；:：!?！？"
+        suffix = text.strip().rstrip(marks)
+        if not suffix or not bound or not source.rstrip(marks).endswith(suffix):
+            return False
+        # Script-extension tokenization includes some CJK punctuation. Ignore
+        # the terminal marks symmetrically, preserving every lexical token ID.
+        source_matches = list(_TOKENS.finditer(source))
+        if len(source_matches) != len(bound.tokens):
+            return False
+        words = [m.group().casefold() for m in _TOKENS.finditer(suffix) if m.group() not in marks]
+        observed = [(w, i) for w, i in zip(self._words, self._ids) if w not in marks]
+        bound_ids = [i for m, i in zip(source_matches, bound.tokens) if m.group() not in marks]
+        n = len(words)
+        return bool(n and [w for w, _ in observed[-n:]] == words
+                    and [i for _, i in observed[-n:]] == bound_ids[-n:])
+
     def bind(self, sentence_id: str, revision: int, span: SourceSpan | None) -> None:
         self._bindings.pop(sentence_id, None)
         if span is not None:
@@ -130,6 +149,31 @@ class SourceLedger:
             self._published[sentence_id] = span
         while len(self._published) > self.max_bindings:
             self._published.popitem(last=False)
+
+    def revised_tail_start(self, sentence_id: str, revision: int, previous: str, text: str) -> int | None:
+        """Find an added tail after a recognizer edit to an already spoken prefix."""
+        published = self._published.get(sentence_id)
+        current = self.binding(sentence_id, revision)
+        if not published or not current:
+            return None
+        old_matches = list(_TOKENS.finditer(previous))
+        matches = list(_TOKENS.finditer(text))
+        if len(old_matches) != len(published.tokens) or len(matches) != len(current.tokens):
+            return None
+        # The old full stop can migrate to the end of the revision. Anchor on
+        # spoken tokens so its occurrence never consumes the added clause.
+        old_ids = [token for token, match in zip(published.tokens, old_matches) if match[0][0].isalnum()]
+        positions = [(token, match.start()) for token, match in zip(current.tokens, matches)
+                     if match[0][0].isalnum()]
+        new_ids = [token for token, _ in positions]
+        if len(old_ids) < 8 or old_ids[-1] not in new_ids:
+            return None
+        anchor = old_ids[-4:]
+        end = new_ids.index(anchor[-1]) + 1
+        if new_ids[end - len(anchor):end] != anchor or end >= len(new_ids):
+            return None
+        retained = set(old_ids).intersection(new_ids[:end])
+        return positions[end][1] if 3 * len(retained) >= 2 * len(old_ids) else None
 
     def covered_by(self, span: SourceSpan | None, *, excluding: str = "") -> str | None:
         if span is None:

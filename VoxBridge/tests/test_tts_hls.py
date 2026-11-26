@@ -643,6 +643,43 @@ async def test_chinese_auto_speed_is_bounded_in_real_synthesis_and_status(tmp_pa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'language,native_ms,hls_ms,speed,pause_ms',
+    [('Chinese', 0, 40_000, 1.20, 300),
+     ('Chinese', 4_000, 0, 1.3704, 111),
+     ('Chinese', 8_000, 0, 1.50, 80),
+     ('Chinese', None, 40_000, 1.50, 300),
+     ('English', 8_000, 0, 1.05, 300)],
+)
+async def test_native_chinese_catchup_preserves_speech_pcm(tmp_path, language, native_ms, hls_ms, speed, pause_ms):
+    wav_bytes = make_wav()
+    synth = FakeSynthesizer(wav_bytes)
+    encoder = FakeEncoder(tmp_path / 'stream')
+    publisher = SharedHLSTTSPublisher(
+        synthesizer=synth, encoder_factory=lambda root: encoder, root_dir=tmp_path,
+        chunked_synthesis=True, native_unplayed_ms=lambda pcm: native_ms,
+    )
+    first = TTSReadyItem('first', 1, 0, language, '你好。' if language == 'Chinese' else 'Hi.')
+    second = TTSReadyItem('second', 1, 1, language, first.text)
+    try:
+        await publisher.touch_listener('native', 'owner')
+        await publisher.publish(first)
+        await publisher.wait_idle()
+        encoder.pending_audio_ms = hls_ms
+        await publisher.publish(second)
+        await publisher.wait_idle()
+
+        assert synth.speed_calls[-1][2] == pytest.approx(speed)
+        chunks = publisher.native_pcm.snapshot(0)['chunks']
+        assert [chunk['sentence_id'] for chunk in chunks] == ['first', 'second']
+        speech = decode_mono_pcm16_wav(wav_bytes, expected_rate=24_000)
+        assert base64.b64decode(chunks[-1]['pcm']) == speech + bytes(pause_ms * 48)
+        assert encoder.appended[-1] == speech + bytes(pause_ms * 48)
+    finally:
+        await publisher.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('chunked', [False, True])
 async def test_prepared_chinese_audio_retains_bounded_speed_on_release(tmp_path, chunked):
     synth = FakeSynthesizer(make_wav())

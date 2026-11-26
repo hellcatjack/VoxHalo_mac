@@ -204,7 +204,7 @@ class OpenAIAPITranslator:
     def supports_caption_preview(self) -> bool:
         return urlsplit(self.chat_url).hostname in {"localhost", "127.0.0.1", "::1"}
 
-    async def translate_caption(self, source: str, target: str) -> str:
+    async def translate_caption(self, source: str, target: str, *, max_tokens: int | None = None) -> str:
         """Quick single-pass translation of an unfinished utterance."""
         import httpx
 
@@ -216,11 +216,14 @@ class OpenAIAPITranslator:
             "Translate only the words provided. Do not finish the thought or add explanations. "
             "Return only the translation.\n\n" + source
         )
+        if max_tokens is None:
+            han_chars = sum("\u3400" <= char <= "\u9fff" for char in source)
+            max_tokens = max(56, 2 * han_chars) if han_chars > 42 else 56
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         body = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": min(56, self.max_new_tokens),
+            "max_tokens": min(max_tokens, self.max_new_tokens),
             "temperature": 0,
             "stream": True,
             "cache_prompt": False,
@@ -229,22 +232,25 @@ class OpenAIAPITranslator:
         finish_reason = ""
         # Streaming lets cancellation close the request when a formal
         # translation needs the single local inference slot.
-        async with httpx.AsyncClient(timeout=2.5, trust_env=False) as client:
-            async with client.stream("POST", self.chat_url, json=body, headers=headers) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    choices = json.loads(data).get("choices", [])
-                    if choices:
-                        choice = choices[0]
-                        content = (choice.get("delta") or {}).get("content")
-                        if isinstance(content, str):
-                            parts.append(content)
-                        finish_reason = choice.get("finish_reason") or finish_reason
+        try:
+            async with httpx.AsyncClient(timeout=2.5, trust_env=False) as client:
+                async with client.stream("POST", self.chat_url, json=body, headers=headers) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        choices = json.loads(data).get("choices", [])
+                        if choices:
+                            choice = choices[0]
+                            content = (choice.get("delta") or {}).get("content")
+                            if isinstance(content, str):
+                                parts.append(content)
+                            finish_reason = choice.get("finish_reason") or finish_reason
+        except httpx.TimeoutException as exc:
+            raise TimeoutError("caption translation timed out") from exc
         text = " ".join("".join(parts).replace("<target>", "").replace("</target>", "").split())
         if finish_reason != "stop" or translation_output_issue(source, text):
             return ""

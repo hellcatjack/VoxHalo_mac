@@ -25,16 +25,18 @@ def after_spoken_prefix(text: str, prefix: str) -> str | None:
     return text[new[len(old)].start():].strip() if len(new) > len(old) else ''
 
 
-def unspoken_extension(previous: str, revised: str, following: Sequence[str] = ()) -> str:
+def unspoken_extension(previous: str, revised: str, following: Sequence[str] = (),
+                       *, revised_tail_start: int | None = None) -> str:
     old = [m.group().casefold() for m in _tokens(previous)]
     new = _tokens(revised)
     words = [m.group().casefold() for m in new]
-    # Rewrites are not safe to replay. Only an aligned extension has a known
-    # spoken prefix; punctuation and capitalization are immaterial to coverage.
-    if not old or words[:len(old)] != old or len(words) <= len(old):
+    # An edited prefix requires a boundary independently proved by the ledger.
+    if old and words[:len(old)] == old and len(words) > len(old):
+        revised_tail_start = new[len(old)].start()
+    if revised_tail_start is None:
         return ""
-    suffix = revised[new[len(old)].start():].strip()
-    suffix_words = words[len(old):]
+    suffix = revised[revised_tail_start:].strip()
+    suffix_words = [m.group().casefold() for m in _tokens(suffix)]
     later = [m.group().casefold() for text in following for m in _tokens(text)]
     if any(later[i:i + len(suffix_words)] == suffix_words
            for i in range(len(later) - len(suffix_words) + 1)):

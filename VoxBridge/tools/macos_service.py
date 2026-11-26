@@ -80,6 +80,7 @@ def build_commands():
            '--backend', 'mlx', '--mlx-precision', 'int8', '--asr-model-path', str(ASR_MODEL),
            '--host', host, '--port', '8024', '--max-connections', '1',
            '--max-new-tokens', '256', '--chunk-size-sec', '2',
+           '--native-zh2en-chunk-size-sec', '1.25',
            '--client-chunk-ms', '100', '--consumer-batch-sec', '0.5',
            '--slice-mode', 'vad', '--auto-slice-sec', '12',
            '--state-rollover-sec', '12', '--segment-hard-cut-sec', '12',

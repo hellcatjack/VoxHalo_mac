@@ -68,6 +68,297 @@ private func checkLiveTranslationPreview() {
     }
 }
 
+private func checkEnglishCaptionContinuity() {
+    let clause = "我们已经完成全部测量，"
+    func preview(_ text: String = "We have finished all measurements.") -> [String: Any] {
+        ["type": "caption_preview", "after_sentence_id": "", "preview_source": clause, "translation": text]
+    }
+    func committed(_ text: String) -> [String: Any] {
+        ["type": "sentence_committed", "sentence_id": "row", "revision": 1, "text": text]
+    }
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(preview(), now: 0)
+    assert(queue.advance(now: 0))
+    let deadline = queue.deadline
+    queue.observe(committed(clause + "我们明天可以公布这些结果。"), now: 0.7)
+    queue.observe(translated("row", "We have finished all measurements, and we can publish the results tomorrow."), now: 0.9)
+    assert(!queue.advance(now: 1.0) && queue.deadline == deadline)
+    assert(queue.advance(now: deadline) && queue.text == "and we can publish the results tomorrow.")
+    assert(queue.deadline - deadline >= 2.4)
+
+    queue.reset()
+    queue.observe(preview(), now: 0)
+    assert(queue.advance(now: 0))
+    queue.observe(committed(clause), now: 0.7)
+    queue.observe(translated("row", "We have finished all measurements."), now: 0.9)
+    assert(queue.references.map(\.id) == ["row"])
+    assert(!queue.advance(now: queue.deadline) && queue.pendingCount == 0)
+    assert(queue.text == "We have finished all measurements.")
+
+    // The opening wording alone cannot justify trimming a correction or a
+    // translation from a different source span.
+    for (sourceText, correction) in [
+        (clause, "We have not finished all measurements."),
+        ("我们还没完成全部测量。", "We have finished all measurements, and we can publish tomorrow."),
+        (clause, "We have finished all measurements except the last one."),
+    ] {
+        queue.reset()
+        queue.observe(preview(), now: 0)
+        assert(queue.advance(now: 0))
+        queue.observe(committed(sourceText), now: 0.7)
+        queue.observe(translated("row", correction), now: 0.9)
+        assert(queue.advance(now: queue.deadline) && queue.text == correction)
+    }
+
+    queue.reset()
+    let opening = "We should finish the current work before we leave this room."
+    let previousTail = "Please write down anything we still need to discuss at tomorrow’s meeting."
+    let revisedTail = "Please write down anything we still need to discuss at the meeting on Friday morning."
+    queue.observe(source("long"), now: 1)
+    queue.observe(occurrence("long", opening + " " + previousTail, [1, 2, 3]), now: 1)
+    assert(queue.advance(now: 1) && queue.text == opening)
+    let pageEnd = queue.deadline
+    queue.observe(source("long", 2), now: 1.2)
+    queue.observe(occurrence("long", opening + " " + revisedTail, [1, 2, 4], 2), now: 1.3)
+    assert(!queue.advance(now: 1.4) && queue.deadline == pageEnd)
+    assert(queue.advance(now: pageEnd) && queue.text == revisedTail)
+    assert(queue.references.map(\.revision) == [2])
+}
+
+private func checkProgressiveEnglishPreview() {
+    let sourcePrefix = "会上我们已经确认时间，"
+    let extended = sourcePrefix + "明天上午正式公布结果，"
+    let opener = "At the meeting we confirmed the time,"
+    let addition = "and we'll publish the results tomorrow morning,"
+    let remainder = "so everyone can prepare."
+    func draft(_ source: String, _ text: String) -> [String: Any] {
+        ["type": "caption_preview", "after_sentence_id": "", "preview_source": source, "translation": text]
+    }
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(draft(sourcePrefix, opener), now: 1)
+    assert(queue.advance(now: 1) && queue.text == opener)
+    let firstDeadline = queue.deadline
+    queue.observe(draft(extended, "We had the meeting and discussed the schedule."), now: 1.2)
+    assert(!queue.advance(now: firstDeadline) && queue.text == opener)
+    queue.observe(draft(extended, opener + " " + addition), now: firstDeadline + 0.1)
+    assert(queue.advance(now: firstDeadline + 0.1) && queue.text == addition)
+    let secondDeadline = queue.deadline
+    queue.observe(["type": "sentence_committed", "sentence_id": "next", "revision": 1,
+                   "text": extended + "大家来得及准备。"], now: firstDeadline + 0.2)
+    queue.observe(translated("next", opener + " " + addition + " " + remainder),
+                  now: firstDeadline + 0.3)
+    assert(!queue.advance(now: secondDeadline - 0.01) && queue.text == addition)
+    assert(queue.advance(now: secondDeadline) && queue.text == remainder)
+    assert(queue.references.first?.page == 2)
+
+    queue.reset()
+    queue.observe(draft(sourcePrefix, opener), now: 1)
+    assert(queue.advance(now: 1) && queue.text == opener)
+    let nextTurn = queue.deadline
+    queue.observe(draft(extended, opener + " " + addition), now: 1.2)
+    assert(queue.advance(now: nextTurn) && queue.text == addition)
+    let correction = "and we'll publish the results on Friday morning."
+    queue.observe(["type": "sentence_committed", "sentence_id": "next", "revision": 1,
+                   "text": sourcePrefix + "周五上午正式公布结果。"], now: nextTurn + 0.2)
+    queue.observe(translated("next", opener + " " + correction), now: nextTurn + 0.3)
+    assert(queue.advance(now: queue.deadline) && queue.text == correction)
+}
+
+private func checkEnglishOpeningCoverage() {
+    let cases = [
+        ("但是如果他们有合理的建议，", "But, if they have legitimate suggestions,",
+         "However, if they have legitimate suggestions, we should listen.",
+         "we should listen."),
+        ("最后一点，随着父母年龄增大，他们会觉得老了，",
+         "One last point: as parents age, they may feel that they are getting old.",
+         "The last point is that as parents age, they may feel less capable.",
+         "they may feel less capable."),
+        ("我爸爸做手术，我在医院陪了他五天，",
+         "My father had surgery, and I stayed with him for five days.",
+         "My father had surgery, and I stayed with him for six days.",
+         "and I stayed with him for six days."),
+    ]
+    for (sourceText, draft, revised, tail) in cases {
+        var queue = ReadingSubtitleQueue(compact: true)
+        queue.reset(targetLanguage: "en")
+        queue.observe(["type": "caption_preview", "after_sentence_id": "", "preview_source": sourceText,
+                       "translation": draft], now: 1)
+        assert(queue.advance(now: 1) && queue.text == draft)
+        let deadline = queue.deadline
+        queue.observe(["type": "sentence_committed", "sentence_id": "row", "revision": 1,
+                       "text": sourceText + "接下来继续。"], now: 1.5)
+        queue.observe(translated("row", revised), now: 1.6)
+        assert(!queue.advance(now: deadline - 0.01) && queue.text == draft)
+        assert(queue.advance(now: deadline) && queue.text == tail)
+    }
+}
+
+private func checkIndependentCaptionClauses() {
+    let head = "My father had surgery, and I stayed with him in the hospital for five days."
+    let tail = "During that close care, I could understand his feelings as a patient."
+    let headSource = "我爸爸做手术，我在医院陪了他五天，"
+    let fullSource = headSource + "在近身陪护时，我就可以体会他作为一个病人的心，"
+    func seed(anchor: String) -> [String: Any] {
+        ["type": "caption_preview", "after_sentence_id": anchor, "preview_source": headSource, "translation": head]
+    }
+    func extensionEvent(anchor: String) -> [String: Any] {
+        ["type": "caption_preview", "after_sentence_id": anchor, "preview_source": fullSource,
+         "preview_base_source": headSource, "translation": head + " " + tail]
+    }
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(source("older"), now: 0)
+    queue.observe(translated("older", "We can understand the feelings of our elderly parents."), now: 0)
+    assert(queue.advance(now: 0.5))
+    let priorDeadline = queue.deadline
+    queue.observe(seed(anchor: "older"), now: 1)
+    queue.observe(extensionEvent(anchor: "older"), now: 1.1)
+    assert(queue.advance(now: priorDeadline) && queue.text == head)
+    let headDeadline = queue.deadline
+    assert(queue.advance(now: headDeadline) && queue.text == tail)
+    queue.observe(["type": "sentence_committed", "text": fullSource, "sentence_id": "hospital", "revision": 1],
+                  now: headDeadline + 0.1)
+    queue.observe(translated("hospital", head + " " + tail), now: headDeadline + 0.2)
+    assert(!queue.advance(now: queue.deadline) && queue.text == tail && queue.pendingCount == 0)
+
+    queue.reset()
+    queue.observe(seed(anchor: ""), now: 0)
+    assert(queue.advance(now: 0) && queue.text == head)
+    let deadline = queue.deadline
+    queue.observe(["type": "sentence_committed", "text": fullSource, "sentence_id": "hospital", "revision": 1,
+                   "caption_continuation": extensionEvent(anchor: "")], now: deadline)
+    assert(queue.advance(now: deadline) && queue.text == tail)
+    queue.observe(translated("hospital", head + " " + tail), now: deadline + 0.2)
+    assert(!queue.advance(now: queue.deadline) && queue.pendingCount == 0)
+}
+
+private func checkEnglishConditionAndResultShareAReadingTurn() {
+    let condition = "If you are responsible for caring for your elderly parents…"
+    let outcome = "You can understand their hearts."
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(source("condition"), now: 0)
+    queue.observe(translated("condition", condition), now: 0.1)
+    queue.observe(source("result"), now: 0.2)
+    queue.observe(translated("result", outcome), now: 0.3)
+    assert(queue.advance(now: 1) && queue.text == condition + " " + outcome)
+    assert(queue.references.map(\.id) == ["condition", "result"] && queue.deadline - 1 >= 3)
+    assert(!queue.advance(now: queue.deadline) && queue.pendingCount == 0)
+}
+
+private func checkCaptionSourceCoverage() {
+    let prefix = "如果你照顾年迈的父母，你就可以体会他们的心"
+    let next = "我爸爸做手术，我在医院陪了他五天。"
+    let preview = "When you care for your elderly parents, you can understand their feelings."
+    let rephrased = "If you look after aging parents, you can empathize with them."
+    let tail = "I stayed with my father for five days after his surgery."
+    func prepared(_ sourceText: String) -> ReadingSubtitleQueue {
+        var queue = ReadingSubtitleQueue(compact: true)
+        queue.reset(targetLanguage: "en")
+        queue.observe(["type": "caption_preview", "after_sentence_id": "", "translation": preview,
+                       "preview_source": prefix], now: 0)
+        assert(queue.advance(now: 0))
+        queue.observe(["type": "sentence_committed", "sentence_id": "bound", "revision": 1,
+                       "text": sourceText], now: 0.3)
+        return queue
+    }
+    var queue = prepared(prefix + "。")
+    var final = translated("bound", rephrased)
+    final["caption_prefix"] = prefix
+    final["caption_tail_expected"] = false
+    queue.observe(final, now: 0.5)
+    assert(!queue.advance(now: queue.deadline) && queue.pendingCount == 0)
+
+    queue = prepared(prefix + next)
+    final["translation"] = rephrased + " " + tail
+    final["caption_tail_expected"] = true
+    queue.observe(final, now: 0.5)
+    queue.observe(["type": "caption_tail", "sentence_id": "bound", "revision": 2,
+                   "caption_prefix": prefix, "translation": "Stale text."], now: 0.7)
+    assert(queue.text == preview)
+    queue.observe(["type": "caption_tail", "sentence_id": "bound", "revision": 1,
+                   "caption_prefix": prefix, "translation": tail], now: 0.8)
+    assert(queue.advance(now: queue.deadline) && queue.text == tail)
+
+    queue = prepared(prefix + next)
+    queue.observe(final, now: 0.5)
+    assert(queue.advance(now: queue.deadline) && queue.text.hasPrefix(rephrased))
+
+    let independent = "After the operation my father had to stay in hospital for several days. I visited him each morning and tried to understand how he felt as a patient."
+    let complete = prefix + next + "我可以体会他作为一个病人的心。"
+    queue.reset()
+    queue.observe(["type": "caption_preview", "after_sentence_id": "", "translation": preview,
+                   "preview_source": prefix], now: 0)
+    assert(queue.advance(now: 0) && queue.text == preview)
+    queue.observe(["type": "caption_preview", "after_sentence_id": "", "translation": preview + " " + independent,
+                   "preview_source": complete, "preview_base_source": prefix], now: 0.5)
+    let end = queue.deadline
+    assert(queue.advance(now: end) && queue.text != preview)
+    var newPages = [queue.text]
+    queue.observe(["type": "sentence_committed", "sentence_id": "bound", "revision": 1,
+                   "text": complete], now: end + 0.1)
+    var covered = translated("bound", rephrased + " " + independent)
+    covered["caption_prefix"] = complete
+    covered["caption_tail_expected"] = false
+    queue.observe(covered, now: end + 0.2)
+    while queue.advance(now: queue.deadline) { newPages.append(queue.text) }
+    assert(newPages.joined(separator: " ") == independent && queue.pendingCount == 0)
+
+    queue.reset()
+    queue.observe(["type": "caption_preview", "after_sentence_id": "", "translation": preview,
+                   "preview_source": prefix], now: 0)
+    assert(queue.advance(now: 0) && queue.text == preview)
+    queue.observe(["type": "caption_preview", "after_sentence_id": "", "translation": preview + " " + tail,
+                   "preview_source": prefix + next, "preview_base_source": prefix], now: 0.5)
+    assert(queue.advance(now: queue.deadline) && queue.text == tail)
+    let corrected = "His surgery was postponed until the following week."
+    queue.observe(["type": "sentence_committed", "sentence_id": "bound", "revision": 1,
+                   "text": prefix + "我爸爸的手术推迟到下一周。"], now: queue.deadline - 0.5)
+    var correction = translated("bound", rephrased + " " + corrected)
+    correction["caption_prefix"] = prefix
+    correction["caption_tail_translation"] = corrected
+    queue.observe(correction, now: queue.deadline - 0.4)
+    assert(queue.advance(now: queue.deadline) && queue.text == corrected)
+    assert(!queue.advance(now: queue.deadline) && queue.pendingCount == 0)
+}
+
+private func checkCaptionContinuityWithSeveralPendingRows() {
+    let prefix = "如果你照顾年迈的父母，你就可以体会他们的心"
+    let canonical = "如果你照顾年迈的父母，你就可以体会，他们的心，"
+    let first = "If you care for your elderly parents, you can understand their feelings."
+    let second = "Looking after elderly parents helps you understand how they feel."
+    let tail = "My father needed surgery and spent five days in hospital."
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(source("older"), now: 0)
+    queue.observe(["type": "caption_preview", "after_sentence_id": "older",
+                   "preview_source": prefix, "translation": first], now: 0.4)
+    assert(queue.advance(now: 0.4) && queue.text == first)
+    queue.observe(["type": "sentence_committed", "sentence_id": "first-pass", "revision": 1,
+                   "text": canonical + "我爸爸需要手术，住院五天。"], now: 1)
+    queue.observe(["type": "caption_preview", "after_sentence_id": "first-pass",
+                   "preview_source": prefix, "translation": second], now: 1.2)
+    assert(queue.advance(now: queue.deadline) && queue.text == second,
+           "A new occurrence of the same audio has its own reading turn")
+    queue.observe(["type": "sentence_committed", "sentence_id": "second-pass", "revision": 1,
+                   "text": canonical], now: queue.deadline - 0.5)
+    var final = translated("first-pass", "If you look after aging parents, you can empathize with them. " + tail)
+    final["caption_prefix"] = canonical
+    final["caption_tail_translation"] = tail
+    queue.observe(final, now: queue.deadline - 0.4)
+    var repeated = translated("second-pass", "If you look after aging parents, you can empathize with them.")
+    repeated["caption_prefix"] = canonical
+    repeated["caption_tail_expected"] = false
+    queue.observe(repeated, now: queue.deadline - 0.3)
+    queue.observe(translated("older", "This is the earlier translation."), now: queue.deadline - 0.2)
+    var displayed: [String] = []
+    while queue.advance(now: queue.deadline) { displayed.append(queue.text) }
+    assert(displayed.joined(separator: " ") == "This is the earlier translation. " + tail)
+    assert(queue.pendingCount == 0)
+}
+
 private func checkLanguageTimingAndCoverage() {
     let samples = ["en": "Don't split 'quoted words' here.", "fr": "L’homme n’est pas encore arrivé.",
                    "es": "Esta es una frase completa.", "it": "Questa è una frase completa.",
@@ -672,6 +963,13 @@ private func checkEnglishPendingFontReflow() {
 @main struct ReadingSubtitleChecks {
     static func main() {
         checkLiveTranslationPreview()
+        checkEnglishCaptionContinuity()
+        checkProgressiveEnglishPreview()
+        checkEnglishOpeningCoverage()
+        checkIndependentCaptionClauses()
+        checkEnglishConditionAndResultShareAReadingTurn()
+        checkCaptionSourceCoverage()
+        checkCaptionContinuityWithSeveralPendingRows()
         checkSupersededPresentationOnly()
         checkReplacementFallbackAndEpochs()
         checkCanonicalSourceRebuilds()

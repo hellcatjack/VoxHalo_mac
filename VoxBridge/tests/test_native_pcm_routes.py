@@ -24,6 +24,43 @@ def test_feedback_expires_and_does_not_use_unplayed_server_estimates():
     assert feedback.snapshot('one') == []
 
 
+def test_native_backlog_counts_scheduled_and_unreceived_audio_once():
+    from voxbridge.tts.native_routes import NativePlaybackFeedback
+    from voxbridge.tts.pcm import NativePCMBuffer
+
+    now = [10.0]
+    feedback = NativePlaybackFeedback(clock=lambda: now[0])
+    pcm = NativePCMBuffer(max_chunks=2)
+    pcm.reset("one")
+    def append_audio(order):
+        pcm.append(pcm=bytes(48_000), sentence_id=str(order), revision=1,
+                   source_order=order, index=0, count=1, text="一句话。")
+
+    append_audio(1)
+    append_audio(2)
+    feedback.update("native", epoch="one", received_seq=1, played_seq=0,
+                    buffered_ms=750, playing=True)
+    feedback.update("other-epoch", epoch="old", received_seq=0, played_seq=0,
+                    buffered_ms=5000, playing=False)
+    assert feedback.unplayed_duration_ms(pcm) == 1750
+    now[0] = 10.25
+    assert feedback.unplayed_duration_ms(pcm) == 1500
+    feedback.update("native", epoch="one", received_seq=2, played_seq=1,
+                    buffered_ms=750, playing=False)
+    now[0] = 10.5
+    assert feedback.unplayed_duration_ms(pcm) == 750
+    append_audio(3)
+    append_audio(4)
+    assert feedback.unplayed_duration_ms(pcm) == 2750
+    append_audio(5)
+    assert feedback.unplayed_duration_ms(pcm) is None
+    feedback.update("native", epoch="one", received_seq=5, played_seq=5,
+                    buffered_ms=0, playing=False)
+    assert feedback.unplayed_duration_ms(pcm) == 0
+    now[0] += 2
+    assert feedback.unplayed_duration_ms(pcm) is None
+
+
 def test_expired_feedback_cannot_shorten_release_on_translation_completion():
     from voxbridge.tts.native_routes import NativePlaybackFeedback
     from voxbridge.tts.jobs import RevisionStableTTSBuffer

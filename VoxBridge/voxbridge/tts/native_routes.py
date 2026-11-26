@@ -11,6 +11,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .hls import HLSListenerCapacityExceeded, HLSUnavailable
+from .pcm import NativePCMBuffer, PCMError
 
 
 class NativePlaybackFeedback:
@@ -67,6 +68,19 @@ class NativePlaybackFeedback:
                      feedback_age_ms=round((now - value['at']) * 1000))
                 for value in self.entries.values()
                 if value['epoch'] == epoch and now - value['at'] < 2]
+
+    def unplayed_duration_ms(self, pcm: NativePCMBuffer) -> int | None:
+        backlogs = []
+        for value in self.snapshot(pcm.epoch):
+            try:
+                unreceived_ms = pcm.unreceived_duration_ms(value['received_seq'], pcm.epoch)
+            except PCMError:
+                continue
+            scheduled_ms = value['buffered_ms']
+            if value['playing']:
+                scheduled_ms = max(0, scheduled_ms - value['feedback_age_ms'])
+            backlogs.append(round(scheduled_ms) + unreceived_ms)
+        return max(backlogs, default=None)
 
 
 def register_native_pcm_routes(app, *, token: str, owner_key, validate_listener) -> None:

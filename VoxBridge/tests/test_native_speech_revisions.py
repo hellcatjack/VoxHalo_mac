@@ -417,3 +417,66 @@ def test_early_pcm_late_extension_survives_final_drain(monkeypatch, tmp_path, fo
                 assert extra not in speech
             assert speech.count(tail) == 1
             assert app.state.speech_diagnostics() == []
+
+
+def test_chinese_to_english_recovers_tail_after_edit_to_already_spoken_source(monkeypatch, tmp_path):
+    spoken = '我们根据上周大家同意的安排开始工作经过这几天的准备和反复检查最后终于能确定他们已经把那座城墙修好了。'
+    added = '接下来还要继续修理北边的大门。'
+    revised = spoken[:-1].replace('那座', '这座') + added
+    following = '后续的工作计划将由施工队提交说明。'
+
+    class ASR(_FakeASR):
+        source = spoken
+
+        def streaming_transcribe(self, wav, state):
+            state.chunk_id = getattr(state, 'chunk_id', 0) + 1
+            state.language = 'Chinese'
+            state.text = self.source + following
+            return state
+
+        def finish_streaming_transcribe(self, state):
+            return state
+
+    class Synthesizer:
+        def synthesize(self, text, language, **kwargs):
+            return SynthesizedAudio(_silent_wav_bytes(), sample_rate=24000, duration_ms=250)
+
+    monkeypatch.setenv('VOXBRIDGE_NATIVE_CONTROL_TOKEN', 'chinese-extension-test')
+    args = _args()
+    args.native_console = args.tts_native_pcm = args.tts_stream_chunks = True
+    args.segment_final_redecode = args.final_redecode_on_stop = False
+    args.tts_revision_stable_sec = args.tts_latest_revision_grace_sec = 0
+    args.tts_hls_root_dir = str(tmp_path)
+    args.tts_hls_encoder_factory = FakeEncoder
+    asr = ASR()
+    app = _create_app(args, asr, translator=_FakeTranslator(), tts_synthesizer=Synthesizer())
+    headers = {'X-VoxBridge-Control-Token': 'chinese-extension-test'}
+    with TestClient(app, client=('127.0.0.1', 1234)) as client:
+        client.get('/api/native/tts/native-chinese-extension/pcm?after=-1', headers=headers).raise_for_status()
+        with client.websocket_connect('/ws', headers=headers) as ws:
+            ws.receive_json()
+            ws.send_json({'type': 'start', 'translation_direction': 'zh2en'})
+            _receive_until_type(ws, 'started')
+            frame = np.array([0, 1000, -1000], dtype='<i2').tobytes()
+            for _ in range(3):
+                ws.send_bytes(frame)
+                _receive_until_type(ws, 'partial')
+            deadline = time.monotonic() + 2
+            while not any(spoken in c['text'] for c in app.state.tts_hls.native_pcm.snapshot(0)['chunks']):
+                if time.monotonic() >= deadline:
+                    pytest.fail('The original sentence must already have entered PCM')
+                time.sleep(.01)
+
+            asr.source = revised
+            for _ in range(3):
+                ws.send_bytes(frame)
+                _receive_until_type(ws, 'partial')
+            ws.send_json({'type': 'finish', 'mode': 'stop'})
+            _receive_until_type(ws, 'final', max_steps=100)
+            client.portal.call(app.state.tts_hls.wait_idle)
+
+            rows = app.state.monitor.snapshot()['rows']
+            assert any(row['source'] == revised and row['translation'] for row in rows), rows
+            speech = ' '.join(c['text'] for c in app.state.tts_hls.native_pcm.snapshot(0)['chunks'])
+            assert speech.count(spoken) == speech.count(following) == speech.count(added) == 1, speech
+            assert revised not in speech

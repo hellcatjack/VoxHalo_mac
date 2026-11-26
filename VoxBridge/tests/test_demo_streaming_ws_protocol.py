@@ -8188,7 +8188,7 @@ def test_speculative_translation_consumed_only_at_formal_commit(tmp_path, monkey
 
 
 @pytest.mark.parametrize(("direction", "language", "draft_source", "target", "draft_text"), [
-    ("zh2en", "Chinese", "我们明天上午讨论之后，", "English", "After our discussion tomorrow morning"),
+    ("zh2en", "Chinese", "我们明天上午会讨论这个方案，", "English", "We will discuss this proposal tomorrow morning,"),
     ("en2zh", "English", "After reviewing the numbers,", "Chinese", "看完这些数字之后"),
 ])
 def test_native_preview_precedes_sentence_commit_without_entering_formal_translation(
@@ -8197,10 +8197,12 @@ def test_native_preview_precedes_sentence_commit_without_entering_formal_transla
     monkeypatch.setenv("VOXBRIDGE_NATIVE_CONTROL_TOKEN", "test-token")
     full_source = draft_source + ("再决定下一步。" if language == "Chinese" else " we will decide what to do.")
     requested = threading.Event()
+    chunk_sizes = []
 
     class FragmentASR(_FakeASR):
         def init_streaming_state(self, **kwargs):
             state = super().init_streaming_state(**kwargs)
+            chunk_sizes.append(kwargs["chunk_size_sec"])
             state.chunk_id = 0
             return state
 
@@ -8225,21 +8227,36 @@ def test_native_preview_precedes_sentence_commit_without_entering_formal_transla
     translator = Translator()
     args = _args()
     args.native_console = True
+    args.backend = "mlx"
+    args.native_zh2en_chunk_size_sec = 1.25
     app = _create_app(args, FragmentASR(), translator)
     client = TestClient(app, client=("127.0.0.1", 12345))
     with client.websocket_connect("/ws", headers={"X-VoxBridge-Control-Token": "test-token"}) as ws:
         assert ws.receive_json()["type"] == "ready"
         ws.send_json({"type": "start", "translation_direction": direction, "caption_preview": True})
         _receive_until_type(ws, "started")
+        assert chunk_sizes[-1] == (1.25 if direction == "zh2en" else args.chunk_size_sec)
         ws.send_bytes(np.full(3200, 1000, dtype="<i2").tobytes())
         _receive_until_type(ws, "partial")
-        assert not requested.is_set()
+        if direction == "zh2en":
+            assert requested.wait(2)
+        else:
+            assert not requested.is_set()
+        ws.send_json({"type": "ping"})
+        for _ in range(40):
+            response = ws.receive_json()
+            assert response["type"] != "caption_preview"
+            if response["type"] == "pong":
+                break
+        else:
+            pytest.fail("ping did not finish before the next audio chunk")
         ws.send_bytes(np.full(3200, 1000, dtype="<i2").tobytes())
         _receive_until_type(ws, "partial")
         assert requested.wait(2)
         preview = ws.receive_json()
         assert preview["type"] == "caption_preview"
         assert preview["translation"] == draft_text and preview["after_sentence_id"] == ""
+        assert preview["preview_source"] == draft_source
         assert translator.calls == []
         assert client.get("/api/monitor/state").json()["rows"] == []
         ws.send_json({"type": "finish", "mode": "stop"})

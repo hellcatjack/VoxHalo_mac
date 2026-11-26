@@ -43,6 +43,8 @@ def test_macos_launch_profile_is_local_and_pinned():
     assert app[app.index('--port')+1] == '8024'
     assert app[app.index('--backend')+1] == 'mlx'
     assert app[app.index('--mlx-precision')+1] == 'int8'
+    assert app[app.index('--chunk-size-sec')+1] == '2'
+    assert app[app.index('--native-zh2en-chunk-size-sec')+1] == '1.25'
     assert app[app.index('--translation-api-base-url')+1] == 'http://127.0.0.1:8876'
     assert app[app.index('--translation-sampling-profile')+1] == 'mac-verified'
     assert '--enable-tts' in app and '--enable-translation' in app

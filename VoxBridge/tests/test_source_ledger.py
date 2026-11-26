@@ -55,6 +55,22 @@ def test_real_chinese_repeats_keep_distinct_occurrences():
     assert ledger.covered_by(b) is None
 
 
+def test_rollover_omits_only_the_already_registered_occurrence():
+    ledger = SourceLedger()
+    row = "担当他们的软弱，以爱爱心，来遮盖他们。"
+    carry = "爱心，来遮盖他们。"
+    ledger.observe(row, 1, raw=row)
+    ledger.bind("last", 1, ledger.spans([row])[0])
+    assert ledger.registered_carry(carry, "last", 1, row)
+    assert not ledger.registered_carry(carry, "last", 2, row)
+    assert not ledger.registered_carry(carry + "还有其他人。", "last", 1, row)
+    assert not ledger.registered_carry("他们的人格。", "last", 1, "我们要维护他们的。")
+    ledger.observe(row + carry, 1, raw=row + carry)
+    assert not ledger.registered_carry(carry, "last", 1, row)
+    ledger.observe(carry, 2, raw=carry)
+    assert not ledger.registered_carry(carry, "last", 1, row)
+
+
 def test_repaired_sentence_confirms_from_real_decodes_without_literal_substring():
     raw = "We don't need any. Any new regulations. The current laws already cover these concerns."
     units, tail = _split_translation_units_and_tail(raw)
@@ -104,6 +120,36 @@ def test_binding_retirement_is_revision_fenced_and_preserves_published_history()
     assert ledger.overlapping_bindings(span) == []
     assert ledger.overlaps_published(span)
     assert ledger.covered_by(span) == 'first'
+
+
+def test_spoken_chinese_revision_recovers_only_new_tail_after_an_internal_asr_edit():
+    from voxbridge.streaming.spoken_source import unspoken_extension
+
+    ledger = SourceLedger()
+    previous = '尼希米看见工人已经把东边的整段城墙修好了。'
+    revised = '尼希米看见众人已经把东边的整段城墙修好了，还要继续修理北门。'
+    ledger.observe(previous, 1, raw=previous)
+    ledger.bind('sentence', 1, ledger.spans([previous])[0])
+    ledger.publish('sentence', 1)
+    ledger.observe(revised, 1, raw=revised)
+    ledger.bind('sentence', 2, ledger.spans([revised])[0])
+
+    tail = '还要继续修理北门。'
+    assert unspoken_extension(previous, revised) == ''  # The old text-only path lost the tail.
+    start = ledger.revised_tail_start('sentence', 2, previous, revised)
+    assert start == revised.index(tail)
+    assert unspoken_extension(previous, revised, revised_tail_start=start) == tail
+    assert unspoken_extension(previous, revised, [tail], revised_tail_start=start) == ''
+
+    second = revised + '然后查看工程记录。'
+    ledger.publish('sentence', 2)  # The supplement committed before the next edit.
+    ledger.observe(second, 1, raw=second)
+    ledger.bind('sentence', 3, ledger.spans([second])[0])
+    assert ledger.revised_tail_start('sentence', 3, revised, second) == second.index('然后')
+
+    ledger.observe(revised, 2, raw=revised)  # Repeated words are a new occurrence.
+    ledger.bind('sentence', 4, ledger.spans([revised])[0])
+    assert ledger.revised_tail_start('sentence', 4, revised, revised) is None
 
 
 def test_dependency_repairs_preserve_subject_and_object_in_evaluation_cases():

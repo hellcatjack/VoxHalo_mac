@@ -122,6 +122,8 @@ extension NSColor {
 
 @MainActor final class SubtitleTextView: NSView {
     private var text = ""
+    private let tracePaint = ProcessInfo.processInfo.environment["LINGOCOVE_TRACE_SUBTITLE_PAINT"] == "1"
+    private var tracedText = ""
     private var preferences = SubtitlePreferences()
     #if NATIVE_PLAYBACK_TESTING
     struct PaintObservation {
@@ -150,6 +152,7 @@ extension NSColor {
         let normalized = preferences.normalized()
         guard self.text != text || self.preferences != normalized else { return }
         self.text = text; self.preferences = normalized
+        if text.isEmpty { tracedText = "" }
         setAccessibilityElement(true); setAccessibilityRole(.staticText)
         setAccessibilityLabel(NativeLocalization.text("翻译字幕")); setAccessibilityValue(text)
         needsDisplay = true
@@ -177,6 +180,12 @@ extension NSColor {
         }
         CTFrameDraw(frame, context)
         context.restoreGState()
+        if tracePaint, window?.isVisible == true, tracedText != text {
+            let range = CTFrameGetVisibleStringRange(frame)
+            let visible = (text as NSString).substring(with: NSRange(location: range.location, length: range.length))
+            NSLog("caption_painted %@ | %@", String(Date().timeIntervalSince1970), visible)
+            tracedText = text
+        }
         #if NATIVE_PLAYBACK_TESTING
         let range = CTFrameGetVisibleStringRange(frame)
         let source = text as NSString
