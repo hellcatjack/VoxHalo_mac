@@ -1,59 +1,48 @@
 # Reading-first subtitles
 
 The native App offers **Reading first** (default) and **Follow speech** in Subtitle
-settings. **Build 43 makes Reading first independent of audio**: a completed
-translation can enter the visible queue before speech confirmation, synthesis or
-PCM delivery. Follow speech still shows the currently audible segment. Models,
-prompts, speech confirmation, synthesis speed, PCM bytes and playback scheduling
-are unchanged. The local web listener retains playback-synchronized captions.
+settings. Reading first can show translated fragments while the speaker continues.
+Completed translations enter an independent reading queue. Follow speech and the
+local web listener show the currently audible segment.
 
-The overlay contains translations only, with no mode labels, operational notices,
-or partial token generation. It uses the selected fixed font size, natural
-wrapping, and spaces in place of source newlines. The App separately shows the
-text currently being spoken. A later completed correction can therefore differ
-from an older translation still being spoken; choose Follow speech when matching
-the audible wording matters more than seeing a completed translation early.
+The overlay uses the selected fixed font size and natural wrapping. It shows one
+short reading turn at a time. Visible words and line breaks stay fixed until
+the next turn. The App separately shows the text currently being spoken.
+
+## Live translation previews
+
+- A readable source clause can be translated before the end of a sentence.
+  Its punctuation and wording must agree across two advancing ASR decodes.
+  Commas, semicolons and sentence punctuation can qualify. Punctuation inside
+  numbers, periods after common abbreviations and commas inside common
+  dependent phrases are excluded. Tiny translated fragments are held for the
+  complete translation.
+- The local translator uses its idle inference slot for one short preview per
+  source position. Formal translation takes priority and cancels in-flight work.
+  A preview waits for space on the reading clock, takes its own turn and stays
+  fixed while visible. Older unread complete translations keep their place.
+  A confirmed translation that arrives before its preview is shown takes
+  priority. Only formal translation events reach speech and Reading history.
+
+The design follows research on readable clause boundaries and stable on-screen
+text. [Simultaneous Speech Translation for Live Subtitling](https://aclanthology.org/2021.mtsummit-asltrw.4/) · [Modeling and improving text stability in live captions](https://research.google/blog/modeling-and-improving-text-stability-in-live-captions/)
 
 ## Independent reading clock
 
 - A complete, stable `sentence_translation` for the current source revision is
-  eligible immediately, with no dependency on accepted or playing PCM. An
-  isolated very short result can gather neighboring text for **at most 0.4 s
-  from translation completion**; time already spent waiting counts toward that
-  bound. End of input removes this gathering delay.
-- Screens follow source insertion order. A later completed result cannot jump
-  over an earlier unresolved translation. Already-ready neighboring rows share
-  a screen at the next boundary if they fit at the selected font size and within
-  the target language's reading budget. Sharing charges the minimum once.
-- Once shown, the entire screen's text, identity, layout and deadline stay fixed.
-  Incoming text is not appended mid-screen. After its reading time ends, the
-  next ready screen replaces it on the independent 50 ms presentation clock;
-  there is no wait for an audio chunk or another silent interval.
-- Chinese and Japanese use `max(3, reading_work / 1.35)` seconds, plus a bounded
-  dense-text allowance. Reading work is `CJK characters / 6 + other-script
-  words / 3`. The allowance is 0.05 s per Han character beyond 24, capped at
-  1.5 s per screen; Japanese also counts kana. It is charged once to the whole
-  screen. **Speech speed and queued audio do not shorten these budgets.**
-- Chinese/Japanese screens have a work limit of 10 (approximately **60 pure
-  CJK characters**), in addition to actual fixed-font geometry. A pure Chinese
-  30-character screen gets about 4.0 s, 40 gets about 5.7 s and 60 about 8.9 s.
-  Longer translations continue on complete subsequent pages without truncation.
-- English uses `max(3.5, 0.2 + words / 4.8)` seconds from build 44: a fixed
-  288-word/minute pace with a **3.5-second minimum**, independent of speech or
-  backlog. Its work limit remains approximately 36 words. Complete-word
-  boundaries and balanced long-text pages avoid charging a full minimum hold
-  for a tiny leftover tail. If actual font geometry subdivides those pages, the
-  queue compares semantic-first and physical-first candidates and keeps the
-  lower total reading cost, after lossless-content, fit and word-limit checks.
-  Current visible screens keep their entire budget. An identical translation
-  retains its actual read cursor even after manual font reflow, including a
-  completed fallback waiting for a newer source revision's translation.
-- French, Spanish, Italian, Portuguese and Hindi keep their separate original
-  `max(3.5, 0.5 + words / 3.5)` policies and approximately 36-word screen limit.
-  Mixed CJK consumes proportional reading work; contractions remain one word
-  and Indic combining marks stay with their word. These are engineering defaults,
-  not a universal reading-speed claim. Large fonts, slower readers or sustained
-  input above visual capacity can still require a reading queue.
+  eligible independently of accepted or playing PCM. An isolated very short
+  result can gather neighboring text for **up to 0.4 seconds from translation
+  completion**. End of input removes this gathering delay.
+- Reading turns follow source insertion order. Up to two adjacent, already-ready
+  short units can share the next turn. There is no late append to visible text.
+- One screen holds up to **18 words or 36 CJK characters** in the selected font.
+  Mixed text is budgeted as `CJK characters / 6 + other-script words / 3`, up to
+  six units. All turns get at least **2.4 seconds**.
+- Chinese and Japanese use `max(2.4, reading_work / 1.35)` seconds, with 0.05 s
+  per Han character or Japanese kana beyond 24, capped at 1.5 s of extra time.
+  English uses `max(2.4, 0.2 + words / 4.8)` seconds. French, Spanish, Italian,
+  Portuguese and Hindi use `max(2.4, 0.5 + words / 3.5)` seconds. These are
+  engineering defaults. Speech speed and queued audio do not change the clock.
 - Long text paginates at punctuation/word boundaries and the user's actual font
   and display capacity. Every non-whitespace character is retained. There is no
   automatic font shrinking, inserted newline or second overlay pagination timer.

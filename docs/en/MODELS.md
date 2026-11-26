@@ -2,15 +2,15 @@
 
 **English** | [简体中文](../zh-CN/MODELS.md) · [Project README](../../README.md) · [Installation](INSTALLATION.md)
 
-This document describes App 1.6.0/build 18. The authoritative settings are in [macos_service.py](../../VoxBridge/tools/macos_service.py), the [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py), and the [asset manifest](../../scripts/runtime-assets.json). It describes this implementation, not every capability advertised by the upstream model families.
+This document describes LingoCove's local runtime. See the launcher, ASR adapter, and manifest for the exact settings. [macos_service.py](../../VoxBridge/tools/macos_service.py) · [MLX adapter](../../VoxBridge/voxbridge/asr/mlx_backend.py) · [Asset manifest](../../scripts/runtime-assets.json)
 
 ## 1. Qwen3-ASR 0.6B: speech recognition
 
 - **Source:** [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B), the smaller 0.6B-named variant of the Qwen3-ASR family. The installed system does not use the 1.7B variant.
-- **Runtime:** MLX 0.32.2, mlx-metal 0.32.2, and [mlx-qwen3-asr 0.4.0](https://github.com/moona3k/mlx-qwen3-asr), using the Apple GPU through Metal.
+- **Runtime:** MLX 0.32.2, mlx-metal 0.32.2, and the [mlx-qwen3-asr 0.4.4 streaming API](https://pypi.org/project/mlx-qwen3-asr/0.4.4/), using the Apple GPU through Metal.
 - **Precision:** the original local checkpoint is loaded with FP16 dtype, then MLX quantizes eligible weights to 8 bits with group size 64. Activations and unquantized layers remain floating point. The approximately 1.88 GB downloaded checkpoint is not an already packed INT8 file; startup conversion and temporary allocations also require memory.
 - **Input:** mono 16 kHz audio. The native client sends 100 ms frames; recognition is triggered at approximately 2-second intervals. The default boundary policy uses a 12-second threshold, 0.8-second candidate silence, and 0.32-second overlap, with protection for incomplete phrases and final redecoding.
-- **Streaming:** bounded-window repeated decoding plus source revisions; no claim of upstream vLLM streaming or fully incremental KV-cache reuse. Initial text can change before it is committed.
+- **Streaming.** The MLX Session reuses the encoder output and decoder cache for completed audio blocks. VoxBridge controls segment boundaries and flushes the remaining PCM at pauses and when capture stops. During an active English phrase in Chinese speech, the hard cut can wait up to six additional seconds while drafts continue to update.
 - **Languages:** Chinese, English, Japanese, French, Spanish, Italian, Portuguese and Hindi. The selected source forces the corresponding Qwen language; any of the other seven can be the translation/speech target.
 - **Context:** optional ASR terms help names and specialist vocabulary; the native UI accepts at most 24 whitespace-separated entries, 160 characters combined. These terms do not replace the separate translation policy or guarantee correct recognition.
 

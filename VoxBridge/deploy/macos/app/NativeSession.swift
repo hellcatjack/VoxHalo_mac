@@ -92,7 +92,7 @@ enum HLSPlaybackGap {
     private(set) var translationText = ""
     private var subtitleState = CompletedSubtitleState()
     private var playbackSubtitle: SubtitlePlayback.Caption?
-    private var readingSubtitles = ReadingSubtitleQueue()
+    private var readingSubtitles = ReadingSubtitleQueue(compact: true)
     private(set) var subtitleHistory = SubtitleHistory()
     private var readingClock: Task<Void, Never>?
     var subtitleMode: SubtitlePreferences.Mode = .playback { didSet { onChange?() } }
@@ -274,7 +274,8 @@ enum HLSPlaybackGap {
             try await sendJSON(["type": "start", "asr_engine": "qwen3-asr",
                                 "translation_direction": selected.direction,
                                 "language": selected.languagePair.sourceLanguage,
-                                "asr_context_terms": selected.contextTerms, "tts_enabled": false], to: ws)
+                                "asr_context_terms": selected.contextTerms, "tts_enabled": false,
+                                "caption_preview": readingModeEnabled], to: ws)
             while true {
                 let event = try await receive(ws)
                 try requireCurrent(run)

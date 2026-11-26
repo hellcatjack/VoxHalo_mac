@@ -125,7 +125,7 @@ SIP/Gatekeeper，也不自动点击受保护的授权窗口。
 
 | 部分 | 本机设置 |
 |---|---|
-| ASR | Qwen3-ASR 0.6B；MLX0.32.2、mlx-qwen3-asr0.4.0；Metal GPU |
+| ASR | Qwen3-ASR 0.6B INT8；MLX 0.32.2、mlx-qwen3-asr 0.4.4 流式接口；Metal GPU |
 | 精度 | affine INT8 group64 权重；激活及未量化层 FP16 |
 | 流式方式 | 有界窗口重复识别，约2秒触发一次；接入 VoxBridge 原分段与 revision 协议，非原生缓存增量流式 |
 | 默认音频边界 | 12秒分段阈值，0.8秒静音候选，0.32秒重叠；保留原系统的未完句保护与最终复核 |

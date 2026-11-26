@@ -67,7 +67,7 @@ import Foundation
     assert(!session.advanceIndependentReadingForTesting(now: 100),
            "The MT event should publish its reading page without a second timer tick")
     let identity = session.subtitleIdentity, deadline = session.independentReadingDeadlineForTesting
-    assert(deadline >= 103 && !session.subtitleFollowsPlayback)
+    assert(deadline >= 102.4 && !session.subtitleFollowsPlayback)
     fixture.noAudio("completed MT, zero PCM")
     fixture.source("second", at: 100.1)
     fixture.translation("second", second, at: 100.1)
@@ -99,13 +99,14 @@ import Foundation
         }
         for fixture in [normal, fast] {
             fixture.translation("reading", text, at: 10)
-            assert(fixture.session.subtitleText == text)
+            let page = fixture.session.subtitleText
+            assert(!page.isEmpty && text.hasPrefix(page) && SubtitleReading.work(page) <= 6.000_001)
         }
         let normalEnd = normal.session.independentReadingDeadlineForTesting
         let fastEnd = fast.session.independentReadingDeadlineForTesting
         assert(abs(normalEnd - fastEnd) < 0.001,
                "TTS playback speed changed the independent reading deadline for \(direction.rawValue)")
-        assert(normalEnd > 13 && normal.session.subtitleText == fast.session.subtitleText)
+        assert(normalEnd >= 12.4 && normal.session.subtitleText == fast.session.subtitleText)
         normal.noAudio("slow speech feedback")
         fast.noAudio("fast speech feedback")
     }
@@ -113,7 +114,7 @@ import Foundation
 
 @MainActor private func hiddenCaptionsAndPlaybackMode() {
     let fixture = Fixture(), session = fixture.session
-    let first = "隐藏或切换字幕模式时，不能修改朗读，也不能消耗用户尚未获得的阅读时间。"
+    let first = "隐藏或切换字幕模式时，须保留足够的阅读时间。"
     let second = "字幕重新开启以后，下一句仍按照独立的阅读时钟显示。"
     fixture.source("first", at: 100); fixture.translation("first", first, at: 100)
     assert(session.subtitleText == first)

@@ -2,15 +2,15 @@
 
 [English](../en/MODELS.md) | **简体中文** · [项目首页](../../README.zh-CN.md) · [安装指南](INSTALLATION.md)
 
-本文对应 App 1.6.0/build 18。实际配置以 [macos_service.py](../../VoxBridge/tools/macos_service.py)、[MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py)和[资源清单](../../scripts/runtime-assets.json)为准。这里介绍本项目的实现，不代表上游模型系列的所有功能。
+本文介绍 LingoCove 的本地运行配置。具体设置参见启动脚本、识别适配器和资源清单。 [macos_service.py](../../VoxBridge/tools/macos_service.py) · [MLX 适配器](../../VoxBridge/voxbridge/asr/mlx_backend.py) · [资源清单](../../scripts/runtime-assets.json)
 
 ## 1. Qwen3-ASR 0.6B：语音识别
 
 - **来源：**[Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，Qwen3-ASR 系列中命名为 0.6B 的较小型号；当前系统不使用 1.7B 型号。
-- **运行时：**MLX 0.32.2、mlx-metal 0.32.2 和 [mlx-qwen3-asr 0.4.0](https://github.com/moona3k/mlx-qwen3-asr)，通过 Metal 使用 Apple GPU。
+- **运行时：**MLX 0.32.2、mlx-metal 0.32.2 和 [mlx-qwen3-asr 0.4.4 流式接口](https://pypi.org/project/mlx-qwen3-asr/0.4.4/)，通过 Metal 使用 Apple GPU。
 - **精度：**先以 FP16 dtype 加载本地原始检查点，再由 MLX 将适用权重量化为 8 bit，group size 为 64。激活及未量化层仍为浮点。下载的约 1.88 GB 检查点不是预先压好的 INT8 文件，启动转换和临时分配也需要内存。
 - **输入：**16 kHz 单声道音频；原生客户端每 100 ms 发送一帧，约两秒触发一次识别。默认采用 12 秒边界阈值、0.8 秒候选静音和 0.32 秒重叠，并保留未完句保护及最终重解码。
-- **流式方式：**有界窗口重复解码与原文修订；不宣称使用上游 vLLM 流式实现或完整增量 KV 缓存。原文提交前可能发生变化。
+- **流式方式。** MLX Session 复用完整音频块的编码结果和解码缓存。VoxBridge 管理切段，在停顿和结束传译时处理剩余音频。中文中的英文短语仍在继续时，强制切段最多延后 6 秒，流式结果继续更新。
 - **语言：**中文、英文、日语、法语、西班牙语、意大利语、葡萄牙语、印地语。所选源语言强制用于 Qwen 识别，其余七种均可作为翻译及朗读目标。
 - **提示词：**可填少量名称／专业术语；原生界面最多接受 24 项以空白分隔的词条，合计 160 字符。这些词条不替代独立翻译策略，也不保证识别正确。
 

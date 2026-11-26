@@ -1,9 +1,4 @@
-"""MLX Qwen3-ASR adapter for VoxBridge's existing streaming protocol.
-
-The MLX runtime performs repeated full-window decodes.  It intentionally does
-not use mlx-qwen3-asr's incremental cache because that path did not meet the
-quality baseline for this deployment.
-"""
+"""Adapt mlx-qwen3-asr's streaming Session to VoxBridge's segment lifecycle."""
 
 from __future__ import annotations
 
@@ -29,10 +24,8 @@ class MLXStreamingState:
     audio_accum: np.ndarray = field(
         default_factory=lambda: np.zeros((0,), dtype=np.float32)
     )
-    buffer: np.ndarray = field(
-        default_factory=lambda: np.zeros((0,), dtype=np.float32)
-    )
     unfixed: str = ""
+    stable_text: str = ""
     unfixed_chunk_num: int = 2
     unfixed_token_num: int = 5
     chunk_size_sec: float = 2.0
@@ -40,6 +33,12 @@ class MLXStreamingState:
     last_decoded_samples: int = 0
     chunk_id: int = 0
     _raw_decoded: str = ""
+    _native_state: Any = field(default=None, repr=False)
+    _fed_samples: int = 0
+
+    @property
+    def buffer(self) -> np.ndarray:
+        return self.audio_accum[self.last_decoded_samples:]
 
 
 @dataclass(frozen=True)
@@ -195,21 +194,52 @@ class MLXQwenASR:
             truncated=False,
         )
 
-    def _decode(self, state: MLXStreamingState) -> MLXStreamingState:
-        audio = np.asarray(state.audio_accum, dtype=np.float32).reshape(-1).copy()
-        result = self._executor.submit(
-            self._transcribe_owned,
-            audio,
-            state.context,
-            state.force_language,
-        ).result()
-        state.language = result.language
-        state.text = result.text
-        state._raw_decoded = result.text
-        state.unfixed = result.text
-        state.last_decoded_samples = int(audio.size)
-        state.buffer = np.zeros((0,), dtype=np.float32)
-        state.chunk_id += 1
+    def _stream_owned(
+        self, state: MLXStreamingState, audio: np.ndarray, finish: bool
+    ) -> Any:
+        with self.gpu_lock:
+            native = state._native_state
+            if native is None:
+                native = self._runtime.init_streaming(
+                    context=state.context,
+                    language=state.force_language,
+                    chunk_size_sec=state.decode_interval_samples / SAMPLE_RATE,
+                    unfixed_chunk_num=state.unfixed_chunk_num,
+                    unfixed_token_num=state.unfixed_token_num,
+                    max_new_tokens=self.max_new_tokens,
+                    # VoxBridge owns VAD, overlap and segment rotation. Keep the
+                    # SDK from committing a second, independent window boundary.
+                    max_context_sec=max(
+                        self.max_audio_samples, state.decode_interval_samples
+                    ) / SAMPLE_RATE,
+                )
+            if audio.size > state._fed_samples:
+                native = self._runtime.feed_audio(audio[state._fed_samples:], native)
+            if finish:
+                native = self._runtime.finish_streaming(native)
+            return native
+
+    def _decode(
+        self, state: MLXStreamingState, audio: np.ndarray, *, finish: bool = False
+    ) -> MLXStreamingState:
+        try:
+            native = self._executor.submit(self._stream_owned, state, audio, finish).result()
+        except Exception:
+            # SDK state is mutable. Rebuild it from retained PCM on a retry.
+            state._native_state = None
+            state._fed_samples = 0
+            raise
+        state._native_state = native
+        state._fed_samples = int(audio.size)
+        state.audio_accum = audio
+        state.last_decoded_samples = state._fed_samples - len(native.buffer)
+        if native.chunk_id or finish:
+            state.language = str(native.language or "")
+            state.text = str(native.text or "").strip()
+            state.stable_text = str(native.stable_text or "").strip()
+            state._raw_decoded = state.text
+            state.unfixed = state.text
+        state.chunk_id = int(native.chunk_id)
         return state
 
     def streaming_transcribe(
@@ -229,16 +259,14 @@ class MLXQwenASR:
                 "audio exceeds the configured maximum bounded window"
             )
 
-        state.audio_accum = np.concatenate((old_audio, samples))
-        state.buffer = np.concatenate(
-            (self._validate_audio_array(state.buffer), samples)
-        )
+        audio = np.concatenate((old_audio, samples))
         if (
             new_size - int(state.last_decoded_samples)
             < int(state.decode_interval_samples)
         ):
+            state.audio_accum = audio
             return state
-        return self._decode(state)
+        return self._decode(state, audio)
 
     def finish_streaming_transcribe(
         self,
@@ -248,8 +276,8 @@ class MLXQwenASR:
         audio = self._validate_audio_array(state.audio_accum)
         if audio.size > self.max_audio_samples:
             raise ValueError("audio exceeds the configured maximum bounded window")
-        if int(audio.size) > int(state.last_decoded_samples):
-            return self._decode(state)
+        if audio.size:
+            return self._decode(state, audio, finish=True)
         return state
 
     @staticmethod

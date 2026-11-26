@@ -43,6 +43,7 @@ def _build_translation_prompt(
     target_language: str,
     translation_direction: Optional[str] = None,
     strict_target_language: bool = False,
+    name_spellings: tuple[tuple[str, str], ...] = (),
 ) -> str:
     source = str(source_language or "Chinese")
     target = str(target_language or "English")
@@ -53,6 +54,11 @@ def _build_translation_prompt(
     if not legacy_pair:
         return recovery_translation_prompt(text, target, source_language=source)
     hint = terminology_hint(text, target)
+    if strict_target_language and name_spellings and _is_english_label(target):
+        hint += "\n".join(
+            f"原文中的专名“{name}”请用拉丁字母写作 {spelling}。"
+            for name, spelling in name_spellings
+        ) + "\n\n"
     if hint and not strict_target_language:
         # The documented short template avoids term lists interacting with the
         # long policy (which swapped subjects in the real Genesis replay).

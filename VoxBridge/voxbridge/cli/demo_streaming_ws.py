@@ -55,6 +55,7 @@ from voxbridge.monitor import MonitorState, MONITOR_HTML
 from voxbridge.asr import ASREngineRegistry, EngineBinding
 from voxbridge.asr.text import StablePrefixGate, split_unpunctuated_chinese
 from voxbridge.streaming.backpressure import QueueBackpressureController
+from voxbridge.streaming.caption_preview import CaptionPreview, Preview
 from voxbridge.streaming.context_schedule import (
     ContextSchedule,
     normalize_session_context_terms,
@@ -1100,6 +1101,13 @@ def _is_hard_cut_mid_speech(
         and bool(in_speech)
         and float(silence_ms) < max(0.0, float(vad_silence_ms))
     )
+
+
+def _chinese_asr_has_english_tail(text: str) -> bool:
+    spans = re.split(r"[\u3400-\u4dbf\u4e00-\u9fff]", str(text or ""))
+    # Ignore a single acronym or number after Chinese text. Keep a spoken
+    # English phrase in its acoustic context even if a draft added a period.
+    return len(spans) > 1 and len(re.findall(r"[A-Za-z]+", spans[-1])) >= 3
 
 
 def _sentence_text_quality_score(text: str) -> int:
@@ -2671,6 +2679,7 @@ def _create_app(
         infer_lock = engine_binding.infer_lock
         use_vllm_streaming = engine_binding.streaming
         capture_started = False
+        caption_preview: CaptionPreview | None = None
         session_force_language = _normalize_force_language(getattr(args, "force_language", None))
         session_context_terms: Optional[Tuple[str, ...]] = None
         state = None
@@ -4948,6 +4957,9 @@ def _create_app(
             )
             if current_item is None:
                 return ""
+            if caption_preview is not None:
+                caption_preview.cancel()
+
             async def compute_translation():
                 return await _translate_sentence_once(
                     sentence_text,
@@ -6536,6 +6548,26 @@ def _create_app(
                     ),
                 )
             if not cut_reason:
+                return
+
+            if (
+                engine_binding.id == "qwen3-asr"
+                and str(getattr(args, "backend", "") or "") == "mlx"
+                and translation_runtime.source_language == "Chinese"
+                and segment_age_ms < segment_policy.hard_cut_ms + 6000.0
+                and _is_hard_cut_mid_speech(
+                    reason=cut_reason,
+                    in_speech=bool(backend_vad.in_speech),
+                    silence_ms=float(signal.get("silence_ms", 0.0) or 0.0),
+                    vad_silence_ms=vad_silence_trigger_ms,
+                )
+                and _chinese_asr_has_english_tail(snapshot)
+            ):
+                # A reset here makes the Chinese-forced decoder start on
+                # isolated English audio. Continue decoding and publishing
+                # normal partials until the switch ends or the extension expires.
+                _trace_event("segment_cut_deferred", reason="english_tail_in_chinese",
+                             segment_id=int(segment_runtime.id), segment_age_ms=int(segment_age_ms))
                 return
 
             if (cut_reason == "vad_silence" and not buffered_speech_endpoint
@@ -8138,9 +8170,33 @@ def _create_app(
                             del confirmation_wait_keys[sid]
             return subtitle_state.tentative_tail
 
+        def _caption_anchor() -> str:
+            return str(subtitle_state.sentence_items[-1]["id"]) if subtitle_state.sentence_items else ""
+
+        def _caption_slot_idle() -> bool:
+            task = translation_runtime.task
+            return (
+                capture_started and not finish_requested and not finished
+                and translation_runtime.queue.empty()
+                and (task is None or task.done())
+                and (speculation is None or not speculation.pending)
+            )
+
+        async def _publish_caption_preview(preview: Preview, text: str) -> None:
+            await _send_json({
+                "type": "caption_preview",
+                "after_sentence_id": preview.after_sentence_id,
+                "translation": text,
+            })
+
         async def _send_json(payload: Dict[str, Any]) -> None:
             payload.setdefault("asr_engine", engine_binding.id)
-            if (payload.get("type") in {"sentence_committed", "sentence_updated", "sentence_translation"}
+            kind = payload.get("type")
+            if caption_preview is not None and kind in {
+                "sentence_committed", "sentence_updated", "sentence_superseded", "sentence_reset", "final"
+            }:
+                caption_preview.cancel()
+            if (kind in {"sentence_committed", "sentence_updated", "sentence_translation"}
                     and caption_reset_context is not None
                     and caption_reset_context["new_epoch"] == int(tts_runtime.generation)):
                 # Presentation-only proof for remapping a canonical rebuild.
@@ -8200,10 +8256,21 @@ def _create_app(
                             stability_phase=str((p.get("stability") or {}).get("phase", "") if isinstance(p.get("stability"), dict) else ""),
                         )
             async with send_lock:
+                if kind == "caption_preview" and (
+                    not _caption_slot_idle() or payload.get("after_sentence_id") != _caption_anchor()
+                ):
+                    return
                 await websocket.send_json(payload)
-                if native_console:
+                if native_console and kind != "caption_preview":
                     # Passive snapshots have no observers, queues or awaits on this path.
                     app.state.monitor.observe(payload)
+            chunk = getattr(state, "chunk_id", None) if caption_preview is not None and kind == "partial" else None
+            if type(chunk) is int and chunk > 0:
+                caption_preview.offer(
+                    str(payload.get("tentative_text") or ""), _caption_anchor(),
+                    str(translation_runtime.target_language),
+                    observation=(int(state_generation), int(segment_runtime.id), chunk),
+                )
 
         def _flush_audio_spill() -> bool:
             nonlocal audio_spill_generation, audio_spill_samples
@@ -9693,6 +9760,16 @@ def _create_app(
                                 playback_pressure=lambda: native_pcm_enabled and app.state.native_playback.urgent(
                                     speech_output.status.speech_epoch_id),
                             )
+                            if caption_preview is not None:
+                                await caption_preview.close()
+                                caption_preview = None
+                            caption_translate = getattr(translator, "translate_caption", None)
+                            if (native_console and payload.get("caption_preview") is True
+                                    and getattr(translator, "supports_caption_preview", False)
+                                    and callable(caption_translate)):
+                                caption_preview = CaptionPreview(
+                                    caption_translate, _publish_caption_preview, _caption_slot_idle,
+                                )
                             capture_started = True
                             native_prefix_gate.clear()
                             qwen_clause_policy.reset()
@@ -9960,6 +10037,8 @@ def _create_app(
                         if requested_mode == "slice":
                             _trace_event("finish_slice_ignored", requested_reason=requested_reason)
                         finish_requested = True
+                        if caption_preview is not None:
+                            caption_preview.cancel()
                         _trace_event(
                             "finish_received",
                             requested_mode=requested_mode,
@@ -9998,6 +10077,8 @@ def _create_app(
             except Exception:
                 pass
         finally:
+            if caption_preview is not None:
+                await caption_preview.close()
             if speculation is not None:
                 speculation.invalidate((speculation_stream, state_generation))
             await _stop_tts_stability_scheduler(reason="ws_close")

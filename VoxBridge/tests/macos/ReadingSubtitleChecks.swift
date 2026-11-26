@@ -10,6 +10,64 @@ private func occurrence(_ id: String, _ text: String, _ tokens: [Int], _ revisio
     var event = translated(id, text, revision); event["source_token_ids"] = tokens; return event
 }
 
+private func checkLiveTranslationPreview() {
+    func preview(_ text: String, after anchor: String = "") -> [String: Any] {
+        ["type": "caption_preview", "after_sentence_id": anchor, "translation": text]
+    }
+    var queue = ReadingSubtitleQueue(compact: true)
+    queue.reset(targetLanguage: "en")
+    queue.observe(preview("We have a\nplan"), now: 0)
+    assert(queue.text.isEmpty)
+    assert(queue.advance(now: 0))
+    let deadline = queue.deadline
+    assert(queue.text == "We have a plan" && queue.references.isEmpty && deadline >= 2.4)
+
+    queue.observe(preview("We have another plan"), now: 0.8)
+    queue.observe(source("first"), now: 1)
+    queue.observe(translated("first", "We have a plan for the next meeting."), now: 1.1)
+    queue.observe(preview("We can meet on Friday", after: "first"), now: 1.4)
+    assert(!queue.advance(now: 1.6))
+    assert(queue.text == "We have a plan" && queue.deadline == deadline)
+    assert(queue.advance(now: deadline))
+    assert(queue.text == "We have a plan for the next meeting.")
+    assert(queue.references.map(\.id) == ["first"])
+    assert(queue.advance(now: queue.deadline))
+    assert(queue.text == "We can meet on Friday" && queue.references.isEmpty)
+
+    queue.observe(preview("Should never be shown after stop", after: "first"), now: 6)
+    queue.observe(["type": "final"], now: 6)
+    queue.observe(preview("Late draft after stop", after: "first"), now: 6.1)
+    assert(!queue.advance(now: 20) && queue.text == "We can meet on Friday")
+
+    queue.reset(targetLanguage: "zh")
+    queue.observe(preview("这句预览在上屏前已经得到完整翻译"), now: 0)
+    queue.observe(source("zh"), now: 0.1)
+    queue.observe(translated("zh", "完整译文已经就绪并且优先显示。"), now: 0.2)
+    assert(queue.advance(now: 0.7) && queue.text == "完整译文已经就绪并且优先显示。")
+
+    let samples = [
+        "zh": String(repeating: "需要保持完整文字，并让每一页都有足够的阅读时间。", count: 4),
+        "en": String(repeating: "Each screen should preserve the complete words and let the viewer read at a comfortable pace. ", count: 4),
+        "ja": String(repeating: "今日は世界の経済状況を詳しく説明し問題を考察します。", count: 4),
+        "hi": String(repeating: "और हर पन्ने पर पढ़ने के लिए पूरा समय मिलता है। ", count: 8),
+    ]
+    for (language, sample) in samples {
+        queue.reset(targetLanguage: language)
+        queue.observe(source("long"), now: 0)
+        queue.observe(translated("long", sample), now: 0)
+        queue.observe(["type": "final"], now: 0)
+        var pages: [String] = [], now = 0.0
+        while queue.advance(now: now) {
+            assert(queue.deadline - now >= 2.4 - 0.000_001)
+            assert(SubtitleReading.work(queue.text) <= 6.000_001)
+            pages.append(queue.text)
+            now = queue.deadline
+        }
+        assert(pages.count > 1 && queue.pendingCount == 0)
+        assert(pages.joined().filter { !$0.isWhitespace } == sample.filter { !$0.isWhitespace })
+    }
+}
+
 private func checkLanguageTimingAndCoverage() {
     let samples = ["en": "Don't split 'quoted words' here.", "fr": "L’homme n’est pas encore arrivé.",
                    "es": "Esta es una frase completa.", "it": "Questa è una frase completa.",
@@ -504,10 +562,9 @@ private func checkEnglishBalancedPagination() {
     q.observe(source("font-reflow", 3), now: 40); q.observe(translated("font-reflow", reflowText, 3), now: 40)
     assert(!q.advance(now: 41) && q.pendingCount == 0 && q.displayedPages == 5)
 
-    // English-only routing leaves the legacy splitter and every other target
-    // language's source grouping and reading policy unchanged.
+    // The generic splitter uses all available capacity without splitting words.
     let legacy = SubtitleReading.pages(words(39), budget: 12)
-    assert(legacy.map { Int(SubtitleReading.work($0) * 3) } == [35, 4])
+    assert(legacy.map { Int(SubtitleReading.work($0) * 3) } == [36, 3])
     for language in ["zh", "ja", "fr", "es", "it", "pt", "hi"] {
         var other = ReadingSubtitleQueue(); other.reset(targetLanguage: language)
         other.configure(splitter: { [$0] }, fits: { SubtitleReading.work($0) <= 12 })
@@ -606,7 +663,7 @@ private func checkEnglishPendingFontReflow() {
         q.configure(splitter: splitter, fits: { $0.split(separator: " ").count <= capacity })
         q.observe(translated("other-pending", original, 2), now: 1.1)
         let shown = drain(&q, now: 1.2, capacity: capacity)
-        let expectedCounts = ["zh", "ja"].contains(language) ? [18, 11, 10] : [18, 17, 4]
+        let expectedCounts = ["zh", "ja"].contains(language) ? [18, 12, 9] : [18, 18, 3]
         assert(shown.map { $0.split(separator: " ").count } == expectedCounts && q.displayedPages == 4)
         assert(compact(shown.joined()) == compact(original))
     }
@@ -614,6 +671,7 @@ private func checkEnglishPendingFontReflow() {
 }
 @main struct ReadingSubtitleChecks {
     static func main() {
+        checkLiveTranslationPreview()
         checkSupersededPresentationOnly()
         checkReplacementFallbackAndEpochs()
         checkCanonicalSourceRebuilds()

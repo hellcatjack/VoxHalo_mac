@@ -811,15 +811,15 @@
       "pt": "Ativar sombra do texto",
       "hi": "पाठ की छाया सक्षम करें"
     },
-    "透明置顶，鼠标穿透。只显示已完成的译文；设置即时生效并自动保存。": {
-      "zh": "透明置顶，鼠标穿透。只显示已完成的译文；设置即时生效并自动保存。",
-      "en": "Transparent, always on top and click-through. Shows completed translations; changes apply immediately and save automatically.",
-      "ja": "透明・最前面・クリック透過。完成した訳文を表示し、設定は即時反映・自動保存します。",
-      "fr": "Transparent, au premier plan et sans interception des clics. Traductions terminées uniquement ; réglages immédiats et enregistrés.",
-      "es": "Transparente, siempre visible y permite clics a través. Muestra traducciones completas; los ajustes se aplican y guardan al instante.",
-      "it": "Trasparente, in primo piano e non intercetta i clic. Mostra traduzioni complete; modifiche immediate e salvate automaticamente.",
-      "pt": "Transparente, sempre no topo e permite cliques através. Exibe traduções completas; ajustes imediatos e salvos automaticamente.",
-      "hi": "पारदर्शी, हमेशा ऊपर और क्लिक आर-पार। पूर्ण अनुवाद दिखाता है; बदलाव तुरंत लागू और अपने आप सहेजे जाते हैं।"
+    "透明置顶，鼠标穿透。设置即时生效并自动保存。": {
+      "zh": "透明置顶，鼠标穿透。设置即时生效并自动保存。",
+      "en": "Transparent, always on top and click-through. Changes apply immediately and save automatically.",
+      "ja": "透明・最前面・クリック透過。設定は即時反映・自動保存します。",
+      "fr": "Transparent, au premier plan et sans interception des clics. Les réglages sont appliqués et enregistrés immédiatement.",
+      "es": "Transparente, siempre visible y permite clics a través. Los ajustes se aplican y guardan al instante.",
+      "it": "Trasparente, in primo piano e non intercetta i clic. Le modifiche si applicano e si salvano subito.",
+      "pt": "Transparente, sempre no topo e permite cliques através. Os ajustes são aplicados e salvos imediatamente.",
+      "hi": "पारदर्शी, हमेशा ऊपर और क्लिक आर-पार। बदलाव तुरंत लागू और अपने आप सहेजे जाते हैं।"
     },
     "字幕字体": {
       "zh": "字幕字体",
@@ -1471,25 +1471,25 @@
       "pt": "Complemento falado",
       "hi": "वाचन का पूरक"
     },
-    "阅读优先：译文完成后按文字量独立展示，不等待朗读；每屏保留足够阅读时间。跟随朗读：显示当前正在朗读的译文。": {
-      "zh": "阅读优先：译文完成后按文字量独立展示，不等待朗读；每屏保留足够阅读时间。跟随朗读：显示当前正在朗读的译文。",
-      "en": "Reading first: show completed translations on their own reading clock, without waiting for speech. Each screen keeps its reading time. Follow speech: show the translation currently being spoken.",
-      "ja": "読書優先：翻訳が完成したら、音声を待たず文字量に応じて表示します。各画面に読む時間を確保します。音声に追従：現在読み上げている訳文を表示します。",
-      "fr": "Lecture prioritaire : afficher les traductions terminées selon leur durée de lecture, sans attendre la voix. Chaque écran conserve son temps de lecture. Suivre la voix : afficher la traduction en cours de lecture.",
-      "es": "Lectura primero: mostrar las traducciones completas con su propio tiempo de lectura, sin esperar a la voz. Cada pantalla conserva su tiempo de lectura. Seguir la voz: mostrar la traducción que se está leyendo.",
-      "it": "Prima la lettura: mostra le traduzioni complete con tempi di lettura indipendenti, senza attendere la voce. Ogni schermata mantiene il suo tempo di lettura. Segui la voce: mostra la traduzione letta in quel momento.",
-      "pt": "Leitura primeiro: mostrar as traduções concluídas com tempo de leitura independente, sem esperar pela voz. Cada tela mantém seu tempo de leitura. Seguir a voz: mostrar a tradução que está sendo lida.",
-      "hi": "पठन पहले: पूरी हुई अनुवादित सामग्री को बोलने की प्रतीक्षा किए बिना, पढ़ने के स्वतंत्र समय के अनुसार दिखाएँ। हर स्क्रीन को पढ़ने का समय मिलेगा। आवाज़ का अनुसरण: अभी बोला जा रहा अनुवाद दिखाएँ।"
+    "阅读优先分段显示译文，当前字幕会保留到读完。跟随朗读显示正在播报的译文。": {
+      "zh": "阅读优先分段显示译文，当前字幕会保留到读完。跟随朗读显示正在播报的译文。",
+      "en": "Reading first shows short captions and gives each one time to read. Follow speech shows the translation being read aloud.",
+      "ja": "読書優先では訳文を短く区切り、読む時間を確保します。音声に追従では読み上げ中の訳文を表示します。",
+      "fr": "La lecture prioritaire affiche des sous-titres courts et laisse le temps de les lire. Le suivi de la voix affiche la traduction lue à voix haute.",
+      "es": "Lectura primero muestra subtítulos breves y da tiempo para leerlos. Seguir la voz muestra la traducción que se está leyendo en voz alta.",
+      "it": "Prima la lettura mostra sottotitoli brevi e lascia il tempo di leggerli. Segui la voce mostra la traduzione letta ad alta voce.",
+      "pt": "Leitura primeiro mostra legendas curtas e dá tempo para ler cada uma. Seguir a voz mostra a tradução que está sendo lida.",
+      "hi": "पठन पहले छोटे उपशीर्षक दिखाता है और उन्हें पढ़ने का समय देता है। आवाज़ का अनुसरण पढ़कर सुनाया जा रहा अनुवाद दिखाता है।"
     },
-    "垂直 100% 可覆盖 Dock。阅读优先按原文顺序显示，当前一屏读完后显示下一屏；完整译文与校订保留在阅读记录。": {
-      "zh": "垂直 100% 可覆盖 Dock。阅读优先按原文顺序显示，当前一屏读完后显示下一屏；完整译文与校订保留在阅读记录。",
-      "en": "Vertical 100% can cover the Dock. Reading first follows source order and shows the next screen when the current reading time ends. Full translations and corrections remain in Reading history.",
-      "ja": "垂直位置100%ではDockに重ねられます。読書優先は原文の順序を守り、現在の画面の読む時間が終わると次を表示します。全文と修正は読書履歴に残ります。",
-      "fr": "La position verticale à 100 % peut recouvrir le Dock. La lecture prioritaire suit l’ordre du texte source et passe à l’écran suivant à la fin du temps de lecture. Les traductions complètes et corrections restent dans l’historique.",
-      "es": "La posición vertical al 100 % puede cubrir el Dock. Lectura primero respeta el orden del original y pasa a la siguiente pantalla al terminar el tiempo de lectura. Las traducciones completas y correcciones quedan en el historial.",
-      "it": "La posizione verticale al 100% può coprire il Dock. Prima la lettura segue l’ordine del testo originale e passa alla schermata successiva al termine del tempo di lettura. Traduzioni complete e correzioni restano nella cronologia.",
-      "pt": "A posição vertical de 100% pode cobrir o Dock. Leitura primeiro segue a ordem do original e mostra a próxima tela após o tempo de leitura da atual. Traduções completas e correções ficam no histórico.",
-      "hi": "100% ऊर्ध्वाधर स्थिति Dock को ढक सकती है। पठन पहले मूल पाठ के क्रम में चलता है और वर्तमान स्क्रीन का पढ़ने का समय पूरा होने पर अगली स्क्रीन दिखाता है। पूरे अनुवाद और सुधार पठन इतिहास में रहते हैं।"
+    "垂直 100% 可覆盖 Dock。完整译文与校订保留在阅读记录。": {
+      "zh": "垂直 100% 可覆盖 Dock。完整译文与校订保留在阅读记录。",
+      "en": "Vertical 100% can cover the Dock. Full translations and corrections remain in Reading history.",
+      "ja": "垂直位置100%ではDockに重ねられます。全文と修正は読書履歴に残ります。",
+      "fr": "La position verticale à 100 % peut recouvrir le Dock. Les traductions complètes et les corrections restent dans l’historique.",
+      "es": "La posición vertical al 100 % puede cubrir el Dock. Las traducciones completas y las correcciones quedan en el historial.",
+      "it": "La posizione verticale al 100% può coprire il Dock. Le traduzioni complete e le correzioni restano nella cronologia.",
+      "pt": "A posição vertical de 100% pode cobrir o Dock. Traduções completas e correções ficam no histórico.",
+      "hi": "100% ऊर्ध्वाधर स्थिति Dock को ढक सकती है। पूरे अनुवाद और सुधार पठन इतिहास में रहते हैं।"
     }
   }
 }

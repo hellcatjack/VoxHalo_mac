@@ -10,7 +10,7 @@ We want people to express themselves in the language they know and understand vo
 
 Today, LingoCove runs independently on **Apple Silicon Macs**, supporting **8 languages and 56 translation directions** through speech recognition, translation, spoken output and synchronized subtitles. Coverage of every language is our long-term goal. We will add languages as their recognition, translation, speech synthesis and local performance are validated.
 
-**Current source build: 1.0.0 · build 44** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
+**Current source build: 1.0.0 · build 47** · **Maintainer: [hellcatjack](https://github.com/hellcatjack)**
 
 The App is named **LingoCove** in Finder, the Dock and every interface language. Previously named VoxHalo / 同声传译, it keeps existing preferences and model files. For older installations, see [upgrading from the previous App](docs/en/INSTALLATION.md#9-update-or-rebuild).
 
@@ -84,9 +84,9 @@ Interface language is independent, follows system/browser preferences by default
 - **Invite listeners on the same network.** The App detects your LAN IP and provides an address and QR code. Phones and tablets can scan it to hear the shared translation stream.
 - **Run interpretation entirely from the App.** Native controls handle devices, direction, start and stop. The browser monitor displays text and status; closing it does not interrupt interpretation.
 
-Captions show completed translations only, at the selected fixed font size. They wrap naturally without inserted headings or paragraph breaks; the console displays the same reading card in its scrollable content.
+Captions show translated text at the selected fixed font size. Text wraps naturally and the console displays the same reading card in its scrollable view.
 
-**Reading first** (default, build 43+) displays completed translations in source order on an independent clock, without waiting for speech confirmation, synthesis or PCM playback. Ready short sentences can share a screen; its content and selected font size remain fixed until its reading time ends. Chinese/Japanese screens get at least 3 seconds, with longer holds for dense text; the six word-based languages retain separate timing and a 3.5-second minimum. Build 44 improves English paging and uses a fixed 288-word/minute reading budget; Chinese timing is unchanged. **Follow speech** still shows the audible segment. Hiding Reading first pauses its visual clock while speech continues. Input that persistently exceeds reading capacity can still accumulate a visual queue; unread completed text is retained.
+**Reading first** (default) uses its own clock. A short translation can appear when a clause boundary and its wording agree across two consecutive recognition updates. One screen holds about 18 words or 36 CJK characters, with a minimum of 2.4 seconds and longer holds for denser text. The selected font size and visible words stay fixed for that reading turn. Long completed translations continue across screens in order. **Follow speech** shows the segment being read aloud. Hiding Reading first pauses its visual clock while speech continues. Sustained speech above reading capacity can queue unread text.
 
 Open **Reading history** with the console's book button or the App menu to read completed full translations and corrections at your own pace. Accepted incremental speech that the full translation does not cover is retained in its exact wording as **Spoken supplement**; an unknown source delta is not replaced with the full parent source. The selectable native record stays available after stopping and clears when the next session starts; it is not saved across App relaunches. Display controls do not change audio scheduling. See [timing, history and limitations](VoxBridge/docs/READING-SUBTITLES.md) and the [independent-caption validation](VoxBridge/docs/MACOS-INDEPENDENT-CAPTIONS-VERIFICATION.md).
 

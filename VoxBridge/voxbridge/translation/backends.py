@@ -21,8 +21,10 @@ import threading
 import urllib.request
 from contextlib import suppress
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 from .prompts import _build_translation_prompt
-from .language_checks import _text_matches_source_language
+from .language_checks import _script_matches, _text_matches_source_language
+from voxbridge.languages import language_profile
 from voxbridge.streaming.translation_quality import translation_output_issue, recovery_translation_prompt
 from voxbridge.streaming.speculative_translation import TranslationKey
 
@@ -84,6 +86,7 @@ class LocalTranslator:
         target_language: Optional[str] = None,
         translation_direction: Optional[str] = None,
         strict_target_language: bool = False,
+        name_spellings: tuple[tuple[str, str], ...] = (),
     ) -> str:
         source = str(source_language or self.source_language or "Chinese")
         target = str(target_language or self.target_language or "English")
@@ -93,6 +96,7 @@ class LocalTranslator:
             target,
             translation_direction,
             strict_target_language,
+            name_spellings,
         )
 
     def translate(
@@ -102,6 +106,7 @@ class LocalTranslator:
         target_language: Optional[str] = None,
         translation_direction: Optional[str] = None,
         strict_target_language: bool = False,
+        name_spellings: tuple[tuple[str, str], ...] = (),
     ) -> str:
         import torch
 
@@ -122,6 +127,7 @@ class LocalTranslator:
                     target_language=target,
                     translation_direction=translation_direction,
                     strict_target_language=strict_target_language,
+                    name_spellings=name_spellings,
                 ),
             }
         ]
@@ -194,6 +200,56 @@ class OpenAIAPITranslator:
         else:
             self.chat_url = f"{normalized}/v1/chat/completions"
 
+    @property
+    def supports_caption_preview(self) -> bool:
+        return urlsplit(self.chat_url).hostname in {"localhost", "127.0.0.1", "::1"}
+
+    async def translate_caption(self, source: str, target: str) -> str:
+        """Quick single-pass translation of an unfinished utterance."""
+        import httpx
+
+        if not self.supports_caption_preview:
+            return ""
+        profile = language_profile(target)
+        prompt = (
+            f"Translate this unfinished speech fragment into {target}. "
+            "Translate only the words provided. Do not finish the thought or add explanations. "
+            "Return only the translation.\n\n" + source
+        )
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        body = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": min(56, self.max_new_tokens),
+            "temperature": 0,
+            "stream": True,
+            "cache_prompt": False,
+        }
+        parts = []
+        finish_reason = ""
+        # Streaming lets cancellation close the request when a formal
+        # translation needs the single local inference slot.
+        async with httpx.AsyncClient(timeout=2.5, trust_env=False) as client:
+            async with client.stream("POST", self.chat_url, json=body, headers=headers) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    choices = json.loads(data).get("choices", [])
+                    if choices:
+                        choice = choices[0]
+                        content = (choice.get("delta") or {}).get("content")
+                        if isinstance(content, str):
+                            parts.append(content)
+                        finish_reason = choice.get("finish_reason") or finish_reason
+        text = " ".join("".join(parts).replace("<target>", "").replace("</target>", "").split())
+        if finish_reason != "stop" or translation_output_issue(source, text):
+            return ""
+        return text if _script_matches(text, profile.code) else ""
+
     def _build_prompt(
         self,
         text: str,
@@ -201,6 +257,7 @@ class OpenAIAPITranslator:
         target_language: Optional[str] = None,
         translation_direction: Optional[str] = None,
         strict_target_language: bool = False,
+        name_spellings: tuple[tuple[str, str], ...] = (),
     ) -> str:
         source = str(source_language or self.source_language or "Chinese")
         target = str(target_language or self.target_language or "English")
@@ -210,6 +267,7 @@ class OpenAIAPITranslator:
             target,
             translation_direction,
             strict_target_language,
+            name_spellings,
         )
 
     def _extract_content(self, payload: Dict[str, Any]) -> str:
@@ -244,6 +302,7 @@ class OpenAIAPITranslator:
         target_language: Optional[str] = None,
         translation_direction: Optional[str] = None,
         strict_target_language: bool = False,
+        name_spellings: tuple[tuple[str, str], ...] = (),
     ) -> str:
         src = str(text or "").strip()
         if not src:
@@ -262,6 +321,7 @@ class OpenAIAPITranslator:
                     target_language=target,
                     translation_direction=translation_direction,
                     strict_target_language=strict_target_language,
+                    name_spellings=name_spellings,
                 ),
             }
         ]

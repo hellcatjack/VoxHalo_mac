@@ -25,6 +25,7 @@ from voxbridge.interpretation.contracts import TranslationRequest
 from voxbridge.languages import translation_pair
 from .language_checks import (_has_cjk, _has_latin, _is_chinese_label, _is_english_label,
                               _text_matches_source_language, _translation_needs_target_language_retry, _script_matches)
+from .name_recovery import english_name_spellings
 
 logger = logging.getLogger("voxbridge.cli.demo_streaming_ws")
 
@@ -43,7 +44,7 @@ class TranslationService:
         self.trace = trace or (lambda event, **fields: None)
         self.on_error = on_error or (lambda message: None)
         self.zh_label, self.en_label, self.peer = zh_label, en_label, peer
-        self.accepts_direction = self.accepts_strict = False
+        self.accepts_direction = self.accepts_strict = self.accepts_name_spellings = False
         if backend is not None:
             try:
                 parameters = list(inspect.signature(backend.translate).parameters.values())
@@ -51,6 +52,7 @@ class TranslationService:
                 parameters = []
             self.accepts_direction = any(p.name == "translation_direction" or p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters)
             self.accepts_strict = any(p.name == "strict_target_language" or p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters)
+            self.accepts_name_spellings = any(p.name == "name_spellings" for p in parameters)
 
     async def translate(self, request: TranslationRequest, *, preflight: bool = False) -> str:
         sentence_id, revision, sentence, language, seq_hint, generation, source_language, target_language, direction = request
@@ -100,7 +102,9 @@ class TranslationService:
 
         t0 = time.monotonic()
         try:
-            async def _invoke_translator(*, strict_target_language: bool) -> str:
+            async def _invoke_translator(
+                *, strict_target_language: bool, name_spellings: tuple[tuple[str, str], ...] = (),
+            ) -> str:
                 translate_kwargs = {
                     "source_language": effective_source_language,
                     "target_language": target_language,
@@ -109,6 +113,8 @@ class TranslationService:
                     translate_kwargs["translation_direction"] = direction
                 if strict_target_language and self.accepts_strict:
                     translate_kwargs["strict_target_language"] = True
+                if name_spellings:
+                    translate_kwargs["name_spellings"] = name_spellings
                 try:
                     result = await asyncio.to_thread(
                         self.backend.translate,
@@ -142,7 +148,9 @@ class TranslationService:
                 )
                 if self.accepts_strict:
                     quality_retry_count = 1
-                    out = await _invoke_translator(strict_target_language=True)
+                    name_spellings = (english_name_spellings(src, out, target_language)
+                                      if self.accepts_name_spellings and pair.direction == 'zh2en' else ())
+                    out = await _invoke_translator(strict_target_language=True, name_spellings=name_spellings)
                 # The Chinese heuristic cannot distinguish every Latin name
                 # from an untranslated sentence. Keep the best retry instead
                 # of silently deleting a valid name and its spoken audio.

@@ -56,22 +56,16 @@ enum SubtitleReading {
             while end < rest.endIndex {
                 let c = rest[end], next = rest.index(after: end)
                 let portion = String(rest[..<next])
+                let amount = work(portion)
+                if amount > budget + 0.000_001 && end > rest.startIndex { break }
                 if c.isWhitespace { space = next }
                 let decimal = end > rest.startIndex && next < rest.endIndex
                     && rest[rest.index(before: end)].isNumber && rest[next].isNumber
-                if "，,。.!?！？;；:：।॥".contains(c), !decimal, work(portion) >= budget / 2 { preferred = next }
+                if "，,。.!?！？;；:：।॥".contains(c), !decimal, amount >= budget / 2 { preferred = next }
                 end = next
-                if work(portion) >= budget { break }
             }
             if let preferred { end = preferred }
             else if let space, work(String(rest[..<space])) >= budget / 2 { end = space }
-            else {
-                // Do not split a Latin/Indic word at a layout budget.
-                while end < rest.endIndex, rest[end].isLetter,
-                      !rest[end].unicodeScalars.contains(where: { (0x3040...0x9fff).contains($0.value) }) {
-                    end = rest.index(after: end)
-                }
-            }
             guard end > rest.startIndex else { break }
             let page = String(rest[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
             if !page.isEmpty { result.append(page) }
@@ -239,6 +233,11 @@ struct ReadingSubtitleQueue {
     private struct Coverage { let id: String; let tokens: [Int]; let epoch: String; let text: String }
     private struct Part { let id: String; var revision: Int; let page: Int; let text: String }
     private struct Card { var parts: [Part]; let text: String; var readingEnd: Double; var deadline: Double }
+    private struct Draft {
+        let text: String
+        var replacementID: String?
+    }
+    private let compact: Bool
     private var rows: [Row] = []
     private var supersededIDs: Set<String> = []
     /// A terminal source retirement does not discard a completed visual fallback
@@ -248,15 +247,27 @@ struct ReadingSubtitleQueue {
     private var rebuildProjection: RebuildProjection?
     private var rebuildFallback: RebuildFallback?
     private var cards: [Card] = []
+    private var draft: Draft?
+    private var latestSourceID = ""
+    private var latestDraftAnchor: String?
     private var serial = 0
     private var pausedAt: Double?
     private var splitToFit: (String) -> [String] = { [$0] }
     private var fits: (String) -> Bool = { _ in true }
     private var displayedCoverage: [Coverage] = []
     private(set) var coveredVersions: [(id: String, revision: Int, coveredBy: String)] = []
+    init(compact: Bool = false) { self.compact = compact }
+
     private var timing: SubtitleTimingPolicy? { SubtitleTimingPolicy.wordLanguages[targetLanguage] }
     private var screenWorkLimit: Double {
-        SubtitleTimingPolicy.characterLanguages[targetLanguage]?.screenWorkLimit ?? timing?.screenWorkLimit ?? 12
+        compact ? 6 : (SubtitleTimingPolicy.characterLanguages[targetLanguage]?.screenWorkLimit ?? timing?.screenWorkLimit ?? 12)
+    }
+    private func compactSeconds(_ text: String) -> Double {
+        let work = SubtitleReading.work(text)
+        let rate = timing.map { $0.wordsPerSecond / 3 }
+            ?? SubtitleTimingPolicy.characterLanguages[targetLanguage]?.paceFactor ?? readingRate
+        return max(2.4, work / rate + (timing?.orientationSeconds ?? 0))
+            + SubtitleReading.additionalSeconds(text, targetLanguage: targetLanguage)
     }
     private func englishDisplayPages(_ text: String, budget: Double) -> [String] {
         let balanced = SubtitleReading.englishPages(text, budget: budget).flatMap(splitToFit)
@@ -265,7 +276,7 @@ struct ReadingSubtitleQueue {
             .flatMap(splitToFit).map(SubtitlePresentation.singleLine)
         let content = text.filter { !$0.isWhitespace }
         func valid(_ pages: [String]) -> Bool {
-            !pages.isEmpty && pages.allSatisfy { !$0.isEmpty && fits($0) && SubtitleReading.work($0) <= budget }
+            !pages.isEmpty && pages.allSatisfy { !$0.isEmpty && fits($0) && SubtitleReading.work($0) <= budget + 0.000_001 }
                 && pages.joined().filter { !$0.isWhitespace } == content
         }
         let balancedValid = valid(balanced), physicalValid = valid(physical)
@@ -523,7 +534,7 @@ struct ReadingSubtitleQueue {
     mutating func reset(targetLanguage: String? = nil) {
         let splitter = splitToFit, capacity = fits
         let language = targetLanguage ?? self.targetLanguage
-        self = ReadingSubtitleQueue()
+        self = ReadingSubtitleQueue(compact: compact)
         splitToFit = splitter; fits = capacity
         self.targetLanguage = language
     }
@@ -581,11 +592,21 @@ struct ReadingSubtitleQueue {
     mutating func observe(_ event: [String: Any], now: Double) {
         switch event["type"] as? String {
         case "started": reset()
+        case "caption_preview":
+            guard !finished, let anchor = event["after_sentence_id"] as? String,
+                  anchor == latestSourceID, anchor != latestDraftAnchor,
+                  let translation = event["translation"] as? String else { return }
+            let text = SubtitlePresentation.singleLine(translation)
+            if !text.isEmpty, SubtitleReading.work(text) <= screenWorkLimit + 0.000_001 {
+                latestDraftAnchor = anchor
+                draft = Draft(text: text)
+            }
         case "sentence_reset":
+            draft = nil; latestSourceID = ""; latestDraftAnchor = nil
             if ["final_redecode", "final_commit_reconcile"].contains(event["reason"] as? String ?? "") {
                 observeSourceRebuild(event)
             } else { reset() }
-        case "final": finished = true; finishSourceRebuild()
+        case "final": draft = nil; finished = true; finishSourceRebuild()
         case "sentence_superseded":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
                   let revision = event["revision"] as? Int, revision >= 0,
@@ -595,6 +616,7 @@ struct ReadingSubtitleQueue {
                   replacementRevision >= 0 else { return }
             if let row = rows.first(where: { $0.id == id }), row.revision != revision { return }
             supersededIDs.insert(id)
+            if draft?.replacementID == id { draft?.replacementID = replacement }
             pendingReplacements[id] = Replacement(id: replacement, revision: replacementRevision)
             if let index = rows.firstIndex(where: { $0.id == id }) { restoreCompletedFallback(at: index) }
             if let owner = rows.first(where: { $0.id == replacement }),
@@ -612,12 +634,17 @@ struct ReadingSubtitleQueue {
                   let index = rows.firstIndex(where: { $0.id == id && $0.revision == revision }),
                   rows[index].pages == nil else { return }
             rows[index].failedRevision = revision
+            if draft?.replacementID == id { draft = nil }
             restoreCompletedFallback(at: index)
         case "sentence_committed", "sentence_updated":
             guard let id = event["sentence_id"] as? String, !id.isEmpty,
                   !supersededIDs.contains(id),
                   let revision = event["revision"] as? Int, revision >= 0,
                   let source = event["text"] as? String else { return }
+            if event["type"] as? String == "sentence_committed" {
+                latestSourceID = id
+                if draft?.replacementID == nil { draft?.replacementID = id }
+            }
             if suppressRebuiltSource(event, id: id, revision: revision) { return }
             if let index = rows.firstIndex(where: { $0.id == id }) {
                 guard revision >= rows[index].revision else { return }
@@ -648,9 +675,8 @@ struct ReadingSubtitleQueue {
             if let limit = rebuildFallback?.tokens?.count {
                 rows[index].canonicalRange = Self.canonicalRange(event, limit: limit)
             }
-            // Use the actual fixed-font capacity instead of pre-cutting every
-            // 18–36 characters and charging another minimum hold per fragment.
             let fullText = SubtitlePresentation.singleLine(translation)
+            if draft?.replacementID == id { draft = nil }
             let completedEnglish = targetLanguage == "en" ? (rows[index].completed ?? rows[index].previousCompleted) : nil
             rows[index].failedRevision = nil
             rows[index].translation = fullText
@@ -744,10 +770,6 @@ struct ReadingSubtitleQueue {
             }
             self.pausedAt = nil
         }
-        // Freeze the entire visible screen, including its identity and layout.
-        // Appending B to an already-visible A re-centers and rewraps A while it
-        // is being read. Incoming translations/revisions stay queued until this
-        // screen has had its complete reading time; never slide out its prefix.
         if let last = cards.last {
             deadline = last.deadline
             guard now >= last.deadline else { return false }
@@ -770,7 +792,7 @@ struct ReadingSubtitleQueue {
         // Build a complete screen from material available at this boundary.
         // All groups assembled in this call become visible together and share
         // the minimum hold. Nothing is appended on a later timer tick.
-        while cards.count < 8 {
+        while cards.count < (compact ? 1 : 8) {
             guard let first = rows.firstIndex(where: { $0.pages == nil || $0.nextPage < $0.pages!.count }),
                   rows[first].pages != nil else { break }
             var parts: [Part] = [], combined = ""
@@ -791,9 +813,10 @@ struct ReadingSubtitleQueue {
                 if cards.contains(where: { $0.parts.contains(where: { $0.id == row.id && ($0.revision != displayRevision || $0.page == row.nextPage) }) }) { break }
                 let page = pages[row.nextPage]
                 let candidate = SubtitlePresentation.joined([combined, page])
+                if compact && (parts.count >= 2 || SubtitleReading.work(combined) >= 3) { break }
                 if !combined.isEmpty && (SubtitleReading.work(combined) >= 8 || SubtitleReading.work(candidate) > 12) { break }
                 let screen = SubtitlePresentation.joined(cards.map { $0.text } + [candidate])
-                if SubtitleReading.work(screen) > screenWorkLimit { break }
+                if SubtitleReading.work(screen) > screenWorkLimit + 0.000_001 { break }
                 if !fits(screen) { break }
                 combined = candidate
                 parts.append(Part(id: row.id, revision: displayRevision, page: row.nextPage, text: page))
@@ -829,19 +852,38 @@ struct ReadingSubtitleQueue {
             cards.append(Card(parts: parts, text: combined, readingEnd: readingEnd, deadline: until))
             displayedPages += parts.count
         }
-        if let last = cards.indices.last {
-            let screen = SubtitlePresentation.joined(cards.map { $0.text })
-            if let timing { cards[last].deadline = now + timing.seconds(screen) }
-            else if let policy = SubtitleTimingPolicy.characterLanguages[targetLanguage] {
-                cards[last].deadline = now + max(policy.minimumSeconds, SubtitleReading.work(screen) / policy.paceFactor)
+        // A preview gets a complete, separate reading turn. It cannot take
+        // the place of an older unresolved row or add a tail to a visible card.
+        if cards.isEmpty, !finished, let draft {
+            let next = rows.first(where: { $0.pages == nil || $0.nextPage < $0.pages!.count })
+            if next == nil || (next?.id == draft.replacementID && next?.pages == nil) {
+                self.draft = nil
+                if fits(draft.text) {
+                    let until = now + compactSeconds(draft.text)
+                    cards.append(Card(parts: [], text: draft.text, readingEnd: until, deadline: until))
+                }
             }
-            cards[last].deadline += SubtitleReading.additionalSeconds(
-                screen, targetLanguage: targetLanguage)
+        }
+        if let last = cards.indices.last, !cards[last].parts.isEmpty {
+            let screen = SubtitlePresentation.joined(cards.map { $0.text })
+            if compact {
+                cards[last].deadline = now + compactSeconds(screen)
+            } else {
+                if let timing { cards[last].deadline = now + timing.seconds(screen) }
+                else if let policy = SubtitleTimingPolicy.characterLanguages[targetLanguage] {
+                    cards[last].deadline = now + max(policy.minimumSeconds, SubtitleReading.work(screen) / policy.paceFactor)
+                }
+                cards[last].deadline += SubtitleReading.additionalSeconds(
+                    screen, targetLanguage: targetLanguage)
+            }
         }
         deadline = cards.last?.deadline ?? now
         guard !cards.isEmpty else { return false } // Keep final text visible.
         let updated = SubtitlePresentation.joined(cards.map { $0.text })
         let refs = cards.flatMap { $0.parts.map { ($0.id, $0.revision, $0.page) } }
+        if let replacement = draft?.replacementID, refs.contains(where: { $0.0 == replacement }) {
+            draft = nil
+        }
         let refKey = refs.map { "\($0.0):\($0.1):\($0.2)" }
         let oldKey = references.map { "\($0.id):\($0.revision):\($0.page)" }
         guard updated != text || refKey != oldKey else { return false }

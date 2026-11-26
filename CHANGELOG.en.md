@@ -2,6 +2,12 @@
 
 **English** | [简体中文](CHANGELOG.md)
 
+## LingoCove 1.0.0 · build 47 · 2026-11-26
+
+- Reading first can show a short translation once a clause and its punctuation agree across two consecutive recognition updates. Screens hold roughly 18 English words or 36 Chinese characters for at least 2.4 seconds. Longer translations continue in order. Speech continues on its independent path.
+- Recover Chinese-to-English sentences rejected because a proper name retained Han characters. The strict retry uses glossary names when available and suggests a Latin-script spelling when the source name can be identified. The complete translation is published once it passes validation.
+- Use the `mlx-qwen3-asr` 0.4.4 streaming API with the Qwen3-ASR 0.6B MLX INT8 weights. The standalone installer includes the new runtime.
+
 ## LingoCove 1.0.0 · build 44 · 2026-10-29 (Release refresh)
 
 - Align the standalone payload with the verified build 44 App and add a version-consistency contract. Publish new DMG, ZIP and SHA-256 files while preserving the original 1.0.0 tag and historical assets.

@@ -23,7 +23,44 @@ class _RuntimeResult:
     truncated: bool = False
 
 
-class _RecordingRuntime:
+class _FakeStreamingRuntime:
+    def init_streaming(self, *, chunk_size_sec, **options):
+        return SimpleNamespace(
+            audio_accum=np.empty(0, dtype=np.float32),
+            buffer=np.empty(0, dtype=np.float32),
+            chunk_samples=round(chunk_size_sec * 16000),
+            chunk_id=0, text="", language="", stable_text="", options=options,
+        )
+
+    def _decode_stream(self, state, samples):
+        state.audio_accum = np.concatenate((state.audio_accum, samples))
+        result = self.transcribe(
+            state.audio_accum,
+            context=state.options["context"],
+            language=state.options["language"],
+            max_new_tokens=state.options["max_new_tokens"],
+        )
+        state.text = result.text
+        state.language = result.language
+        state.chunk_id += 1
+
+    def feed_audio(self, pcm, state):
+        state.buffer = np.concatenate((state.buffer, pcm))
+        while state.buffer.size >= state.chunk_samples:
+            samples = state.buffer[:state.chunk_samples]
+            state.buffer = state.buffer[state.chunk_samples:]
+            self._decode_stream(state, samples)
+        return state
+
+    def finish_streaming(self, state):
+        if state.buffer.size:
+            self._decode_stream(state, state.buffer)
+            state.buffer = np.empty(0, dtype=np.float32)
+        state.stable_text = state.text
+        return state
+
+
+class _RecordingRuntime(_FakeStreamingRuntime):
     def __init__(self, calls, *, delay: float = 0.0):
         self.calls = calls
         self.delay = delay
@@ -121,6 +158,9 @@ def test_streaming_accumulates_every_sample_and_decodes_only_at_interval(backend
     assert state.last_decoded_samples == 32
     assert state.chunk_id == 1
     assert state.text == "samples:32"
+    backend.finish_streaming_transcribe(state)
+    assert len(_decode_calls(calls)) == 1
+    assert state.stable_text == "samples:32"
 
 
 def test_finish_decodes_undecoded_tail_once_and_state_can_continue(backend_factory):
@@ -138,6 +178,49 @@ def test_finish_decodes_undecoded_tail_once_and_state_can_continue(backend_facto
     assert state.chunk_id == 2
     assert state.last_decoded_samples == 24
     assert state.text == "samples:24"
+    assert state.stable_text == "samples:24"
+
+
+def test_native_stream_includes_overlap_and_flushes_tail_after_full_chunk(backend_factory):
+    backend, calls, _ = backend_factory()
+    state = backend.init_streaming_state(chunk_size_sec=0.002)
+    state.audio_accum = np.arange(7, dtype=np.float32)
+    backend.streaming_transcribe(np.arange(7, 40, dtype=np.float32), state)
+    assert state.last_decoded_samples == 32
+    assert state.buffer.tolist() == list(range(32, 40))
+
+    backend.finish_streaming_transcribe(state)
+
+    np.testing.assert_array_equal(_decode_calls(calls)[-1]["audio"], np.arange(40))
+    assert state.last_decoded_samples == 40
+    assert state.stable_text == "samples:40"
+
+
+def test_streaming_retry_rebuilds_the_sdk_state_without_duplicate_samples(
+    backend_factory, monkeypatch,
+):
+    backend, calls, _ = backend_factory()
+    state = backend.init_streaming_state(chunk_size_sec=0.002)
+    backend.streaming_transcribe(np.arange(37, dtype=np.float32), state)
+    feed_audio = backend._runtime.feed_audio
+
+    def interrupted_feed(pcm, native):
+        feed_audio(pcm, native)
+        raise RuntimeError("decode interrupted")
+
+    tail = np.arange(37, 64, dtype=np.float32)
+    with monkeypatch.context() as patch:
+        patch.setattr(backend._runtime, "feed_audio", interrupted_feed)
+        with pytest.raises(RuntimeError, match="decode interrupted"):
+            backend.streaming_transcribe(tail, state)
+    np.testing.assert_array_equal(state.audio_accum, np.arange(37))
+
+    backend.streaming_transcribe(tail, state)
+    backend.finish_streaming_transcribe(state)
+
+    np.testing.assert_array_equal(_decode_calls(calls)[-1]["audio"], np.arange(64))
+    assert state.chunk_id == 2
+    assert state.stable_text == "samples:64"
 
 
 def test_streaming_and_batch_forward_context_language_and_token_limit(backend_factory):
@@ -189,16 +272,19 @@ def test_all_runtime_work_uses_one_owner_thread_and_serializes_calls(backend_fac
     caller_thread = threading.get_ident()
     backend, calls, runtime_threads = backend_factory(delay=0.02)
 
+    stream = backend.init_streaming_state(chunk_size_sec=0.001)
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = [
             pool.submit(
                 backend.transcribe,
                 (np.full(16, index, dtype=np.float32), 16000),
             )
-            for index in range(4)
+            for index in range(3)
         ]
+        streaming = pool.submit(backend.streaming_transcribe, np.zeros(16, dtype=np.float32), stream)
         for future in futures:
             assert future.result(timeout=2)[0].text == "samples:16"
+        assert streaming.result(timeout=2).text == "samples:16"
 
     decode_calls = _decode_calls(calls)
     runtime = backend._runtime
@@ -423,7 +509,7 @@ def test_mlx_long_silence_with_context_never_publishes_context_echo(tmp_path):
     model_path.mkdir()
     (model_path / "config.json").write_text("{}", encoding="utf-8")
 
-    class ContextEchoRuntime:
+    class ContextEchoRuntime(_FakeStreamingRuntime):
         tokenizer = SimpleNamespace(encode=lambda text, **_: list(text))
 
         def transcribe(self, audio, **kwargs):
@@ -497,7 +583,7 @@ def test_mlx_long_silence_without_context_never_publishes_model_hallucination(
     model_path.mkdir()
     (model_path / "config.json").write_text("{}", encoding="utf-8")
 
-    class SilenceHallucinationRuntime:
+    class SilenceHallucinationRuntime(_FakeStreamingRuntime):
         tokenizer = SimpleNamespace(encode=lambda text, **_: list(text))
 
         def transcribe(self, audio, **kwargs):
@@ -569,7 +655,7 @@ def test_mlx_stop_keeps_short_tail_when_silero_observed_quiet_speech(
     model_path.mkdir()
     (model_path / "config.json").write_text("{}", encoding="utf-8")
 
-    class ShortSpeechRuntime:
+    class ShortSpeechRuntime(_FakeStreamingRuntime):
         tokenizer = SimpleNamespace(encode=lambda text, **_: list(text))
 
         def transcribe(self, audio, **kwargs):

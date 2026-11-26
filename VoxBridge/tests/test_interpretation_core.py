@@ -52,6 +52,52 @@ async def test_standalone_translation_service_retries_wrong_language_and_retains
     assert errors == []
 
 
+@pytest.mark.parametrize(('source', 'rejected', 'spellings'), [
+    ('他投靠在腓力斯，并住在史葛拉。', 'He took refuge there and lived in Sh格拉.', (('史葛拉', 'Shigela'),)),
+    ('这是一个叫做桃溪的小镇。', 'This is a small town called 桃溪.', (('桃溪', 'Taoxi'),)),
+    ('他在耶路撒冷住过。', 'He lived in the city of 耶路撒冷.', ()),
+    ('他住在史葛拉或石格拉。', 'He might have lived in Sh格拉.', ()),
+    ('专业同工共同服侍。', 'The pastor and 同工 served together.', ()),
+])
+def test_english_name_recovery_is_anchored_to_source_and_prioritizes_glossary(source, rejected, spellings):
+    from voxbridge.translation.name_recovery import english_name_spellings
+
+    assert english_name_spellings(source, rejected, 'English') == spellings
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('source', 'rejected', 'good', 'hint', 'fallback'), [
+    ('他投靠在腓力斯，并住在史葛拉。', 'He sought refuge with the Philistines and lived in Sh格拉.',
+     'He sought refuge with the Philistines and lived in Shigela.', '史葛拉”请用拉丁字母写作 Shigela', True),
+    ('他在耶路撒冷住过。', 'He lived in the city of 耶路撒冷.', 'He lived in the city of Jerusalem.',
+     '耶路撒冷 翻译成 Jerusalem', False),
+])
+async def test_english_name_recovery_guides_existing_strict_retry_without_changing_source(
+    monkeypatch, source, rejected, good, hint, fallback,
+):
+    import io
+    import json
+    from voxbridge.interpretation.contracts import TranslationRequest
+    from voxbridge.translation.backends import OpenAIAPITranslator
+    from voxbridge.translation.service import TranslationService
+
+    prompts = []
+
+    def respond(request, timeout):
+        prompt = json.loads(request.data)['messages'][0]['content']
+        prompts.append(prompt)
+        text = good if len(prompts) == 2 and hint in prompt else rejected
+        return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': text}}]}).encode())
+
+    monkeypatch.setattr('urllib.request.urlopen', respond)
+    translator = OpenAIAPITranslator('http://127.0.0.1:8876', 'hy-mt')
+    request = TranslationRequest('source-1', 1, source, 'Chinese', 1, 1, 'Chinese', 'English', 'zh2en')
+    assert await TranslationService(translator).translate(request) == good
+    assert len(prompts) == 2 and all(prompt.endswith(source) for prompt in prompts)
+    assert (hint in prompts[0]) is not fallback
+    assert ('请用拉丁字母写作' in prompts[1]) is fallback
+
+
 @pytest.mark.asyncio
 async def test_service_failure_is_reported_and_cancellation_is_not_swallowed():
     import asyncio

@@ -8187,6 +8187,69 @@ def test_speculative_translation_consumed_only_at_formal_commit(tmp_path, monkey
     assert sum(r.get('event') == 'translation_speculative_hit' for r in rows) == 1
 
 
+@pytest.mark.parametrize(("direction", "language", "draft_source", "target", "draft_text"), [
+    ("zh2en", "Chinese", "我们明天上午讨论之后，", "English", "After our discussion tomorrow morning"),
+    ("en2zh", "English", "After reviewing the numbers,", "Chinese", "看完这些数字之后"),
+])
+def test_native_preview_precedes_sentence_commit_without_entering_formal_translation(
+    monkeypatch, direction, language, draft_source, target, draft_text,
+):
+    monkeypatch.setenv("VOXBRIDGE_NATIVE_CONTROL_TOKEN", "test-token")
+    full_source = draft_source + ("再决定下一步。" if language == "Chinese" else " we will decide what to do.")
+    requested = threading.Event()
+
+    class FragmentASR(_FakeASR):
+        def init_streaming_state(self, **kwargs):
+            state = super().init_streaming_state(**kwargs)
+            state.chunk_id = 0
+            return state
+
+        def streaming_transcribe(self, wav, state):
+            state.audio_accum = np.concatenate((state.audio_accum, wav))
+            state.chunk_id += 1
+            state.text, state.language = draft_source, language
+            return state
+
+        def finish_streaming_transcribe(self, state):
+            state.text, state.language = full_source, language
+            return state
+
+    class Translator(_FakeTranslator):
+        supports_caption_preview = True
+
+        async def translate_caption(self, text, dst):
+            assert (text, dst) == (draft_source, target)
+            requested.set()
+            return draft_text
+
+    translator = Translator()
+    args = _args()
+    args.native_console = True
+    app = _create_app(args, FragmentASR(), translator)
+    client = TestClient(app, client=("127.0.0.1", 12345))
+    with client.websocket_connect("/ws", headers={"X-VoxBridge-Control-Token": "test-token"}) as ws:
+        assert ws.receive_json()["type"] == "ready"
+        ws.send_json({"type": "start", "translation_direction": direction, "caption_preview": True})
+        _receive_until_type(ws, "started")
+        ws.send_bytes(np.full(3200, 1000, dtype="<i2").tobytes())
+        _receive_until_type(ws, "partial")
+        assert not requested.is_set()
+        ws.send_bytes(np.full(3200, 1000, dtype="<i2").tobytes())
+        _receive_until_type(ws, "partial")
+        assert requested.wait(2)
+        preview = ws.receive_json()
+        assert preview["type"] == "caption_preview"
+        assert preview["translation"] == draft_text and preview["after_sentence_id"] == ""
+        assert translator.calls == []
+        assert client.get("/api/monitor/state").json()["rows"] == []
+        ws.send_json({"type": "finish", "mode": "stop"})
+        events = _collect_through_final(ws)
+    assert [event["text"] for event in events if event["type"] == "sentence_committed"] == [full_source]
+    assert len([event for event in events if event["type"] == "sentence_translation"]) == 1
+    assert [call[0] for call in translator.calls] == [full_source]
+    assert all(event["type"] != "caption_preview" for event in events)
+
+
 @pytest.mark.parametrize('later_remainder', ['while new details remain audible.', ''])
 def test_ws_following_row_does_not_repeat_a_supplement_published_before_it_arrived(later_remainder):
     class ASR(_FastRevisionASR):

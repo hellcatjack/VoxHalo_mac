@@ -74,7 +74,7 @@ import AppKit
             body.topAnchor.constraint(equalTo: document.topAnchor, constant: 22),
             body.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -22)
         ])
-        let intro = NSTextField(wrappingLabelWithString: "透明置顶，鼠标穿透。只显示已完成的译文；设置即时生效并自动保存。")
+        let intro = NSTextField(wrappingLabelWithString: "透明置顶，鼠标穿透。设置即时生效并自动保存。")
         intro.textColor = .secondaryLabelColor; intro.font = .systemFont(ofSize: 12)
         body.addArrangedSubview(intro)
         intro.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
@@ -87,7 +87,7 @@ import AppKit
         }
         mode.addItems(withTitles: ["阅读优先", "跟随朗读"])
         mode.setAccessibilityLabel("字幕节奏"); add("字幕节奏", mode)
-        let readingHint = NSTextField(wrappingLabelWithString: "阅读优先：译文完成后按文字量独立展示，不等待朗读；每屏保留足够阅读时间。跟随朗读：显示当前正在朗读的译文。")
+        let readingHint = NSTextField(wrappingLabelWithString: "阅读优先分段显示译文，当前字幕会保留到读完。跟随朗读显示正在播报的译文。")
         readingHint.font = .systemFont(ofSize: 11); readingHint.textColor = .secondaryLabelColor
         body.addArrangedSubview(readingHint); readingHint.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         for name in NSFontManager.shared.availableFonts.sorted(by: {
@@ -114,7 +114,7 @@ import AppKit
         addSlider("verticalPosition", label: "垂直位置", range: 0...1, to: add)
         addSlider("widthFraction", label: "字幕宽度", range: 0.25...1, to: add)
         body.addArrangedSubview(preview)
-        let hint = NSTextField(wrappingLabelWithString: "垂直 100% 可覆盖 Dock。阅读优先按原文顺序显示，当前一屏读完后显示下一屏；完整译文与校订保留在阅读记录。")
+        let hint = NSTextField(wrappingLabelWithString: "垂直 100% 可覆盖 Dock。完整译文与校订保留在阅读记录。")
         hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
         body.addArrangedSubview(hint); hint.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         errorLabel.font = .systemFont(ofSize: 11); errorLabel.textColor = .systemRed

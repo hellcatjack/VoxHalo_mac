@@ -63,6 +63,16 @@ def test_chinese_endpoint_does_not_hold_complete_compounds_or_english(text):
     assert demo_streaming_ws._qwen_cjk_endpoint_defer_reason(text) == ""
 
 
+@pytest.mark.parametrize(("text", "tail"), [
+    ("他就说：“I hope to make some new contacts with the.”", True),
+    ("他就说：“I hope to make some new contacts.” 那这话说得很直白。", False),
+    ("请注意 PM2.5。", False),
+    ("I hope to make some new contacts.", False),
+])
+def test_chinese_asr_english_tail_before_hard_cut(text, tail):
+    assert demo_streaming_ws._chinese_asr_has_english_tail(text) is tail
+
+
 def test_ordered_tts_transition_serializes_drain_and_whole_batch_publication():
     async def scenario():
         buffer = RevisionStableTTSBuffer(stable_sec=0.0)

@@ -19,11 +19,11 @@ CHURCH_TERMS = (
 )
 
 
-def terminology_hint(source: str, target_language: str) -> str:
+def matched_terms(source: str, target_language: str) -> list[tuple[str, str]]:
     chinese = target_language.strip().casefold() in {'chinese', '中文', 'zh', 'zh-cn'}
     english = target_language.strip().casefold() in {'english', '英语', '英文', 'en'}
     if not (chinese or english):
-        return ''
+        return []
     pairs = [(en, zh) if chinese else (zh, en) for en, zh in CHURCH_TERMS]
     if english:
         pairs += [('尼西米', 'Nehemiah'), ('多比亚', 'Tobiah'), ('利卫人', 'Levites')]
@@ -34,9 +34,15 @@ def terminology_hint(source: str, target_language: str) -> str:
         for match in re.finditer(pattern, source):
             if any(match.start() < end and match.end() > start for start, end in occupied):
                 continue
-            selected.append((match.start(), f'{term} 翻译成 {translated}'))
+            selected.append((match.start(), term, translated))
             occupied.append(match.span())
             break
         if len(selected) >= 8:
             break
-    return ('参考下面的翻译：\n' + '\n'.join(line for _, line in sorted(selected)) + '\n\n') if selected else ''
+    return [(term, translated) for _, term, translated in sorted(selected)]
+
+
+def terminology_hint(source: str, target_language: str) -> str:
+    terms = matched_terms(source, target_language)
+    return ('参考下面的翻译：\n' + '\n'.join(f'{term} 翻译成 {translated}' for term, translated in terms)
+            + '\n\n') if terms else ''
